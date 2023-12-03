@@ -31,15 +31,15 @@ sub load_ssh_uris() {
     @ssh_uris = ();
     $ssh_uri_count = 0;
 
-    #if (open(my $f,"<",$ENV{'HOME'}."/.ssh/config")) {
-    #    while(<$f>) {
-    #        next unless (/^host (.+)/i);
-    #        my $h = $1;
-    #        add_ssh_uri $ENV{'USER'}."\@$h";
-    #        add_ssh_uri "root\@$h";
-    #    }
-    #    close $f;
-    #}
+    if (open(my $f,"<",$ENV{'HOME'}."/.ssh/config")) {
+       while(<$f>) {
+           next unless (/^host (.+)/i);
+           my $h = $1;
+           add_ssh_uri $ENV{'USER'}."\@$h";
+           add_ssh_uri "root\@$h";
+       }
+       close $f;
+    }
 
     if (open(my $f,"<",$ENV{'HOME'}."/.config/mc/hotlist")) {
         while(<$f>) {
