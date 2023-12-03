@@ -181,10 +181,8 @@ $cui->set_binding( sub { enable_mosh() }, "M" );
 $cui->set_binding( sub { disable_mosh() }, "S" );
 
 $ssh_menu_box->focus();
-$cui->mainloop();
-
-# Update the layout to ensure the hotkey bar is visible
 $cui->layout();
+$cui->mainloop();
 
 $cui->leave_curses();
 
