@@ -28,7 +28,13 @@ It's convenient to bind the SSH Menu to a hotkey using your X11 window manager. 
 
 ### Dependencies
 
-Before installing SSH Menu, ensure you have Perl and the necessary Perl modules installed on your system. You can install Curses::UI Perl module using CPAN:
+Before installing SSH Menu, ensure you have Perl and the necessary Perl modules installed on your system. On Ubuntu, you can install the Curses::UI Perl module using `apt-get`:
+
+```bash
+sudo apt-get install libcurses-ui-perl
+```
+
+For other systems, you may install Curses::UI using CPAN:
 
 ```bash
 cpan Curses::UI
