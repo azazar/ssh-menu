@@ -7,7 +7,6 @@ SSH Menu is a Perl-based utility that leverages your `.bash_history` and SSH con
 - Easy-to-use interface for selecting SSH connections.
 - Integration with `.bash_history` to remember and prioritize frequently used connections.
 - Support for both SSH and Mosh (Mobile Shell) connections.
-- Customizable hotkeys for quick access to functionality.
 
 ## Hotkeys
 
