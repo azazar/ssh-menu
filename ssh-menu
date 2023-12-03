@@ -1,0 +1,203 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+use Curses::UI;
+
+### SSH Host List Handling
+
+my %ssh_uris;
+my @ssh_uris;
+my $ssh_uri_count;
+
+sub add_ssh_uri($) {
+    my $host = shift;
+
+    return if $host =~ /\*/;
+
+    $ssh_uris{$host} = ++$ssh_uri_count;
+
+    return if exists $ssh_uris{$host};
+
+    unshift(@ssh_uris, $host);
+}
+
+my $bash_history_last_line;
+
+our %mosh;
+
+sub load_ssh_uris() {
+    %ssh_uris = ();
+    @ssh_uris = ();
+    $ssh_uri_count = 0;
+
+    #if (open(my $f,"<",$ENV{'HOME'}."/.ssh/config")) {
+    #    while(<$f>) {
+    #        next unless (/^host (.+)/i);
+    #        my $h = $1;
+    #        add_ssh_uri $ENV{'USER'}."\@$h";
+    #        add_ssh_uri "root\@$h";
+    #    }
+    #    close $f;
+    #}
+
+    if (open(my $f,"<",$ENV{'HOME'}."/.config/mc/hotlist")) {
+        while(<$f>) {
+            add_ssh_uri $1 if (/^ENTRY "[^"]+" URL "\/sh:\/\/([^\/]+)[^"]*"/i); #"
+        }
+        close $f;
+    }
+
+    if (open(my $f,"<",$ENV{'HOME'}."/.bash_history")) {
+        while(<$f>) {
+            s/^exec +//;
+
+            $bash_history_last_line = $_;
+
+            if (my ($cmd, $uri) = /^(ssh|ssh-copy-id|mosh) .*?([A-Za-z0-9\.-_]+\@[A-Za-z0-9_\.:-]+)/i) {
+                add_ssh_uri $uri;
+                $mosh{$uri} = $cmd eq 'mosh';
+            }
+        }
+        close $f;
+    }
+
+    @ssh_uris = sort{$ssh_uris{$b}<=>$ssh_uris{$a}}(keys(%ssh_uris));
+}
+
+load_ssh_uris();
+
+#print join("\n", @ssh_uris)."\n";
+#exit;
+
+### UI
+
+my $cui = new Curses::UI( -color_support => 1 );
+
+our $selected;
+
+my $ssh_menu_box;
+
+sub selected() {
+    $selected = $ssh_menu_box->get;
+    #$cui->dialog($selected);
+    $cui->mainloopExit;
+}
+
+sub exit_dialog() {
+    #my $return = $cui->dialog(
+    #    -message => "Do you really want to quit?",
+    #    -title   => "Are you sure???",
+    #    -buttons => [ 'yes', 'no' ],
+    #
+    #);
+    #
+    #$cui->mainloopExit if $return;
+    $cui->mainloopExit
+}
+
+our $force_mosh = 0;
+
+sub enable_mosh() {
+    $force_mosh = 1;
+}
+
+sub disable_mosh() {
+    $force_mosh = -1;
+}
+
+my $win1 = $cui->add(
+    'win1', 'Window',
+    -title => 'SSH Connections',
+    -border => 1,
+    #-y      => 1,
+    -bbg    => 'white',
+    -tbg    => 'white',
+
+    -bfg    => 'green',
+    -tfg    => 'green',
+
+    -bg     => 'white',
+    -fg     => 'black',
+);
+
+my @ssh_menu = ();
+
+my %ssh_menu_labels = ();
+
+my $max_username_len = 0;
+
+foreach my $ssh_uri (@ssh_uris) {
+    if ($ssh_uri =~ /^([^@]+)\@/) {
+        my $username_len = length($1);
+
+        $max_username_len = $username_len if $max_username_len < $username_len;
+    }
+}
+
+foreach my $ssh_uri (@ssh_uris) {
+    push(@ssh_menu, $ssh_uri);
+
+    my $label = $ssh_uri;
+
+    if ($ssh_uri =~ /^([^@]+)\@(.+)$/) {
+        my $username = $1;
+        my $host = $2;
+        my $username_len = length($username);
+
+        $label = ' ' x ($max_username_len - $username_len) . $username . ' @ ' . $host;
+    }
+
+    $ssh_menu_labels{$ssh_uri} = $label;
+}
+
+$ssh_menu_box = $win1->add(
+    'ssh_menu',
+    'Listbox',
+    -values => \@ssh_menu,
+    -labels => \%ssh_menu_labels,
+    -ipad => 1,
+    -onchange => \&selected,
+    -vscrollbar => 1,
+
+    -fg => 'black',
+    -bg => 'white',
+    #-foreground => 'green',
+    #-background => 'green',
+    #-selectedcol => 'green',
+);
+
+$cui->set_binding( \&exit_dialog, "\cQ" );
+$cui->set_binding( \&exit_dialog, "Q" );
+$cui->set_binding( \&exit_dialog, "q" );
+$cui->set_binding( \&exit_dialog, "\r" );
+$cui->set_binding( \&enable_mosh, "M" );
+$cui->set_binding( \&disable_mosh, "S" );
+
+#$texteditor->focus();
+$ssh_menu_box->focus();
+$cui->mainloop();
+
+$cui->leave_curses();
+
+if ($selected) {
+    my $cmd;
+    if (($force_mosh == 0 && $mosh{$selected}) || $force_mosh == 1) {
+        $cmd = "mosh ";
+    }
+    else {
+        $cmd = "ssh ";
+    }
+    $cmd .= "$selected";
+
+    if (-e $ENV{'HOME'}."/.bash_history") {
+        if ("$cmd\n" ne $bash_history_last_line) {
+            if (open(my $f,">>",$ENV{'HOME'}."/.bash_history")) {
+                print $f "exec $cmd\n";
+                close $f;
+            }
+        }
+    }
+
+    exec($cmd);
+}
