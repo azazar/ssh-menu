@@ -167,19 +167,14 @@ $ssh_menu_box = $win1->add(
     #-selectedcol => 'green',
 );
 
-# Add a label for the hotkey bar at the bottom
-my $hotkey_bar = $win1->add(
-    'hotkey_bar', 'Label',
-    -y    => -1,
-    -bold => 1,
-    -text => "Hotkeys: [Q]uit [Enter]Connect [M]osh [S]SH",
-);
+$cui->set_binding( \&exit_dialog, "\cQ" );
+$cui->set_binding( \&exit_dialog, "Q" );
+$cui->set_binding( \&exit_dialog, "q" );
+$cui->set_binding( \&exit_dialog, "\r" );
+$cui->set_binding( \&enable_mosh, "M" );
+$cui->set_binding( \&disable_mosh, "S" );
 
-$cui->set_binding( sub { exit_dialog() }, "\cQ", "q", "Q" );
-$cui->set_binding( sub { selected() }, "\r" );
-$cui->set_binding( sub { enable_mosh() }, "M" );
-$cui->set_binding( sub { disable_mosh() }, "S" );
-
+#$texteditor->focus();
 $ssh_menu_box->focus();
 $cui->layout();
 $cui->mainloop();
