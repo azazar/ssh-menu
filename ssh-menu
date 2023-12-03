@@ -6,20 +6,27 @@ use Curses::UI;
 
 ### SSH Host List Handling
 
+# Hash to store unique SSH URIs
 my %ssh_uris;
+
+# Array to store sorted SSH URIs for the menu
 my @ssh_uris;
+
+# Counter to keep track of the number of SSH URIs
 my $ssh_uri_count;
 
-sub add_ssh_uri($) {
-    my $host = shift;
+# Adds an SSH URI to the list if it's not a wildcard and not already present
+sub add_ssh_uri {
+    my ($host) = @_;
 
+    # Skip wildcard entries
     return if $host =~ /\*/;
 
-    $ssh_uris{$host} = ++$ssh_uri_count;
-
-    return if exists $ssh_uris{$host};
-
-    unshift(@ssh_uris, $host);
+    # Increment the count and add to hash if not already present
+    if (!exists $ssh_uris{$host}) {
+        $ssh_uris{$host} = ++$ssh_uri_count;
+        unshift(@ssh_uris, $host);
+    }
 }
 
 my $bash_history_last_line;
@@ -31,7 +38,8 @@ sub load_ssh_uris() {
     @ssh_uris = ();
     $ssh_uri_count = 0;
 
-    if (open(my $f,"<",$ENV{'HOME'}."/.ssh/config")) {
+    # Use three-argument open with a lexical filehandle for better error handling
+    if (open(my $ssh_config_fh, '<', $ENV{'HOME'} . '/.ssh/config')) {
        while(<$f>) {
            next unless (/^host (.+)/i);
            my $h = $1;
@@ -41,14 +49,16 @@ sub load_ssh_uris() {
        close $f;
     }
 
-    if (open(my $f,"<",$ENV{'HOME'}."/.config/mc/hotlist")) {
+    # Use three-argument open with a lexical filehandle for better error handling
+    if (open(my $mc_hotlist_fh, '<', $ENV{'HOME'} . '/.config/mc/hotlist')) {
         while(<$f>) {
             add_ssh_uri $1 if (/^ENTRY "[^"]+" URL "\/sh:\/\/([^\/]+)[^"]*"/i); #"
         }
         close $f;
     }
 
-    if (open(my $f,"<",$ENV{'HOME'}."/.bash_history")) {
+    # Use three-argument open with a lexical filehandle for better error handling
+    if (open(my $bash_history_fh, '<', $ENV{'HOME'} . '/.bash_history')) {
         while(<$f>) {
             s/^exec +//;
 
@@ -180,14 +190,14 @@ if ($selected) {
     }
     $cmd .= "$selected";
 
-    if (-e $ENV{'HOME'}."/.bash_history") {
-        if ("$cmd\n" ne $bash_history_last_line) {
-            if (open(my $f,">>",$ENV{'HOME'}."/.bash_history")) {
-                print $f "exec $cmd\n";
-                close $f;
-            }
-        }
+# Append the command to .bash_history if it's not the same as the last line
+if (-e $ENV{'HOME'} . '/.bash_history' && "$cmd\n" ne $bash_history_last_line) {
+    # Use three-argument open with a lexical filehandle for better error handling
+    if (open(my $bash_history_fh, '>>', $ENV{'HOME'} . '/.bash_history')) {
+        print $bash_history_fh "exec $cmd\n";
+        close $bash_history_fh;
     }
+}
 
     exec($cmd);
 }
