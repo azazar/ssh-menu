@@ -53,4 +53,4 @@ Ensure that `$HOME/.local/bin` is in your PATH so that you can run `ssh-menu` fr
 
 ## License
 
-SSH Menu is licensed under the GNU General Public License v3.0 (GPLv3). The full text of the license will be added to the project separately.
+SSH Menu is licensed under the GNU General Public License v3.0 (GPLv3).
