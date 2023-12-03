@@ -67,8 +67,10 @@ sub load_ssh_uris() {
 
 load_ssh_uris();
 
-#print join("\n", @ssh_uris)."\n";
-#exit;
+if ($ARGV[0] && $ARGV[0] eq '--dump') {
+    print join("\n", @ssh_uris)."\n";
+    exit;
+}
 
 ### UI
 
