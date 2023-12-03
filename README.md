@@ -1,6 +1,6 @@
 # SSH Menu
 
-SSH Menu is a Perl-based utility that leverages your `.bash_history` and SSH configuration files in `$HOME/.ssh/` to provide a convenient user interface for managing and initiating SSH connections. It automatically parses your history and SSH configuration to prioritize frequently used connections, making it easier to access your most important servers.
+SSH Menu is a Perl-based utility that leverages your `.bash_history`, SSH configuration files in `$HOME/.ssh/`, and Midnight Commander hotlist in `$HOME/.config/mc/hotlist` to provide a convenient user interface for managing and initiating SSH connections. It automatically parses your history, SSH configuration, and MC hotlist to prioritize frequently used connections, making it easier to access your most important servers.
 
 ## Features
 
