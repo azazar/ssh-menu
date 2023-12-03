@@ -82,19 +82,10 @@ my $ssh_menu_box;
 
 sub selected() {
     $selected = $ssh_menu_box->get;
-    #$cui->dialog($selected);
     $cui->mainloopExit;
 }
 
 sub exit_dialog() {
-    #my $return = $cui->dialog(
-    #    -message => "Do you really want to quit?",
-    #    -title   => "Are you sure???",
-    #    -buttons => [ 'yes', 'no' ],
-    #
-    #);
-    #
-    #$cui->mainloopExit if $return;
     $cui->mainloopExit
 }
 
@@ -164,9 +155,6 @@ $ssh_menu_box = $win1->add(
 
     -fg => 'black',
     -bg => 'white',
-    #-foreground => 'green',
-    #-background => 'green',
-    #-selectedcol => 'green',
 );
 
 $cui->set_binding( \&exit_dialog, "\cQ" );
@@ -176,7 +164,6 @@ $cui->set_binding( \&exit_dialog, "\r" );
 $cui->set_binding( \&enable_mosh, "M" );
 $cui->set_binding( \&disable_mosh, "S" );
 
-#$texteditor->focus();
 $ssh_menu_box->focus();
 $cui->layout();
 $cui->mainloop();
