@@ -189,7 +189,13 @@ sub selected {
 }
 
 sub select_current {
-    $selected = $ssh_menu_box ? $ssh_menu_box->get : undef;
+    if ($ssh_menu_box) {
+        my $ypos = $ssh_menu_box->{-ypos};
+        my $values = $ssh_menu_box->{-values};
+        $selected = (defined $ypos && $values && $ypos < scalar @$values)
+            ? $values->[$ypos]
+            : undef;
+    }
     $cui->mainloopExit;
 }
 
