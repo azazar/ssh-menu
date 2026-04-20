@@ -15,23 +15,87 @@ my @ssh_uris;
 # Counter to keep track of the number of SSH URIs
 my $ssh_uri_count;
 
-# Adds an SSH URI to the list if it's not a wildcard and not already present
+# Adds an SSH URI to the list if it's not a wildcard and updates its recency rank
 sub add_ssh_uri {
     my ($host) = @_;
 
     # Skip wildcard entries
     return if $host =~ /\*/;
 
-    # Increment the count and add to hash if not already present
-    if (!exists $ssh_uris{$host}) {
-        $ssh_uris{$host} = ++$ssh_uri_count;
-        unshift(@ssh_uris, $host);
-    }
+    # Increment the count and assign it as the latest-seen rank
+    $ssh_uris{$host} = ++$ssh_uri_count;
 }
 
 my $bash_history_last_line;
 
+my $default_user = $ENV{'USER'} || getpwuid($<) || 'root';
+
 our %mosh;
+
+sub ssh_target_string {
+    my ($user, $host, $port) = @_;
+    return unless defined $host && length $host;
+
+    my $uri = $host;
+    if (defined $user && length $user) {
+        $uri = $user eq $default_user ? $host : "$user\@$host";
+    }
+
+    $uri .= ":$port" if defined $port && length $port;
+    return $uri;
+}
+
+sub process_ssh_config_section {
+    my ($host_spec, $user) = @_;
+    return unless defined $host_spec;
+
+    for my $host (split /\s+/, $host_spec) {
+        next if $host =~ /\*/;
+        add_ssh_uri ssh_target_string($user // $default_user, $host);
+        add_ssh_uri "root\@$host" if ($user // $default_user) ne 'root';
+    }
+}
+
+sub parse_ssh_history_target {
+    my ($line) = @_;
+    return unless $line =~ /^\s*(ssh|ssh-copy-id|mosh)\b(.*)$/i;
+
+    my $cmd = lc $1;
+    my @parts = grep { length } split /\s+/, $2;
+    my ($port, $target);
+
+    while (my $token = shift @parts) {
+        if ($token eq '-p' && @parts) {
+            $port = shift @parts;
+            next;
+        }
+        if ($token =~ /^-p(\d+)$/) {
+            $port = $1;
+            next;
+        }
+        next if $token =~ /^-/;
+        $target = $token;
+        last;
+    }
+
+    return unless defined $target;
+
+    if ($target =~ /^([^@]+)\@([A-Za-z0-9_.-]+)(?::(\d+))?$/) {
+        my ($user, $host, $target_port) = ($1, $2, $3);
+        $port ||= $target_port;
+        return ($cmd, ssh_target_string($user, $host, $port));
+    }
+
+    if ($target =~ /^([A-Za-z0-9_.-]+):(\d+)$/) {
+        return ($cmd, ssh_target_string(undef, $1, $2));
+    }
+
+    if ($target =~ /^[A-Za-z0-9_.-]+$/) {
+        return ($cmd, ssh_target_string(undef, $target, $port));
+    }
+
+    return;
+}
 
 sub load_ssh_uris() {
     %ssh_uris = ();
@@ -40,13 +104,20 @@ sub load_ssh_uris() {
 
     # Use three-argument open with a lexical filehandle for better error handling
     if (open(my $ssh_config_fh, '<', $ENV{'HOME'} . '/.ssh/config')) {
-       while(<$ssh_config_fh>) {
-           next unless (/^host (.+)/i);
-           my $h = $1;
-           add_ssh_uri $ENV{'USER'}."\@$h";
-           add_ssh_uri "root\@$h";
-       }
-       close $ssh_config_fh;
+        my ($host_spec, $user);
+        while (<$ssh_config_fh>) {
+            next if /^\s*#/;
+            if (/^\s*Host\s+(.+)/i) {
+                process_ssh_config_section($host_spec, $user);
+                $host_spec = $1;
+                $user = undef;
+            }
+            elsif (defined $host_spec && /^\s*User\s+(.+)/i) {
+                $user = $1;
+            }
+        }
+        process_ssh_config_section($host_spec, $user);
+        close $ssh_config_fh;
     }
 
     # Use three-argument open with a lexical filehandle for better error handling
@@ -59,12 +130,12 @@ sub load_ssh_uris() {
 
     # Use three-argument open with a lexical filehandle for better error handling
     if (open(my $bash_history_fh, '<', $ENV{'HOME'} . '/.bash_history')) {
-        while(<$bash_history_fh>) {
+        while (<$bash_history_fh>) {
+            chomp;
             s/^exec +//;
+            $bash_history_last_line = "$_\n";
 
-            $bash_history_last_line = $_;
-
-            if (my ($cmd, $uri) = /^(ssh|ssh-copy-id|mosh) .*?([A-Za-z0-9\.-_]+\@[A-Za-z0-9_\.:-]+)/i) {
+            if (my ($cmd, $uri) = parse_ssh_history_target($_)) {
                 add_ssh_uri $uri;
                 $mosh{$uri} = $cmd eq 'mosh';
             }
@@ -138,6 +209,8 @@ foreach my $ssh_uri (@ssh_uris) {
     }
 }
 
+my $pad = $max_username_len ? $max_username_len + 3 : 0;
+
 foreach my $ssh_uri (@ssh_uris) {
     push(@ssh_menu, $ssh_uri);
 
@@ -149,6 +222,9 @@ foreach my $ssh_uri (@ssh_uris) {
         my $username_len = length($username);
 
         $label = ' ' x ($max_username_len - $username_len) . $username . ' @ ' . $host;
+    }
+    else {
+        $label = ' ' x $pad . $ssh_uri if $pad;
     }
 
     $ssh_menu_labels{$ssh_uri} = $label;
@@ -182,16 +258,25 @@ $cui->leave_curses();
 
 if ($selected) {
     my $cmd;
+    my $target = $selected;
+    my $port;
+
+    if ($selected =~ /^(.*?):(\d+)$/) {
+        ($target, $port) = ($1, $2);
+    }
+
     if (($force_mosh == 0 && $mosh{$selected}) || $force_mosh == 1) {
         $cmd = "mosh ";
+        $cmd .= "--ssh=\"ssh -p $port\" " if defined $port;
     }
     else {
         $cmd = "ssh ";
+        $cmd .= "-p $port " if defined $port;
     }
-    $cmd .= "$selected";
+    $cmd .= $target;
 
-# Append the command to .bash_history if it's not the same as the last line
-if (-e $ENV{'HOME'} . '/.bash_history' && "$cmd\n" ne $bash_history_last_line) {
+    # Append the command to .bash_history if it's not the same as the last line
+    if (-e $ENV{'HOME'} . '/.bash_history' && "$cmd\n" ne $bash_history_last_line) {
     # Use three-argument open with a lexical filehandle for better error handling
     if (open(my $bash_history_fh, '>>', $ENV{'HOME'} . '/.bash_history')) {
         print $bash_history_fh "exec $cmd\n";
