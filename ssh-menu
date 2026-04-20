@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 
 use strict;
+use Text::ParseWords;
 
 use Curses::UI;
 
@@ -61,7 +62,7 @@ sub parse_ssh_history_target {
     return unless $line =~ /^\s*(ssh|ssh-copy-id|mosh)\b(.*)$/i;
 
     my $cmd = lc $1;
-    my @parts = grep { length } split /\s+/, $2;
+    my @parts = shellwords($2);
     my ($port, $target);
 
     while (my $token = shift @parts) {
@@ -71,6 +72,23 @@ sub parse_ssh_history_target {
         }
         if ($token =~ /^-p(\d+)$/) {
             $port = $1;
+            next;
+        }
+        if ($token =~ /^--ssh(?:=(.*))?$/) {
+            my $ssh_arg = defined $1 ? $1 : shift @parts;
+            if (defined $ssh_arg) {
+                my @ssh_parts = shellwords($ssh_arg);
+                while (my $inner = shift @ssh_parts) {
+                    if ($inner eq '-p' && @ssh_parts) {
+                        $port = shift @ssh_parts;
+                        last;
+                    }
+                    if ($inner =~ /^-p(\d+)$/) {
+                        $port = $1;
+                        last;
+                    }
+                }
+            }
             next;
         }
         next if $token =~ /^-/;
