@@ -176,25 +176,73 @@ if ($ARGV[0] && $ARGV[0] eq '--dump') {
 my $cui = new Curses::UI( -color_support => 1 );
 
 our $selected;
-
 my $ssh_menu_box;
+my @ssh_menu = ();
+my @filtered_menu = ();
+my %ssh_menu_labels = ();
+my $filter_text = '';
+my $filter_text_label;
 
-sub selected() {
+sub selected {
     $selected = $ssh_menu_box->get;
     $cui->mainloopExit;
 }
 
-sub exit_dialog() {
-    $cui->mainloopExit
+sub select_current {
+    $selected = $ssh_menu_box ? $ssh_menu_box->get : undef;
+    $cui->mainloopExit;
+}
+
+sub update_filter {
+    $filter_text_label->text($filter_text);
+    my $lc_query = lc($filter_text);
+    my $current = $ssh_menu_box->get;
+
+    @filtered_menu = grep { index(lc($_), $lc_query) != -1 } @ssh_menu;
+    $ssh_menu_box->values(\@filtered_menu);
+    $ssh_menu_box->labels(\%ssh_menu_labels);
+
+    if (defined $current) {
+        my $index = 0;
+        while ($index < @filtered_menu && $filtered_menu[$index] ne $current) {
+            $index++;
+        }
+        if ($index < @filtered_menu) {
+            $ssh_menu_box->{-ypos} = $index;
+        }
+    }
+
+    $ssh_menu_box->layout_content;
+    $ssh_menu_box->schedule_draw(1);
+}
+
+sub append_filter_char {
+    my $char = shift;
+    $filter_text .= $char;
+    update_filter();
+}
+
+sub remove_filter_char {
+    chop $filter_text;
+    update_filter();
+}
+
+sub clear_filter {
+    $filter_text = '';
+    update_filter();
+}
+
+sub exit_dialog {
+    $cui->mainloopExit;
 }
 
 our $force_mosh = 0;
 
-sub enable_mosh() {
+sub enable_mosh {
     $force_mosh = 1;
 }
 
-sub disable_mosh() {
+sub disable_mosh {
     $force_mosh = -1;
 }
 
@@ -202,20 +250,34 @@ my $win1 = $cui->add(
     'win1', 'Window',
     -title => 'SSH Connections',
     -border => 1,
-    #-y      => 1,
-    -bbg    => 'white',
-    -tbg    => 'white',
-
-    -bfg    => 'green',
-    -tfg    => 'green',
-
-    -bg     => 'white',
-    -fg     => 'black',
+    -padbottom => 1,
+    -bbg => 'white',
+    -tbg => 'white',
+    -bfg => 'green',
+    -tfg => 'green',
+    -bg => 'white',
+    -fg => 'black',
 );
 
-my @ssh_menu = ();
+my $help_win = $cui->add(
+    'help_win', 'Window',
+    -y => -1,
+    -height => 1,
+    -border => 0,
+    -bg => 'white',
+    -fg => 'black',
+);
 
-my %ssh_menu_labels = ();
+$help_win->add(
+    'help_bar',
+    'Label',
+    -y => 0,
+    -x => 1,
+    -width => -1,
+    -text => 'Type filter text above | up/down navigate | Enter connect | Backspace delete',
+    -fg => 'black',
+    -bg => 'white',
+);
 
 my $max_username_len = 0;
 
@@ -248,25 +310,67 @@ foreach my $ssh_uri (@ssh_uris) {
     $ssh_menu_labels{$ssh_uri} = $label;
 }
 
-$ssh_menu_box = $win1->add(
-    'ssh_menu',
-    'Listbox',
-    -values => \@ssh_menu,
-    -labels => \%ssh_menu_labels,
-    -ipad => 1,
-    -onchange => \&selected,
-    -vscrollbar => 1,
+@filtered_menu = @ssh_menu;
 
+$win1->add(
+    'filter_label',
+    'Label',
+    -y => 1,
+    -x => 1,
+    -text => 'Filter: ',
     -fg => 'black',
     -bg => 'white',
 );
 
+$filter_text_label = $win1->add(
+    'filter_text',
+    'Label',
+    -y => 1,
+    -x => 10,
+    -text => '',
+    -width => -1,
+    -fg => 'black',
+    -bg => 'white',
+);
+
+$ssh_menu_box = $win1->add(
+    'ssh_menu',
+    'Listbox',
+    -y => 2,
+    -height => -1,
+    -values => \@filtered_menu,
+    -labels => \%ssh_menu_labels,
+    -ipad => 1,
+    -onchange => \&selected,
+    -vscrollbar => 1,
+    -fg => 'black',
+    -bg => 'white',
+);
+
+my @printable_keys = (
+    'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z',
+    'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
+    '0','1','2','3','4','5','6','7','8','9',
+    ' ', '_', '-', '.', '@', ':', '/', '\\', '"', "'", ',', ';', '!', '?',
+    '[', ']', '{', '}', '(', ')', '<', '>', '+', '=', '*', '&', '^', '%', '#', '$'
+);
+
+foreach my $key (@printable_keys) {
+    $ssh_menu_box->set_binding( sub { append_filter_char($key) }, $key );
+}
+
+$ssh_menu_box->set_binding( \&select_current, Curses::KEY_ENTER(), "\n", "\r" );
+$ssh_menu_box->set_binding( sub { $ssh_menu_box->option_prev; }, Curses::KEY_UP() );
+$ssh_menu_box->set_binding( sub { $ssh_menu_box->option_next; }, Curses::KEY_DOWN() );
+$ssh_menu_box->set_binding( sub { $ssh_menu_box->option_prev; }, Curses::KEY_PPAGE() );
+$ssh_menu_box->set_binding( sub { $ssh_menu_box->option_next; }, Curses::KEY_NPAGE() );
+$ssh_menu_box->set_binding( \&remove_filter_char, Curses::KEY_BACKSPACE(), "\b", "\177" );
+$ssh_menu_box->set_binding( \&clear_filter, "\cU" );
+
 $cui->set_binding( \&exit_dialog, "\cQ" );
-$cui->set_binding( \&exit_dialog, "Q" );
-$cui->set_binding( \&exit_dialog, "q" );
-$cui->set_binding( \&exit_dialog, "\r" );
-$cui->set_binding( \&enable_mosh, "M" );
-$cui->set_binding( \&disable_mosh, "S" );
+$cui->set_binding( \&exit_dialog, "\e" );
+$cui->set_binding( \&enable_mosh, Curses::KEY_F(2) );
+$cui->set_binding( \&disable_mosh, Curses::KEY_F(3) );
 
 $ssh_menu_box->focus();
 $cui->layout();
