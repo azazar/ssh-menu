@@ -16,6 +16,17 @@ SSH Menu is a Perl-based utility that leverages your `.bash_history`, SSH config
 
 It's convenient to bind the SSH Menu to a hotkey using your X11 window manager. This allows you to quickly open the menu with a keyboard shortcut.
 
+## Keyboard shortcuts
+
+- Type any supported character to filter the connection list.
+- `Up` / `Down` / `PgUp` / `PgDn`: navigate the list.
+- `Enter`: connect to the selected host.
+- `Backspace`: delete one character from the filter.
+- `Ctrl-U`: clear the filter.
+- `F2`: force Mosh for the selected target.
+- `F3`: force SSH for the selected target.
+- `Esc` or `Ctrl-Q`: quit.
+
 ## Installation
 
 ### Dependencies

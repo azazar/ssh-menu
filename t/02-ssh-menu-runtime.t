@@ -161,6 +161,7 @@ my @visible = grep { /\S/ } @screen;
 ok(@lines == 24, 'PTY output renders a 24-line screen');
 ok($all_text =~ /Filter:/, 'filter prompt is visible in PTY output');
 ok($all_text =~ /Type filter text above/, 'help bar text is visible in PTY output');
+ok($all_text =~ /F2 force mosh/, 'extended shortcuts help text is visible in PTY output');
 
 if (@visible) {
     my $seen_bottom = 0;

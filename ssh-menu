@@ -256,7 +256,7 @@ my $win1 = $cui->add(
     'win1', 'Window',
     -title => 'SSH Connections',
     -border => 1,
-    -padbottom => 1,
+    -padbottom => 2,
     -bbg => 'white',
     -tbg => 'white',
     -bfg => 'green',
@@ -267,8 +267,8 @@ my $win1 = $cui->add(
 
 my $help_win = $cui->add(
     'help_win', 'Window',
-    -y => -1,
-    -height => 1,
+    -y => -2,
+    -height => 2,
     -border => 0,
     -bg => 'white',
     -fg => 'black',
@@ -280,7 +280,18 @@ $help_win->add(
     -y => 0,
     -x => 1,
     -width => -1,
-    -text => 'Type filter text above | up/down navigate | Enter connect | Backspace delete',
+    -text => 'Type filter text above | Enter connect | Backspace delete | Ctrl-U clear',
+    -fg => 'black',
+    -bg => 'white',
+);
+
+$help_win->add(
+    'help_bar_keys',
+    'Label',
+    -y => 1,
+    -x => 1,
+    -width => -1,
+    -text => 'Up/Down/PgUp/PgDn navigate | F2 force mosh | F3 force ssh | Esc/Ctrl-Q quit',
     -fg => 'black',
     -bg => 'white',
 );

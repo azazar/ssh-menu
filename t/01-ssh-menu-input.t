@@ -13,6 +13,10 @@ close $fh;
 ok($src =~ /\@printable_keys/, 'printable key list exists');
 ok($src =~ /-width\s*=>\s*-1/, 'search field width is set to -1');
 ok($src =~ /help_bar/, 'help bar label exists');
+ok($src =~ /Ctrl-U clear/, 'help bar documents Ctrl-U clear');
+ok($src =~ /F2 force mosh/, 'help bar documents F2 force mosh');
+ok($src =~ /F3 force ssh/, 'help bar documents F3 force ssh');
+ok($src =~ /Esc\/Ctrl-Q quit/, 'help bar documents quit shortcuts');
 ok($src =~ /\&remove_filter_char,.*Curses::KEY_BACKSPACE\(\)/s, 'backspace binding exists');
 ok($src =~ /\&select_current,.*Curses::KEY_ENTER\(\)/s, 'enter binding exists');
 
