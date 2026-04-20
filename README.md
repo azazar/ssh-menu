@@ -8,13 +8,6 @@ SSH Menu is a Perl-based utility that leverages your `.bash_history`, SSH config
 - Integration with `.bash_history` to remember and prioritize frequently used connections.
 - Support for both SSH and Mosh (Mobile Shell) connections.
 
-## Hotkeys
-
-- `Q`, `q`, or `Ctrl+Q`: Exit the SSH Menu.
-- `Enter`: Connect to the selected SSH connection.
-- `M`: Enable Mosh for the current session.
-- `S`: Disable Mosh for the current session.
-
 ## Screenshot
 
 ![SSH Menu Screenshot](screenshot.png)
