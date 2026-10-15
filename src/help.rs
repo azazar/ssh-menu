@@ -147,7 +147,8 @@ pub(super) fn show(terminal: &mut DefaultTerminal, context: Context) -> io::Resu
             continue;
         }
         match key.code {
-            KeyCode::Esc | KeyCode::F(1) | KeyCode::Char('q') => return Ok(()),
+            KeyCode::Esc | KeyCode::F(1) => return Ok(()),
+            KeyCode::Char('q') if key.modifiers.is_empty() => return Ok(()),
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return Ok(()),
             KeyCode::Right | KeyCode::Tab => help.topic = (help.topic + 1) % help.topics.len(),
             KeyCode::Left | KeyCode::BackTab => {

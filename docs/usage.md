@@ -19,7 +19,7 @@ Changing a profile affects only the selected host. Moving away or changing the f
 | F8 | Toggle plain SSH / Mosh for the selected host |
 | Backspace / Delete | Remove the last character |
 | Ctrl-Backspace / Ctrl-Delete | Remove the last word |
-| Esc / Ctrl-Q / Ctrl-C | Quit |
+| Esc / Ctrl-C | Quit |
 
 Editing happens at the end of the text. Ctrl-Backspace also accepts the legacy Ctrl-H encoding.
 

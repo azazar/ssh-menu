@@ -41,7 +41,7 @@ impl TryFrom<String> for Shortcut {
         }
         let letter = letter.chars().next().unwrap();
         // Include terminal aliases (Tab, Enter, Backspace) and flow/suspend keys.
-        if modifiers.contains(KeyModifiers::CONTROL) && "chijmqsz".contains(letter) {
+        if modifiers.contains(KeyModifiers::CONTROL) && "chijmsz".contains(letter) {
             return Err(format!(
                 "profile key {value:?} is reserved by the app or terminal"
             ));
@@ -85,6 +85,8 @@ mod tests {
         for (text, modifiers) in [
             ("Alt+M", KeyModifiers::ALT),
             ("Ctrl+P", KeyModifiers::CONTROL),
+            ("Ctrl+Q", KeyModifiers::CONTROL),
+            ("Ctrl+Alt+Q", KeyModifiers::CONTROL | KeyModifiers::ALT),
             ("Ctrl+Alt+P", KeyModifiers::CONTROL | KeyModifiers::ALT),
         ] {
             let key = Shortcut::try_from(text.to_owned()).unwrap();
@@ -105,7 +107,6 @@ mod tests {
             "Ctrl+Ctrl+P",
             "Ctrl+",
             "Ctrl+é",
-            "Ctrl+Q",
             "Ctrl+C",
             "Ctrl+H",
             "Ctrl+I",

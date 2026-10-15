@@ -21,13 +21,13 @@ modes.add_argument('--help-viewer', action='store_true', help='capture built-in 
 args = parser.parse_args()
 if args.dialog:
     keys = b'\x1bOQdeploy@new.example.org:2222\t\x1b[C\x1b[C\t'
-    title, output_name, quit_keys = 'NEW REMOTE', 'screenshot-new-remote.png', b'\x11\x11'
+    title, output_name, quit_keys = 'NEW REMOTE', 'screenshot-new-remote.png', b'\x03\x03'
 elif args.help_viewer:
     keys = b'\x1bOP'
-    title, output_name, quit_keys = 'HELP', 'screenshot-help.png', b'\x11\x11'
+    title, output_name, quit_keys = 'HELP', 'screenshot-help.png', b'\x03\x03'
 else:
     keys = b'\x1b[C' * 4
-    title, output_name, quit_keys = 'SSH MENU', 'screenshot.png', b'\x11'
+    title, output_name, quit_keys = 'SSH MENU', 'screenshot.png', b'\x03'
 
 repo = Path(__file__).resolve().parents[1]
 binary = repo / 'target/x86_64-unknown-linux-musl/release/ssh-menu'

@@ -854,7 +854,7 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
     fn rejects_conflicting_or_misplaced_profile_keys() {
         assert!(Config::parse("default: A\nprofiles: [{name: A, command: 'ssh %h', key: Alt+M}, {name: B, command: 'mosh %h', key: alt+m, available_command: 'exit 1'}]").is_err());
         assert!(Config::parse("default: A\nprofiles: [{name: A, command: 'ssh %h'}]\nconfiguration_scripts: [{name: Setup, command: 'true', key: Alt+M}]").is_err());
-        for key in ["M", "Ctrl+Q", "Alt+Enter", "Ctrl+Alt+H"] {
+        for key in ["M", "Ctrl+C", "Alt+Enter", "Ctrl+Alt+H"] {
             assert!(
                 Config::parse(&format!(
                     "default: A\nprofiles: [{{name: A, command: 'ssh %h', key: '{key}'}}]"

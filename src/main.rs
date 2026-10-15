@@ -421,7 +421,7 @@ fn menu(
                     }
                 }
                 KeyCode::Esc => return Ok(None),
-                KeyCode::Char('q' | 'c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     return Ok(None);
                 }
                 // Legacy terminals encode Ctrl-Backspace as Ctrl-H (0x08).

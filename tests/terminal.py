@@ -140,9 +140,9 @@ profiles:
     assert b"\x1b[?1049h" not in invalid.stdout, "invalid config opened the TUI"
     config_file.write_text(original_config)
     (root / "command").unlink()
-    session([b"no-such-host", b"\r", b"\x11"])  # empty result, then Ctrl-Q
+    session([b"no-such-host", b"\r", b"\x03"])  # empty result, then Ctrl-C
     assert not (root / "command").exists()
-    session([b"\x11"], rows=10, cols=40)
+    session([b"\x03"], rows=10, cols=40)
     # Profile changes belong to target identity, not the current row or filter.
     baseline = "ssh alpha\nssh -p 2222 beta\n"
     (root / ".bash_history").write_text(baseline)
@@ -156,7 +156,7 @@ profiles:
     session([b"\x1b[C", b"alpha", b"\x08", b"\r"])  # Filtering preserves beta's edit.
     assert (root / "command").read_text().splitlines()[0].endswith("/mosh")
     (root / ".bash_history").write_text(baseline)
-    session([b"\x1b[C", b"\x11"])  # Merely cycling does not save settings.
+    session([b"\x1b[C", b"\x03"])  # Merely cycling does not save settings.
     assert (root / ".bash_history").read_text() == baseline
     assert config_file.read_text() == original_config
     session([b"beta:2222", b"\r"])
@@ -184,7 +184,7 @@ profiles:
     assert (root / "command").read_text().splitlines()[1:] == ["-p", "2200", "--", "new@example.org"]
     assert "new@example.org:2200" in subprocess.check_output([binary, "--dump"], env=child_env, text=True)
     before = (root / ".bash_history").read_text()
-    session([b"\x1bOQ", b"invalid:0", b"\r", b"\x1b", b"\x11"])
+    session([b"\x1bOQ", b"invalid:0", b"\r", b"\x1b", b"\x03"])
     assert (root / ".bash_history").read_text() == before
     # Configured setup receives escaped target/port and a restored terminal before connect.
     stub = root / "bin/setup-test"
@@ -231,7 +231,7 @@ configuration_scripts:
     assert (root / "command.setup").read_text().splitlines() == ["inputs-host", literal, "full"]
     assert literal not in (root / ".bash_history").read_text(), "setup values must not enter history"
     before = (root / ".bash_history").read_text()
-    session([b"\x1bOQ", b"cancelled", b"\x1b[C", b"\t", b"\t", b"discard me", b"\x1b", b"\x11"])
+    session([b"\x1bOQ", b"cancelled", b"\x1b[C", b"\t", b"\t", b"discard me", b"\x1b", b"\x03"])
     assert (root / ".bash_history").read_text() == before
     # Generators run on selection, cache results in this dialog, and pass resolved choices.
     config_file.write_text("""default: SSH
@@ -256,13 +256,13 @@ configuration_scripts:
         type: pickString
         command: echo 'generator test failure' >&2; exit 5
 """)
-    session([b"\x11"])
+    session([b"\x03"])
     assert not (root / "generator-runs").exists(), "generators ran during config load"
     session([b"\x1bOQ", b"generated", b"\t", b"\x1b[C", b"\x1b[D", b"\x1b[C", b"\r"])
     assert (root / "command.setup").read_text().splitlines() == ["generated text", "second"]
     assert (root / "generator-runs").read_text().splitlines() == ["run"], "generator was rerun instead of cached"
     (root / "command.setup").unlink()
-    output = session([b"\x1bOQ", b"broken", b"\x1b[D", b"\r", b"\t", b"\t", b"\x1b[C", b"\x1b", b"\x11"])
+    output = session([b"\x1bOQ", b"broken", b"\x1b[D", b"\r", b"\t", b"\t", b"\x1b[C", b"\x1b", b"\x03"])
     assert b"generator test failure" in output
     assert not (root / "command.setup").exists(), "failed generator allowed setup to run"
     # Availability filters choices, preserves original script identity, and skips generators.
@@ -282,7 +282,7 @@ configuration_scripts:
     available_command: exit 0
     command: setup-test visible
 """)
-    session([b"\x11"])
+    session([b"\x03"])
     assert not (root / "availability-checks").exists()
     output = session([b"\x1bOQ", b"available", b"\x1b[C", b"\r"])
     assert b"Running Visible for available" in output
@@ -295,12 +295,12 @@ configuration_scripts:
     assert b"ssh-copy-id" not in output, "unavailable setup offered without keypairs"
     assert (root / "command").read_text().splitlines()[1:] == ["--", "no-keys"]
     (root / ".ssh/id_ed25519").write_text("fake private key")
-    output = session([b"\x1bOQ", b"\x1b[C", b"\x1b", b"\x11"])
+    output = session([b"\x1bOQ", b"\x1b[C", b"\x1b", b"\x03"])
     assert b"ssh-copy-id" in output, "availability was not refreshed on reopening"
     config_file.write_text(original_config)
     # Help is embedded and returns to the same filter/profile without launching anything.
     before = (root / ".bash_history").read_text()
-    output = session([b"\x1bOP", b"\x1b[F", b"\x1b[H", b"\t", b"\x1b[6~", b"\x1b[5~", b"\x1b[Z", b"\x1bOP", b"\x11"], rows=10, cols=40)
+    output = session([b"\x1bOP", b"\x1b[F", b"\x1b[H", b"\t", b"\x1b[6~", b"\x1b[5~", b"\x1b[Z", b"\x1bOP", b"\x03"], rows=10, cols=40)
     assert b"HELP" in output and b"Profiles" in output
     assert b"Setup" not in output, "host help offered dialog-only topics"
     assert (root / ".bash_history").read_text() == before
@@ -312,6 +312,12 @@ configuration_scripts:
     assert b"Setting up a remote" in output
     assert b"Profiles" not in output and b"TOPIC" not in output, "dialog help offered irrelevant topics"
     assert (root / "command").read_text().splitlines()[1:] == ["-p", "2222", "--", "help-host"]
+    # Unbound Ctrl+Q must not quit the menu or close help/dialogs.
+    session([b"\x11", b"alpha", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    session([b"\x1bOP", b"\x11", b"\x1bOP", b"\x03"])
+    output = session([b"\x1bOQ", b"\x11", b"ctrlq-host", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "ctrlq-host"]
     # Launch availability is evaluated once at load, before history and navigation.
     config_file.write_text("""default: Missing
 profiles:
@@ -347,14 +353,14 @@ configuration_scripts:
     config_file.write_text(original_config)
     config_file.write_text("""default: SSH
 profiles:
-  - {name: SSH, key: Ctrl+P, command: 'ssh -- %h'}
+  - {name: SSH, key: Ctrl+Q, command: 'ssh -- %h'}
   - {name: Mosh, key: Alt+M, command: 'mosh -- %h'}
   - {name: Custom, key: Ctrl+Alt+X, command: 'custom-connect %h'}
 """)
     (root / ".bash_history").write_text("ssh alpha\n")
     for shortcut, program, arguments in [
         (b"\x1bm", "mosh", ["--", "alpha"]),
-        (b"\x10", "ssh", ["--", "alpha"]),
+        (b"\x11", "ssh", ["--", "alpha"]),
         (b"\x1b\x18", "custom-connect", ["alpha"]),
     ]:
         session([b"alpha", shortcut])
@@ -365,10 +371,10 @@ profiles:
     assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
     before = (root / ".bash_history").read_text()
     (root / "command").unlink()
-    session([b"m", b"\x11"])  # Plain typing must not launch the Alt+M profile.
-    session([b"no-such-host", b"\x1bm", b"\x11"])
-    session([b"\x1bOP", b"\x1bm", b"\x1bOP", b"\x11"])  # Help does not launch profiles.
-    session([b"\x1bOQ", b"\x1bm", b"\x1b", b"\x11"])  # Neither does the dialog.
+    session([b"m", b"\x03"])  # Plain typing must not launch the Alt+M profile.
+    session([b"no-such-host", b"\x1bm", b"\x03"])
+    session([b"\x1bOP", b"\x1bm", b"\x1bOP", b"\x03"])  # Help does not launch profiles.
+    session([b"\x1bOQ", b"\x1bm", b"\x1b", b"\x03"])  # Neither does the dialog.
     assert not (root / "command").exists()
     assert (root / ".bash_history").read_text() == before
     config_file.write_text(original_config)

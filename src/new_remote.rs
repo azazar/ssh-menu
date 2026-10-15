@@ -183,7 +183,7 @@ pub(super) fn dialog(
         match key.code {
             KeyCode::F(1) => crate::help::show(terminal, crate::help::Context::NewRemote)?,
             KeyCode::Esc => return Ok(None),
-            KeyCode::Char('c' | 'q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return Ok(None);
             }
             KeyCode::Tab | KeyCode::Down => focus = (focus + 1) % field_count,
