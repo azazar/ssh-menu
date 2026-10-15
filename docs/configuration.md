@@ -8,12 +8,14 @@ Launch profiles are shell command templates. A minimal config is:
 default: SSH
 profiles:
   - name: SSH
+    key: Alt+S
     command: ssh %h
   - name: Mosh
     key: Alt+M
     available_command: command -v mosh
     command: mosh %h
   - name: MC
+    key: Alt+C
     command: mc /sh://%t/
 ```
 
@@ -29,7 +31,7 @@ Use **Ctrl+letter**, **Alt+letter**, or **Ctrl+Alt+letter**, with an ASCII lette
 
 Ctrl+C, Ctrl+H, Ctrl+I, Ctrl+J, Ctrl+M, Ctrl+S, and Ctrl+Z are reserved, including combinations with Alt. These cover existing quit/edit keys, terminal aliases for Backspace/Tab/Enter, flow control, and suspend. Profile shortcuts cannot replace the app's function keys, arrows, Enter, Esc, or editing keys. A terminal or desktop may intercept other combinations; choose another binding if needed.
 
-The shipped bindings are **Alt+S** SSH, **Alt+M** Mosh, **Alt+C** MC, **Alt+B** Bash, and **Alt+Z** Zellij. Existing configs are preserved; add `key` to enable shortcuts there. Setup recipes do not accept `key`.
+The shipped bindings are **Alt+S** SSH, **Alt+M** Mosh, **Alt+C** MC, **Alt+B** Bash, and **Alt+Z** Zellij. Existing configs are preserved; add `key` to enable shortcuts there. Ctrl+Q and Ctrl+Alt+Q are available for custom bindings; neither quits the app. Setup recipes do not accept `key`.
 
 ## Profile availability
 

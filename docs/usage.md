@@ -13,13 +13,16 @@ Changing a profile affects only the selected host. Moving away or changing the f
 | ↑ / ↓ · PgUp / PgDn | Move through hosts |
 | ← / → | Change the selected host's profile |
 | Enter | Connect |
-| Configured Ctrl/Alt shortcut | Connect using that profile immediately |
+| Alt+S / Alt+M / Alt+C | Connect with SSH / Mosh / MC |
+| Alt+B / Alt+Z | Connect with remote Bash / Zellij |
 | F1 | Open built-in help |
 | F2 | Add a remote with optional setup |
 | F8 | Toggle plain SSH / Mosh for the selected host |
 | Backspace / Delete | Remove the last character |
 | Ctrl-Backspace / Ctrl-Delete | Remove the last word |
 | Esc / Ctrl-C | Quit |
+
+These are the shipped profile shortcuts; your configured, available bindings appear above the menu controls. A shortcut connects immediately using the selected host. Ctrl+Q has no built-in action and may be assigned to a profile.
 
 Editing happens at the end of the text. Ctrl-Backspace also accepts the legacy Ctrl-H encoding.
 

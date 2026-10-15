@@ -2,7 +2,7 @@
 
 ## Get a binary
 
-Download **[v0.1.0-rc.3](https://github.com/azazar/ssh-menu/releases/tag/v0.1.0-rc.3)** from GitHub Releases. All seven platform builds passed. Choose the archive for your system and download `SHA256SUMS` to verify it.
+Download **[v0.1.0-rc.4](https://github.com/azazar/ssh-menu/releases/tag/v0.1.0-rc.4)** from GitHub Releases. Release publication requires all platform builds and checks to pass. Choose the archive for your system and download `SHA256SUMS` to verify it.
 
 F1 help is embedded in the executable and works offline. You only need to install `ssh-menu` (or `ssh-menu.exe`); the documentation files in the archive are optional.
 
@@ -50,7 +50,7 @@ Add the `PATH` line to your shell's startup file to keep it across sessions. Lin
 Use an explicit version for release candidates; GitHub's `latest` download URL excludes prereleases. For example:
 
 ```sh
-version=v0.1.0-rc.3
+version=v0.1.0-rc.4
 archive=ssh-menu-x86_64-unknown-linux-musl.tar.gz
 base="https://github.com/azazar/ssh-menu/releases/download/$version"
 curl -fLO "$base/$archive"
@@ -78,7 +78,7 @@ cargo build --locked --release
 ./target/release/ssh-menu
 ```
 
-The repository pins its Rust toolchain. To build the RC source specifically, run `git checkout v0.1.0-rc.3` before building. On Linux x86-64, add `--target x86_64-unknown-linux-musl` for a static build; the binary will be in `target/x86_64-unknown-linux-musl/release/`.
+The repository pins its Rust toolchain. To build the RC source specifically, run `git checkout v0.1.0-rc.4` before building. On Linux x86-64, add `--target x86_64-unknown-linux-musl` for a static build; the binary will be in `target/x86_64-unknown-linux-musl/release/`.
 
 ## Requirements
 
@@ -87,3 +87,19 @@ Use a UTF-8 terminal with a Powerline-compatible font, such as a Nerd Font. Inst
 ## Command-line options
 
 Run `ssh-menu` to open the menu. Use `ssh-menu --dump` to list hosts without opening the UI; `--help` and `--version` are also available.
+
+## Upgrading
+
+Re-run the install command for your platform to replace the executable. Check `ssh-menu --version` afterward; this release is **0.1.0-rc.4**. Help remains embedded, so no separate documentation installation is needed.
+
+An existing `~/.ssh/ssh-menu-config.yml` is never overwritten. To enable the new shortcuts and availability checks, add these fields to the corresponding profiles, preserving your commands and other customizations:
+
+| Profile | `key` | `available_command` |
+| --- | --- | --- |
+| SSH | `Alt+S` | `command -v ssh` |
+| Mosh | `Alt+M` | `command -v mosh` |
+| MC | `Alt+C` | `command -v mc` |
+| Bash | `Alt+B` | `command -v ssh` |
+| Zellij | `Alt+Z` | `command -v ssh` |
+
+Restart SSH Menu after editing. Profiles whose checks fail are hidden; if the default is unavailable, the first available profile is used. Ctrl+Q no longer quits and can be assigned to a profile. Use Esc or Ctrl+C to quit.
