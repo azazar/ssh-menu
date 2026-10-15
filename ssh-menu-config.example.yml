@@ -365,11 +365,96 @@ configuration_scripts:
             found=1
           done
           [ "$found" = 1 ] || printf "  - 'Generate new Ed25519 key'\n"
+      - &ssh_key_expiry
+        id: expiry
+        type: pickString
+        description: Key expiry
+        options: [never, 8 hours, day, week, month, year]
+        default: never
+        # Durations start on the server after ssh-copy-id: month = 30 days,
+        # year = 365 days. UTC avoids local time-zone / daylight-saving ambiguity.
+        # never removes expiry-time from this key; it does not remove other options.
     command: |
       set -eu
       port=%p
       key=$(sh -c %{prepare_key} -- %{input:key})
-      exec ssh-copy-id ${port:+-p "$port"} -i "$key" %h
+      ssh-copy-id ${port:+-p "$port"} -i "$key" %h
+      cat "$key" | ssh ${port:+-p "$port"} -i "${key%.pub}" -- %h %{expiry_remote}
+    expiry_remote: &ssh_key_expiry_remote sh -c %{set_expiry} -- %{input:expiry}
+    # Update every occurrence of the selected key in the standard authorized_keys.
+    # Preserve other keys, comments, and options (including quoted commas/spaces).
+    # Custom AuthorizedKeysFile/Command layouts need a custom recipe.
+    set_expiry: &set_ssh_key_expiry |
+      set -eu
+      case "$1" in
+        never) seconds=0 ;;
+        '8 hours') seconds=28800 ;;
+        day) seconds=86400 ;;
+        week) seconds=604800 ;;
+        month) seconds=2592000 ;;
+        year) seconds=31536000 ;;
+        *) echo 'Unknown key expiry.' >&2; exit 1 ;;
+      esac
+      expiry=
+      if [ "$seconds" -ne 0 ]; then
+        deadline=$(( $(date +%s) + seconds ))
+        expiry=$(date -u -d "@$deadline" +%Y%m%d%H%M%SZ 2>/dev/null) ||
+          expiry=$(date -u -r "$deadline" +%Y%m%d%H%M%SZ)
+      fi
+      read -r key_type key_blob comment || :
+      [ -n "$key_type" ] && [ -n "$key_blob" ] || exit 1
+      file="$HOME/.ssh/authorized_keys"
+      [ -f "$file" ] && [ ! -L "$file" ] || {
+        echo 'Expected a regular ~/.ssh/authorized_keys file.' >&2; exit 1;
+      }
+      umask 077
+      work=$(mktemp -d "$HOME/.ssh/.ssh-menu-expiry.XXXXXX")
+      trap 'rm -rf "$work"' 0
+      trap 'exit 1' HUP INT TERM
+      cp "$file" "$work/original"
+      awk -v key_type="$key_type" -v key_blob="$key_blob" -v expiry="$expiry" '
+        # Find a separator outside double quotes, respecting backslash escapes.
+        function boundary(s, commas,    i,c,quoted,escaped) {
+          for (i=1; i<=length(s); i++) {
+            c=substr(s,i,1)
+            if (escaped) { escaped=0; continue }
+            if (c=="\\") { escaped=1; continue }
+            if (c=="\"") { quoted=!quoted; continue }
+            if (!quoted && (commas ? c=="," : c ~ /[ \t]/)) return i
+          }
+          return length(s)+1
+        }
+        function token(    n,t) {
+          sub(/^[ \t]+/, "", rest)
+          n=boundary(rest,0); t=substr(rest,1,n-1)
+          rest=substr(rest,n); return t
+        }
+        /^[ \t]*(#|$)/ { print; next }
+        {
+          original=$0; rest=$0; options=""; kind=token()
+          if (kind!=key_type) { options=kind; kind=token() }
+          blob=token()
+          if (kind!=key_type || blob!=key_blob) { print original; next }
+          found=1; kept=""
+          while (length(options)) {
+            n=boundary(options,1); option=substr(options,1,n-1)
+            options=substr(options,n+1)
+            if (option !~ /^expiry-time=/)
+              kept=kept (length(kept) ? "," : "") option
+          }
+          if (length(expiry)) kept=kept (length(kept) ? "," : "") "expiry-time=\"" expiry "\""
+          print (length(kept) ? kept " " : "") kind " " blob rest
+        }
+        END { if (!found) exit 1 }
+      ' "$work/original" > "$work/updated" || {
+        echo 'Could not find the installed key in ~/.ssh/authorized_keys.' >&2; exit 1;
+      }
+      cmp -s "$file" "$work/original" || {
+        echo 'authorized_keys changed during setup; retry.' >&2; exit 1;
+      }
+      chmod 600 "$work/updated"
+      mv "$work/updated" "$file"
+      printf 'Key expiry: %s%s\n' "$1" "${expiry:+ ($expiry UTC)}"
     # Only runs after confirming setup, with the terminal restored for prompts.
     prepare_key: &prepare_ssh_key |
       set -eu
@@ -396,9 +481,12 @@ configuration_scripts:
       printf '%s\n' "$public"
   - name: Configure key-based auth + install dotfiles
     prepare_key: *prepare_ssh_key
+    expiry_remote: *ssh_key_expiry_remote
+    set_expiry: *set_ssh_key_expiry
     # Relative source paths are resolved under local $HOME.
     inputs:
       - *ssh_key
+      - *ssh_key_expiry
       - id: source
         type: promptString
         description: Local dotfiles directory
@@ -423,9 +511,10 @@ configuration_scripts:
       test -f "$source/$installer" || { echo "Missing $source/$installer" >&2; exit 1; }
       key=$(sh -c %{prepare_key} -- %{input:key})
       ssh-copy-id ${port:+-p "$port"} -i "$key" %h
-      ssh ${port:+-p "$port"} -- %h 'mkdir -p "$HOME/src/dotfiles"'
-      scp ${port:+-P "$port"} -r "$source/." %h:src/dotfiles/
-      ssh ${port:+-p "$port"} -tt -- %h %{remote}
+      cat "$key" | ssh ${port:+-p "$port"} -i "${key%.pub}" -- %h %{expiry_remote}
+      ssh ${port:+-p "$port"} -i "${key%.pub}" -- %h 'mkdir -p "$HOME/src/dotfiles"'
+      scp ${port:+-P "$port"} -i "${key%.pub}" -r "$source/." %h:src/dotfiles/
+      ssh ${port:+-p "$port"} -i "${key%.pub}" -tt -- %h %{remote}
     remote: sh -c %{script} -- %{input:installer} %{input:shell}
     script: |
       set -eu

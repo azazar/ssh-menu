@@ -281,3 +281,99 @@ fn dependency_installation_requires_consent_and_verifies_the_result() {
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("still unavailable"));
 }
+
+#[test]
+fn key_expiry_updates_all_matching_entries_and_preserves_restrictions() {
+    let env = Sandbox::new("key-expiry");
+    for tool in ["awk", "mktemp", "cp", "cmp", "chmod", "mv", "rm"] {
+        env.link(tool);
+    }
+    let date = Command::new("sh")
+        .args(["-c", "command -v date"])
+        .output()
+        .unwrap();
+    let date = String::from_utf8(date.stdout).unwrap();
+    env.stub(
+        "date",
+        &format!(
+            "if [ \"$1\" = +%s ]; then echo 1704067200; else exec {} \"$@\"; fi",
+            date.trim()
+        ),
+    );
+    fs::create_dir_all(env.0.join(".ssh")).unwrap();
+    let authorized = env.0.join(".ssh/authorized_keys");
+    let prefix = "# ssh-ed25519 AAAATEST commented out\n\nssh-ed25519 OTHER unrelated\n";
+    let restrictions = r#"command="echo \"quoted, text\" expiry-time=keep",no-agent-forwarding"#;
+    let original = format!(
+        "{prefix}{restrictions},expiry-time=\"20200101Z\" ssh-ed25519 AAAATEST comment with spaces\nssh-ed25519 AAAATEST duplicate\n"
+    );
+    let mut p = profile("Configure key-based auth");
+    p.inputs.retain(|input| input.id == "expiry");
+    p.command = "sh -c %{set_expiry} -- %{input:expiry}".into();
+    for (choice, expiry) in [
+        ("8 hours", "20240101080000Z"),
+        ("day", "20240102000000Z"),
+        ("week", "20240108000000Z"),
+        ("month", "20240131000000Z"),
+        ("year", "20241231000000Z"),
+        ("never", ""),
+    ] {
+        fs::write(&authorized, &original).unwrap();
+        stdout(env.run_input(
+            &p,
+            None,
+            Some(("expiry", choice)),
+            b"ssh-ed25519 AAAATEST local comment\n",
+        ));
+        let option = if expiry.is_empty() {
+            String::new()
+        } else {
+            format!("expiry-time=\"{expiry}\"")
+        };
+        let comma = if option.is_empty() { "" } else { "," };
+        let space = if option.is_empty() { "" } else { " " };
+        assert_eq!(
+            fs::read_to_string(&authorized).unwrap(),
+            format!(
+                "{prefix}{restrictions}{comma}{option} ssh-ed25519 AAAATEST comment with spaces\n{option}{space}ssh-ed25519 AAAATEST duplicate\n"
+            )
+        );
+        assert_eq!(
+            fs::metadata(&authorized).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+    // Missing keys and malformed choices must leave the file unchanged.
+    fs::write(&authorized, &original).unwrap();
+    assert!(
+        !env.run_input(&p, None, Some(("expiry", "week")), b"ssh-ed25519 MISSING\n")
+            .status
+            .success()
+    );
+    assert_eq!(fs::read_to_string(&authorized).unwrap(), original);
+    p.command = "sh -c %{set_expiry} -- invalid".into();
+    assert!(
+        !env.run_input(&p, None, None, b"ssh-ed25519 AAAATEST\n")
+            .status
+            .success()
+    );
+    assert_eq!(fs::read_to_string(&authorized).unwrap(), original);
+    assert!(!fs::read_dir(env.0.join(".ssh")).unwrap().any(|f| {
+        f.unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".ssh-menu-expiry.")
+    }));
+    // Both shipped recipes share the same picker and updater.
+    let dotfiles = profile("Configure key-based auth + install dotfiles");
+    assert_eq!(p.fields["set_expiry"], dotfiles.fields["set_expiry"]);
+    assert_eq!(
+        dotfiles
+            .inputs
+            .iter()
+            .find(|i| i.id == "expiry")
+            .unwrap()
+            .options,
+        ["never", "8 hours", "day", "week", "month", "year"]
+    );
+}

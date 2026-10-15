@@ -200,7 +200,7 @@ profiles:
     ssh.write_text(original_ssh + 'printf "%s\\n" "$@" >> "$SSH_MENU_TEST_LOG.calls"\n')
     session([ADD_REMOTE, b"dotfiles@example.org:2201", b"\x1b[C", b"\x1b[C", b"\r"])
     assert (root / "command.ssh-copy-id").read_text().splitlines() == ["-p", "2201", "-i", str(root / ".ssh/id_ed25519.pub"), "dotfiles@example.org"]
-    assert (root / "command.scp").read_text().splitlines() == ["-P", "2201", "-r", str(root / "src/dotfiles") + "/.", "dotfiles@example.org:src/dotfiles/"]
+    assert (root / "command.scp").read_text().splitlines() == ["-P", "2201", "-i", str(root / ".ssh/id_ed25519"), "-r", str(root / "src/dotfiles") + "/.", "dotfiles@example.org:src/dotfiles/"]
     assert 'exec "$2" "./$1"' in (root / "command.calls").read_text()
     ssh.write_text(original_ssh)
     # Adding a remote persists through ordinary history, even if no history existed.

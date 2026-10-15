@@ -29,7 +29,7 @@ Images track distribution updates rather than immutable digests so repository/pa
 | Tmux | Decline missing-tool installation; accept and install through the distro package manager; create, detach and reconnect to the same session |
 | Zellij | Decline without installing; verified download into remote `~/.local/bin`; create, detach and reattach to the same session without reinstalling |
 | Monitor | Decline/accept btop installation; start actual btop with the shipped compact config; quit and verify temporary config cleanup; reuse without another prompt |
-| Configure key-based auth | Generate a real Ed25519 key through the recipe; accept an empty passphrase for the disposable test key; authenticate with it; reuse without duplicate authorized keys; reject overwriting it |
+| Configure key-based auth | Generate a real Ed25519 key through the recipe; accept an empty passphrase for the disposable test key; authenticate with it; reuse without duplicate authorized keys; reject overwriting it; verify every expiry duration, expired-key rejection, renewal and removal of expiry |
 | Key auth + dotfiles | Run real ssh-copy-id/scp/SSH; copy dotfiles including hidden files; execute a fixture installer and verify its remote result |
 | Copy terminal definition | Compile a client-only terminfo fixture, export/copy it through the recipe, verify remote infocmp and temporary-file cleanup |
 

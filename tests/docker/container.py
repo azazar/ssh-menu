@@ -1,5 +1,6 @@
 """Real SSH, dependency installs and setup recipes, wholly inside one test container."""
 import errno
+from datetime import datetime, timezone
 import fcntl
 import json
 import os
@@ -132,6 +133,12 @@ Subsystem sftp internal-sftp
 AcceptEnv http_proxy https_proxy no_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY
 SetEnv ENV=/home/remote/.profile LANG=C.UTF-8
 ''')
+    effective = subprocess.run(['/usr/sbin/sshd', '-T', '-f', str(config)],
+                               check=True, capture_output=True, text=True).stdout
+    if 'persourcepenalties ' in effective:
+        # This loopback fixture deliberately rejects keys; don't rate-limit later cases.
+        with config.open('a') as file:
+            file.write('PerSourcePenalties no\n')
     Path('/root/.ssh/config').write_text('''Host ssh-menu-docker
   HostName 127.0.0.1
   Port 1
@@ -200,6 +207,34 @@ def run():
         before = Path('/root/.ssh/id_ed25519').read_bytes()
         script('auth-no-overwrite', 'auth-generate', expected=1)
         assert Path('/root/.ssh/id_ed25519').read_bytes() == before
+
+        for choice, seconds in [('8-hours', 28800), ('day', 86400), ('week', 604800),
+                                ('month', 2592000), ('year', 31536000), ('never', 0)]:
+            started = int(remote('date +%s').stdout)
+            script(f'auth-expiry-{choice}')
+            # Reading over a new BatchMode connection also proves sshd accepts the option.
+            authorized = remote('cat "$HOME/.ssh/authorized_keys"').stdout
+            match = re.search(r'expiry-time="(\d{14}Z)"', authorized)
+            if seconds:
+                assert match, f'{choice}: missing expiry-time'
+                deadline = int(datetime.strptime(match[1], '%Y%m%d%H%M%SZ').replace(tzinfo=timezone.utc).timestamp())
+                ended = int(remote('date +%s').stdout)
+                assert started + seconds <= deadline <= ended + seconds
+            else:
+                assert 'expiry-time=' not in authorized
+
+        # Demonstrate enforcement, then renew via the password-authenticated recipe.
+        authorized_file = Path('/home/remote/.ssh/authorized_keys')
+        authorized_file.write_text('expiry-time="20000101000000Z" ' + public + '\n')
+        rejected = remote('true', check=False)
+        assert rejected.returncode == 255 and 'Permission denied' in rejected.stderr
+        CASES.append({'case': 'auth-expired-rejected', 'status': 'passed'})
+        print('PASS auth-expired-rejected', flush=True)
+        script('auth-expired-renew', 'auth-expiry-day')
+        remote('true')
+        script('auth-expiry-reset', 'auth-expiry-never')
+        assert 'expiry-time=' not in remote('cat "$HOME/.ssh/authorized_keys"').stdout
+        assert not list(Path('/home/remote/.ssh').glob('.ssh-menu-expiry.*'))
 
         dotfiles = Path('/root/src/dotfiles')
         dotfiles.mkdir(parents=True)

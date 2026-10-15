@@ -91,6 +91,14 @@ fn export_docker_fixtures() {
         let values = p.input_defaults();
         write(id, p.command_with_inputs(&target, &values).unwrap());
         if id == "auth" {
+            for expiry in ["8 hours", "day", "week", "month", "year", "never"] {
+                let mut expiring = values.clone();
+                expiring.insert("expiry".into(), expiry.into());
+                write(
+                    &format!("auth-expiry-{}", expiry.replace(' ', "-")),
+                    p.command_with_inputs(&target, &expiring).unwrap(),
+                );
+            }
             let mut generated = values;
             generated.insert("key".into(), "Generate new Ed25519 key".into());
             write(
