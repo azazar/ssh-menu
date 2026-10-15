@@ -22,3 +22,37 @@ jobs:
           file target/x86_64-unknown-linux-musl/release/ssh-menu
           if readelf -l target/x86_64-unknown-linux-musl/release/ssh-menu | grep -q INTERP; then exit 1; fi
           if readelf -d target/x86_64-unknown-linux-musl/release/ssh-menu | grep -q NEEDED; then exit 1; fi
+
+      - name: Export Docker integration fixtures
+        env:
+          SSH_MENU_DOCKER_FIXTURES: ${{ github.workspace }}/target/docker-fixtures
+        run: cargo test --locked export_docker_fixtures -- --ignored
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: docker-fixtures
+          path: target/docker-fixtures
+          if-no-files-found: error
+
+  distro-integration:
+    needs: test-and-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [debian, ubuntu, fedora, rocky, alpine, arch, opensuse]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: docker-fixtures
+          path: target/docker-fixtures
+      - name: Test profiles and automatic setup in Docker
+        run: python3 tests/docker/run.py --fixtures target/docker-fixtures --distro "${{ matrix.distro }}"
+      - name: Upload integration logs
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: docker-results-${{ matrix.distro }}
+          path: target/docker-tests
+          if-no-files-found: warn

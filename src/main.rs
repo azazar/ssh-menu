@@ -1,5 +1,7 @@
 mod bar;
 mod bindings;
+#[cfg(all(test, unix))]
+mod docker_tests;
 mod editor;
 mod help;
 mod launch;
