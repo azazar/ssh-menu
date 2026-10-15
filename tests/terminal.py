@@ -124,7 +124,7 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
         session([b"beta:2222", key])
         assert (root / "command").read_text().splitlines()[-len(suffix):] == suffix
     session([b"beta:2222", b"\x1bh"])
-    assert "btop htop top" in (root / "command").read_text()
+    assert 'shown_boxes = "cpu mem net"' in (root / "command").read_text()
     for key, flag, value in [(b"\x1b[108;7u", "-L", "127.0.0.1:8080:localhost:80"),
                              (b"\x1b[100;7u", "-D", "127.0.0.1:1080")]:
         session([b"beta:2222", key, b"\r"])

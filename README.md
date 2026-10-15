@@ -21,7 +21,7 @@ Find a machine, choose how to connect, and press Enter. SSH Menu brings your SSH
 | **Zellij** | Alt+Z | An existing remote session, or a new session if none exists |
 | **Tmux** | Alt+T | Attach to the remote `main` session, creating it if needed |
 | **SFTP** | Alt+F | An interactive file-transfer session |
-| **Monitor** | Alt+H | Remote btop, htop, or top |
+| **Monitor** | Alt+H | Compact health dashboard: CPU, memory, disks, network and supported GPUs |
 | **Tunnel / SOCKS** | Ctrl+Alt+L / Ctrl+Alt+D | A localhost port forward or SOCKS proxy, with editable settings |
 | **Your own profile** | Configurable | Any command or remote script defined in YAML |
 

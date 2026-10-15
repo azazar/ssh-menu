@@ -122,15 +122,39 @@ fn shipped_transports_preserve_ports_and_tunnel_arguments() {
 }
 
 #[test]
-fn monitor_uses_available_remote_tool_and_reports_missing_tools() {
+fn monitor_uses_isolated_dashboard_and_cleans_up_on_failure() {
     let env = Sandbox::new("monitor");
+    for tool in ["cat", "mktemp", "mkdir", "rm"] {
+        env.link(tool);
+    }
     let mut p = profile("Monitor");
     p.command = "sh -c %{remote}".into();
-    assert!(!env.run(&p, None, None).status.success());
-    for tool in ["top", "htop", "btop"] {
-        env.stub(tool, &format!("echo {tool}"));
-        assert_eq!(stdout(env.run(&p, None, None)), format!("{tool}\n"));
+    for tool in ["top", "htop"] {
+        env.stub(tool, "echo wrong-monitor");
     }
+    let missing = env.run(&p, None, None);
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("requires btop"));
+    fs::create_dir_all(env.0.join(".config/btop")).unwrap();
+    let personal = env.0.join(".config/btop/btop.conf");
+    fs::write(&personal, "personal configuration").unwrap();
+    env.stub("btop", "cat \"$XDG_CONFIG_HOME/btop/btop.conf\"");
+    assert_eq!(
+        stdout(env.run(&p, None, None)),
+        format!("{}\n", p.fields["dashboard"])
+    );
+    env.stub("btop", "exit 42");
+    assert_eq!(env.run(&p, None, None).status.code(), Some(42));
+    assert_eq!(
+        fs::read_to_string(personal).unwrap(),
+        "personal configuration"
+    );
+    assert!(!fs::read_dir(&env.0).unwrap().any(|f| {
+        f.unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with("ssh-menu-monitor.")
+    }));
 }
 
 #[test]
@@ -154,7 +178,7 @@ fn package_recipe_selects_manager_and_propagates_failure() {
         let prefix = if manager == "brew" { "" } else { "sudo\n" };
         assert_eq!(
             stdout(env.run(&p, None, None)),
-            format!("{prefix}{args}\ntmux\nhtop\n")
+            format!("{prefix}{args}\ntmux\nbtop\n")
         );
         assert_eq!(
             stdout(env.run(&p, None, Some(("tools", "mosh")))),

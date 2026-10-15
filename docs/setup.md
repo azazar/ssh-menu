@@ -12,7 +12,7 @@ The samples included in the config are:
 | --- | --- |
 | **Configure key-based auth** | Selects an existing keypair or offers generation when none is available, then copies its public key with ssh-copy-id |
 | **Configure key-based auth + install dotfiles** | Copies the key, uploads a dotfiles directory, and runs its installer |
-| **Install terminal tools** | Installs tmux + htop, or an individual tmux, htop, btop, mosh or mc package |
+| **Install terminal tools** | Installs tmux + btop, or an individual tmux, btop, htop, mosh or mc package |
 | **Copy terminal definition** | Exports local `$TERM` and compiles it into remote `~/.terminfo` for terminals unknown to the server |
 
 The dotfiles sample defaults to local `~/src/dotfiles`, installer `install.sh`, and shell `sh`. Change the dialog values or edit the recipe for your own repository. Both key-based auth samples remain available when no matching `~/.ssh/id_*` private/public keypairs exist. The key selector reads filenames, not key contents. If no usable pair is found, it offers **Generate new Ed25519 key** instead.

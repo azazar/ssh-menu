@@ -125,15 +125,39 @@ profiles:
     key: Alt+H
     available_command: command -v ssh
     command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
-    remote: sh -c %{script}
+    remote: sh -c %{script} -- %{dashboard}
+    # A compact health overview. Press 4 in btop to toggle the process list,
+    # i for disk read/write graphs, and n/b to cycle network interfaces.
+    dashboard: |
+      shown_boxes = "cpu mem net"
+      update_ms = 1000
+      theme_background = false
+      graph_symbol = "block"
+      show_uptime = true
+      check_temp = true
+      show_gpu_info = "On"
+      show_disks = true
+      only_physical = false
+      disks_filter = "exclude=/proc /dev /dev/pts /dev/shm /sys /sys/fs/cgroup /run /run/lock"
+      use_fstab = false
+      show_io_stat = true
+      io_mode = false
+      net_auto = true
+      show_swap = true
     script: |
-      for tool in btop htop top; do
-        if command -v "$tool" >/dev/null 2>&1; then
-          exec "$tool"
-        fi
-      done
-      echo 'Install btop, htop or top on the remote first.' >&2
-      exit 1
+      set -eu
+      command -v btop >/dev/null 2>&1 || {
+        echo 'Monitor requires btop on the remote. Use F2 > Install terminal tools > btop, or install it with the remote package manager.' >&2
+        exit 1
+      }
+      # Isolate the dashboard from the user's regular btop configuration.
+      umask 077
+      config_dir=$(mktemp -d "${TMPDIR:-/tmp}/ssh-menu-monitor.XXXXXX")
+      trap 'rm -rf "$config_dir"' 0
+      trap 'exit 1' HUP INT TERM
+      mkdir -p "$config_dir/btop"
+      printf '%s\n' "$1" > "$config_dir/btop/btop.conf"
+      XDG_CONFIG_HOME="$config_dir" XDG_STATE_HOME="$config_dir" btop
   - name: Tunnel
     key: Ctrl+Alt+L
     available_command: command -v ssh
@@ -270,14 +294,14 @@ configuration_scripts:
       - id: tools
         type: pickString
         description: Remote packages
-        options: ['tmux + htop', tmux, htop, btop, mosh, mc]
-        default: 'tmux + htop'
+        options: ['tmux + btop', tmux, btop, htop, mosh, mc]
+        default: 'tmux + btop'
     command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
     remote: sh -c %{script} -- %{input:tools}
     script: |
       set -eu
       case "$1" in
-        'tmux + htop') set -- tmux htop ;;
+        'tmux + btop') set -- tmux btop ;;
         tmux|htop|btop|mosh|mc) set -- "$1" ;;
         *) echo 'Unknown terminal tools selection.' >&2; exit 1 ;;
       esac

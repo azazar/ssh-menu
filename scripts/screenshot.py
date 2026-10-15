@@ -4,6 +4,7 @@ import fcntl
 import os
 from pathlib import Path
 import pty
+import re
 import select
 import struct
 import subprocess
@@ -16,12 +17,16 @@ import pyte
 
 parser = argparse.ArgumentParser(description=__doc__)
 modes = parser.add_mutually_exclusive_group()
+modes.add_argument('--monitor', action='store_true', help='capture the real btop dashboard (requires local btop)')
 modes.add_argument('--shortcuts', action='store_true', help='capture the Alt shortcut bar')
 modes.add_argument('--connection', action='store_true', help='capture the connection dialog')
 modes.add_argument('--dialog', action='store_true', help='capture the new-remote dialog')
 modes.add_argument('--help-viewer', action='store_true', help='capture built-in help')
 args = parser.parse_args()
-if args.shortcuts:
+if args.monitor:
+    keys = b'\x1bh'
+    title, output_name, quit_keys = 'cpu', 'screenshot-monitor.png', b'q'
+elif args.shortcuts:
     keys = b'\x1b[57443;3u'
     title, output_name, quit_keys = 'SSH MENU', 'screenshot-shortcuts.png', b'\x1b[57443;3:3u\x03'
 elif args.connection:
@@ -39,7 +44,7 @@ else:
 
 repo = Path(__file__).resolve().parents[1]
 binary = repo / 'target/x86_64-unknown-linux-musl/release/ssh-menu'
-cols, rows = 90, 22
+cols, rows = (110, 30) if args.monitor else (90, 22)
 screen = pyte.Screen(cols, rows)
 stream = pyte.ByteStream(screen)
 with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
@@ -49,7 +54,15 @@ with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
         stub = home / "bin" / program
         stub.write_text('#!/bin/sh\nexit 0\n')
         stub.chmod(0o755)
+    if args.monitor:
+        # Run the profile's real remote script locally; never contact a server.
+        (home / "bin/ssh").write_text('#!/bin/sh\nwhile [ "$#" -gt 1 ]; do shift; done\nexec sh -c "$1"\n')
     (home / ".ssh").mkdir()
+    if args.monitor:
+        # Keep this machine's container-specific mounts out of the demo capture.
+        config = (repo / 'ssh-menu-config.example.yml').read_text()
+        config = re.sub(r'(?m)^      disks_filter = .*$', '      disks_filter = "/"', config)
+        (home / '.ssh/ssh-menu-config.yml').write_text(config)
     (home / ".ssh/config").write_text("# Production · deploy window 02:00 UTC\nHost production.example.org\n User deploy\n # Check backups before maintenance\n")
     (home / ".ssh/id_ed25519").write_text("demo fixture")
     (home / ".ssh/id_ed25519.pub").write_text("demo fixture")
@@ -82,7 +95,7 @@ profiles:
                              env=child_env)
     try:
         keys_sent = False
-        deadline = time.monotonic() + 1
+        deadline = time.monotonic() + (4 if args.monitor else 1)
         while time.monotonic() < deadline:
             if select.select([master], [], [], 0.05)[0]:
                 stream.feed(os.read(master, 65536))

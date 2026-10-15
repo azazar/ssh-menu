@@ -31,9 +31,15 @@ Alongside SSH, Mosh, MC, Bash and Zellij, the defaults include:
 | --- | --- |
 | Tmux | `tmux new-session -A -s main` attaches to the remote `main` session or creates it. Requires remote tmux; edit `remote` to use another session name. Detach with tmux's Ctrl+B, then D. |
 | SFTP | Interactive OpenSSH file transfers; type `help` for commands and `bye` to exit. Requires local sftp and a remote SFTP subsystem. |
-| Monitor | Runs the first available remote `btop`, `htop`, or `top`, in that order. No software is installed on launch. |
+| Monitor | Opens a compact btop health dashboard: CPU/load/temperature, memory/swap, mounted filesystem space, disk busy time, network traffic and supported GPU statistics. Requires remote btop. |
 | Tunnel | Opens a dialog for `local port:destination host:port`, default `8080:localhost:80`. The destination is resolved/reached from the SSH server. |
 | SOCKS | Opens a dialog for the local proxy port, default `1080`. Configure your client to use SOCKS5 at `127.0.0.1:1080`, with proxy-side DNS when desired. |
+
+![Compact remote health dashboard](../screenshot-monitor.png)
+
+Monitor starts with CPU, memory/disks and network panels; the process list is hidden to leave room for health data. Press **4** in btop to toggle processes, **i** to switch disk space/busy meters to read/write graphs, and **n/b** to cycle network interfaces. GPU utilization appears in the CPU panel when btop can detect it; GPU panels can be toggled with **5–0** on supported builds. Temperatures and other sensor data also depend on remote hardware, drivers and permissions. GPU monitoring requires a GPU-enabled btop build and the appropriate driver libraries; installing btop alone cannot guarantee it.
+
+The profile's `dashboard` field holds editable btop settings. Mounted filesystems are read live, including container roots and network mounts. The `disks_filter` excludes common virtual system mounts such as `/proc` and `/dev`; edit it to select or hide particular mounts. The number of visible mounts depends on terminal size. A private temporary config keeps your regular btop layout unchanged and is removed when the monitor exits. The setup recipe defaults to tmux + btop. Missing btop produces installation guidance instead of a process-only fallback; nothing is installed automatically.
 
 Both forwarding profiles bind only to `127.0.0.1`, remain in the foreground, and stop with Ctrl+C. They request no remote shell, fail if the listening socket cannot be created, and use SSH keepalives to detect a lost connection. A successful listener does not guarantee the destination service is reachable; the SSH server must allow forwarding. Use Alt+Enter in the dialog to return to the menu when the tunnel stops. Explicit SSH ports and alias settings work as in the other profiles.
 
