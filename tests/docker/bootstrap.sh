@@ -49,6 +49,10 @@ case "$1" in
   opensuse)
     zypper --non-interactive refresh
     zypper --non-interactive install python3 openssh sudo ca-certificates curl tar gzip diffutils gawk ncurses-utils ncurses-devel ncurses procps shadow
+    # Tumbleweed's tmux uses /run/tmux, normally created by systemd-tmpfiles.
+    # The test container has no init system, so supply the shared parent only.
+    mkdir -p /run/tmux
+    chmod 1777 /run/tmux
     ;;
   *) echo "Unknown distro: $1" >&2; exit 1 ;;
 esac

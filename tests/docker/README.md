@@ -37,6 +37,8 @@ The generated fixtures also include each profile's real `prepare_command`. No pa
 
 Bootstrap checks for `awk`, `cmp`, `tic`, and `infocmp`; openSUSE explicitly installs gawk and ncurses-devel for the terminfo tools. The loopback SSH fixture disables per-source penalties when supported because the expiry tests deliberately attempt rejected authentication. The terminfo check uses the root client's system database and verifies the remote user's private database explicitly, accommodating ncurses builds that ignore root's home directory.
 
+The openSUSE image also creates `/run/tmux` with the same shared-directory permissions normally supplied by systemd-tmpfiles. Containers do not run that service, and the packaged tmux needs the directory when it starts.
+
 The Arch test container adds `PERFMON` and `DAC_READ_SEARCH` to its capability bounding set, matching the file capabilities on its packaged btop. Without these, Linux rejects execution with “Operation not permitted.” The container retains its isolated filesystem and process namespaces; it does not use privileged mode.
 
 **Excluded:** Mosh (UDP/client behavior), MC (VFS client), SFTP (interactive client), and Tunnel/SOCKS (client-side forwarding). These remain covered by the fast argument/terminal tests where applicable; this suite targets SSH-executable profiles and configuration recipes. The fixture exporter fails when a shipped profile or recipe is added or renamed without an explicit coverage decision.
