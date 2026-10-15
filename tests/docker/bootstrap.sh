@@ -29,26 +29,26 @@ case "$1" in
       printf 'Acquire::https::CaInfo "/etc/ssl/certs/ca-certificates.crt";\n' > /etc/apt/apt.conf.d/99ssh-menu-test-ca
     fi
     apt-get update
-    apt-get install -y --no-install-recommends python3 openssh-client openssh-server sudo ca-certificates curl tar gzip ncurses-bin ncurses-term procps passwd
+    apt-get install -y --no-install-recommends python3 openssh-client openssh-server sudo ca-certificates curl tar gzip diffutils ncurses-bin ncurses-term procps passwd
     rm -f /etc/apt/apt.conf.d/99ssh-menu-test-ca
     ;;
   fedora)
-    dnf install -y --allowerasing python3 openssh-clients openssh-server sudo ca-certificates curl tar gzip ncurses procps-ng shadow-utils passwd
+    dnf install -y --allowerasing python3 openssh-clients openssh-server sudo ca-certificates curl tar gzip diffutils ncurses procps-ng shadow-utils passwd
     ;;
   rocky)
     # btop is supplied by EPEL on Enterprise Linux, not the base repositories.
     dnf install -y epel-release
-    dnf install -y --allowerasing python3 openssh-clients openssh-server sudo ca-certificates curl tar gzip ncurses procps-ng shadow-utils passwd
+    dnf install -y --allowerasing python3 openssh-clients openssh-server sudo ca-certificates curl tar gzip diffutils ncurses procps-ng shadow-utils passwd
     ;;
   alpine)
-    apk add --no-cache python3 openssh sudo ca-certificates curl tar gzip ncurses ncurses-terminfo-base procps shadow
+    apk add --no-cache python3 openssh sudo ca-certificates curl tar gzip diffutils ncurses ncurses-terminfo-base procps shadow
     ;;
   arch)
-    pacman -Syu --noconfirm --needed python openssh sudo ca-certificates curl tar gzip ncurses procps-ng shadow
+    pacman -Syu --noconfirm --needed python openssh sudo ca-certificates curl tar gzip diffutils ncurses procps-ng shadow
     ;;
   opensuse)
     zypper --non-interactive refresh
-    zypper --non-interactive install python3 openssh sudo ca-certificates curl tar gzip ncurses-utils ncurses procps shadow
+    zypper --non-interactive install python3 openssh sudo ca-certificates curl tar gzip diffutils ncurses-utils ncurses procps shadow
     ;;
   *) echo "Unknown distro: $1" >&2; exit 1 ;;
 esac

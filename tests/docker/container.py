@@ -101,7 +101,10 @@ def interactive(name, command, *, consent='y', finish=None, expected=0, timeout=
             if not finished and time.monotonic() >= next_probe:
                 finished = finish(master, transcript.decode(errors='replace'))
                 next_probe = time.monotonic() + 1
-        assert process.returncode == expected, f'{name}: exit {process.returncode}, expected {expected}'
+        assert process.returncode == expected, (
+            f'{name}: exit {process.returncode}, expected {expected}\n'
+            'Terminal output (tail):\n' + transcript[-4000:].decode(errors='replace')
+        )
         assert finished, f'{name}: exited before the application was exercised'
         CASES.append({'case': name, 'status': 'passed', 'install_prompts': prompts})
         print(f'PASS {name} (installation prompts: {prompts})', flush=True)

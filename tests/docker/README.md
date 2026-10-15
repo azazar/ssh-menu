@@ -19,7 +19,7 @@ The runner exports fixtures through the app's Rust configuration parser and comm
 | Arch Linux | `archlinux:base` | pacman |
 | openSUSE Tumbleweed | `opensuse/tumbleweed:latest` | zypper |
 
-Images track distribution updates rather than immutable digests so repository/package changes are exercised. Bootstrap installs test prerequisites: Python, SSH, sudo, certificates, download/archive tools, process tools and ncurses. Rocky enables EPEL, where btop is packaged. tmux, btop and Zellij are deliberately absent. Bash is also absent on Alpine initially.
+Images track distribution updates rather than immutable digests so repository/package changes are exercised. Bootstrap installs test prerequisites: Python, SSH, sudo, certificates, download/archive tools, process tools, diffutils (`cmp` for the dotfiles fixture and key-expiry updater), and ncurses. Rocky enables EPEL, where btop is packaged. tmux, btop and Zellij are deliberately absent. Bash is also absent on Alpine initially.
 
 ## Coverage
 
@@ -39,7 +39,7 @@ The generated fixtures also include each profile's real `prepare_command`. No pa
 
 ## Results and troubleshooting
 
-Logs and `report.json` are saved under `target/docker-tests/<run-id>/<distro>/`, keeping earlier results separate. A failed build, failed assertion, missing package, timeout or failed download makes the runner exit nonzero. `--timeout` controls the build and container deadlines (1,200 seconds each by default). `--keep` retains this run's named containers and images for inspection; otherwise only those resources are removed. Docker's reusable build cache and downloaded base images remain.
+Logs and `report.json` are saved under `target/docker-tests/<run-id>/<distro>/`, keeping earlier results separate. A failed build, failed assertion, missing package, timeout or failed download makes the runner exit nonzero. Unexpected command exit codes include the terminal output tail in the CI error, alongside the complete per-case log. `--timeout` controls the build and container deadlines (1,200 seconds each by default). `--keep` retains this run's named containers and images for inspection; otherwise only those resources are removed. Docker's reusable build cache and downloaded base images remain.
 
 The suite requires network access to the distributions' package repositories and the pinned upstream Zellij release. Network restrictions are failures, not silently skipped tests. Proxy environment variables are passed to builds, containers, SSH and test sudo sessions. Use repeatable `--ca-cert /path/to/trusted-ca.crt` for trusted HTTPS proxy CAs; TLS verification is never disabled.
 
