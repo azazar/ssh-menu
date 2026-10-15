@@ -79,18 +79,10 @@ impl Help {
                     "Topic",
                     3,
                 ),
-                (
-                    format!(
-                        "{}{}",
-                        bindings.hint("help", "up"),
-                        bindings.hint("help", "down")
-                    ),
-                    "Scroll",
-                    2,
-                ),
-                (bindings.hint("help", "page_down"), "Page", 4),
-                (bindings.hint("help", "help"), "Back", 1),
-                (bindings.hint("help", "close"), "Close", 0),
+                (bar::pair(bindings, "help", "up", "down"), "Scroll", 2),
+                (bar::plain_hint(bindings, "help", "page_down"), "Page", 4),
+                (bar::plain_hint(bindings, "help", "help"), "Back", 1),
+                (bar::plain_hint(bindings, "help", "close"), "Close", 0),
             ],
             topics,
             reference: bindings.reference(scope),

@@ -84,6 +84,10 @@ Use **Alt+Enter** (`connect_and_return`) to reopen the menu after the launched c
 
 The menu, dialogs, help and configuration editor use the same single-row bar. Keys are highlighted against a quiet shared background. The profile selector shows both neighbors, for example `Bash ← → SSH`; the current profile remains in the selected host row. Directional hints show both directions (`←→`, `↑↓`). On narrow terminals, lower-priority hints are omitted; Keys in help lists all bindings, including profile shortcuts.
 
-Hold **Alt** to reveal Alt shortcuts, **Ctrl+Alt** for that exact group, or **Ctrl** for Ctrl shortcuts. Releasing the modifiers restores the normal bar. Idle prompts show `Alt ?`, `Ctrl+Alt ?` and `Ctrl ?`. Holding modifiers requires a terminal supporting Kitty keyboard modifier press/release events. In other terminals, **Alt+?**, **Ctrl+Alt+?** or **Ctrl+?** toggles the corresponding hints; the next ordinary key also closes the reveal. These toggles only reveal bindings: still press the full shortcut to invoke an action. They are configurable as `reveal_alt`, `reveal_ctrl_alt` and `reveal_ctrl` in each screen's binding map.
+Hold **Alt**, **Shift**, **Ctrl**, or a combination to reveal only that exact group's shortcuts. Shift shows **F4 New**; Alt shows profile shortcuts; Ctrl+Alt shows its own shortcuts without Alt-only or Ctrl-only entries. Releasing keys updates the group; releasing all restores the unmodified bar.
+
+Holding modifiers requires Kitty keyboard modifier press/release events. In other terminals, **Alt+?**, **Ctrl+?**, **Ctrl+Alt+?**, and **Shift+F1** toggle the corresponding menu; the next ordinary key closes it. These only reveal bindings: press the full shortcut to invoke an action. The configurable actions are `reveal_alt`, `reveal_ctrl`, `reveal_ctrl_alt`, and `reveal_shift` in each screen's binding map.
+
+![Shift shortcuts in their own action bar](../screenshot-shift-shortcuts.png)
 
 Within a revealed group the modifier prefix is shown once; `S SSH` under Alt means Alt+S. Elsewhere compact key labels use `C-` for Ctrl, `A-` for Alt, `S-` for Shift and `↵` for Enter. Terminal keyboard and focus-reporting modes are restored before launching a connection or external editor.

@@ -581,6 +581,13 @@ profiles:
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     output = session([b"alpha", b"\x1b?", b"\x1b?", b"\r"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    # Shift gets its own menu; releasing it restores the ordinary F4 setup action.
+    output = session([b"alpha", b"\x1b[57441;2u", b"\x1b[57441;2:3u", b"\x1bOS", b"\x1b", b"\r"])
+    assert b"Shift" in output and b"New" in output and b"Configure host" in output
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    output = session([b"alpha", b"\x1b[1;2P", b"\x1b[1;2P", b"\r"])
+    assert b"Shift" in output
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     # Revealing and releasing keys also works inside help and connection dialogs.
     session([b"alpha", b"\x1bOP", b"\x1b[57443;3u", b"\x1b[57443;3:3u", b"\x1bOP", b"\x1b[13;5u", b"\x1b[57442;5u", b"\x1b[57442;5:3u", b"\r"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]

@@ -252,15 +252,7 @@ fn form(
                 "dialog",
                 vec![
                     bar::Item::pair(keys, "dialog", "previous_field", "next_field", "Field", 3),
-                    bar::Item::new(
-                        format!(
-                            "{}{}",
-                            keys.hint("dialog", "left"),
-                            keys.hint("dialog", "right")
-                        ),
-                        "Choice",
-                        4,
-                    ),
+                    bar::Item::pair(keys, "dialog", "left", "right", "Choice", 4),
                     bar::Item::action(
                         keys,
                         "dialog",

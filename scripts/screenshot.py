@@ -19,6 +19,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 modes = parser.add_mutually_exclusive_group()
 modes.add_argument('--search', action='store_true', help='capture a search matching config comments')
 modes.add_argument('--monitor', action='store_true', help='capture the real btop dashboard (requires local btop)')
+modes.add_argument('--shift-shortcuts', action='store_true', help='capture the Shift shortcut bar')
 modes.add_argument('--shortcuts', action='store_true', help='capture the Alt shortcut bar')
 modes.add_argument('--connection', action='store_true', help='capture the connection dialog')
 modes.add_argument('--configure', action='store_true', help='capture setup for the selected host')
@@ -31,6 +32,9 @@ if args.search:
 elif args.monitor:
     keys = b'\x1bh'
     title, output_name, quit_keys = 'cpu', 'screenshot-monitor.png', b'q'
+elif args.shift_shortcuts:
+    keys = b'\x1b[57441;2u'
+    title, output_name, quit_keys = 'SSH MENU', 'screenshot-shift-shortcuts.png', b'\x1b[57441;2:3u\x03'
 elif args.shortcuts:
     keys = b'\x1b[57443;3u'
     title, output_name, quit_keys = 'SSH MENU', 'screenshot-shortcuts.png', b'\x1b[57443;3:3u\x03'

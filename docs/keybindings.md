@@ -18,4 +18,8 @@ Footer hints show the current bindings. The **Keys** topic in built-in help list
 
 ## Modifier hints
 
-Every screen also supports `reveal_alt`, `reveal_ctrl_alt` and `reveal_ctrl` (Alt+?, Ctrl+Alt+? and Ctrl+? respectively) by default. These actions toggle modifier-specific hints for terminals without modifier-only events; put overrides in `menu`, `dialog`, `help` or `editor` as appropriate. In terminals with Kitty keyboard support, simply hold the modifiers to reveal their exact group and release them to restore the normal bar. Idle prompts occupy the same single row as other controls. The bar uses compact labels (`C-`, `A-`, `S-`, `↵`); the Keys topic lists full bindings and all available profile shortcuts.
+Hold **Alt**, **Shift**, or **Ctrl** to show only shortcuts with those exact modifiers. Combinations have separate menus: Ctrl+Alt does not include Ctrl-only or Alt-only shortcuts, and Shift+F4 appears only under Shift. The normal bar contains unmodified shortcuts. Releasing modifiers updates the bar to the remaining combination; releasing all restores the normal bar.
+
+This requires Kitty keyboard modifier press/release events. For other terminals, every screen provides `reveal_alt` (Alt+?), `reveal_ctrl_alt` (Ctrl+Alt+?), `reveal_ctrl` (Ctrl+?), and `reveal_shift` (Shift+F1). These toggle the corresponding menu until toggled again or another key is pressed. They only reveal bindings; invoke actions using the full shortcut. Override them in `menu`, `dialog`, `help`, or `editor`.
+
+Idle prompts share the action row. A revealed menu displays its modifier prefix once; `F4 New` under Shift means Shift+F4. The Keys help topic lists every active shortcut, including combinations with no fallback toggle.

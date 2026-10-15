@@ -34,6 +34,7 @@ keybindings:
     # reveal_alt: [Alt+?]
     # reveal_ctrl_alt: [Ctrl+Alt+?]
     # reveal_ctrl: [Ctrl+?]
+    # reveal_shift: [Shift+F1]
     connect: [Enter]
     connect_and_return: [Alt+Enter]
     connection_settings: [Ctrl+Enter]

@@ -147,6 +147,7 @@ fn defaults(scope: &str) -> Vec<(&'static str, &'static str, Vec<&'static str>)>
         ("reveal_alt", "F21", vec!["Alt+?"]),
         ("reveal_ctrl_alt", "F22", vec!["Ctrl+Alt+?"]),
         ("reveal_ctrl", "F23", vec!["Ctrl+?"]),
+        ("reveal_shift", "F24", vec!["Shift+F1"]),
     ];
     match scope {
         "menu" => result.extend([
