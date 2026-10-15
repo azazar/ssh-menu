@@ -429,10 +429,23 @@ profiles:
     editor.chmod(0o755)
     child_env["VISUAL"] = str(editor)
     (root / "edited.yml").write_text("default: Custom\nprofiles: [{name: Custom, command: 'custom-connect %h'}]\n")
-    session([b"alpha", b"\x1bOS", b"\x1bOP", b"\x1bOP", b"\r", b"\r"])
+    output = session([b"alpha", b"\x1bOS", b"\r"])
+    assert output.count(b"SSH_MENU_EDITOR") == 1
+    assert b"CONFIGURATION" not in output
     assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
+    # Empty environment values fall through to EDITOR, then vi.
+    child_env["VISUAL"] = " "
+    child_env["EDITOR"] = str(editor)
+    output = session([b"\x1bOS", b"\x03"])
+    assert output.count(b"SSH_MENU_EDITOR") == 1
+    shutil.copy2(editor, root / "bin/vi")
+    child_env["EDITOR"] = ""
+    output = session([b"\x1bOS", b"\x03"])
+    assert output.count(b"SSH_MENU_EDITOR") == 1
+    child_env["VISUAL"] = str(editor)
     (root / "edited.yml").write_text("profiles: [broken\n")
-    output = session([b"alpha", b"\x1bOS", b"\r", b"\x1b", b"\r"])
+    output = session([b"alpha", b"\x1bOS", b"\x1bOP", b"\x1bOP", b"\r", b"\x1b", b"\r"])
+    assert output.count(b"SSH_MENU_EDITOR") == 2
     assert b"Configuration not reloaded" in output
     assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
     config_file.write_text(original_config)
@@ -473,7 +486,7 @@ keybindings:
     assert output.count(b"SSH_MENU_HANDOFF") == 1
     session([b"\x1b[20~", b"new-rebound", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "new-rebound"]
-    # Editor actions use their own bindings and help closes back to the launcher.
+    # Editor error actions use their own bindings and help returns to the error screen.
     session([b"alpha", b"\x1b[21~", b"\x1b[17~", b"x", b"\x1b[18~", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     config_file.write_text("""default: SSH

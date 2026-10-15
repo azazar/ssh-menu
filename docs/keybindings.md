@@ -60,6 +60,8 @@ Supported keys: letters with `Ctrl+`, `Alt+`, or `Ctrl+Alt+`; `F1`–`F24`; `Ent
 
 Duplicate keys in a screen, unknown actions, and conflicts with profile shortcuts are rejected. Move or disable the existing action before reusing its key. Profile shortcuts remain modified letters in each profile's `key` field; Ctrl+C can be assigned there after removing it from `menu.quit`. Terminal aliases are checked too: Ctrl+I is Tab, Ctrl+J/Ctrl+M is Enter, and Ctrl+H is Ctrl+Backspace. Some terminals cannot distinguish modified Enter or other combinations; bind a function key or modified letter instead.
 
+`menu.edit_config` launches the external editor immediately. The `editor` bindings apply to the recovery screen shown only when editing or validation fails.
+
 Footer hints show the current bindings. The **Keys** topic in built-in help lists every active binding for the current screen and help viewer, including disabled actions. Changes saved through the configuration editor take effect immediately after validation.
 
 ## Modifier hints

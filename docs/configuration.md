@@ -100,7 +100,7 @@ Each named-field substitution adds a shell-quoting layer. Fields without `%{...}
 
 ## Menu behavior and editing
 
-`connect` hands off to a connection; `connect_and_return` reopens the menu afterward (Enter and Alt+Enter by default). Configure either action under `keybindings.menu` and `keybindings.dialog`. **F4**, then Enter, edits this file using `$VISUAL` / `$EDITOR` / `vi`; F1 opens the format reference. Saving reloads only valid configurations. Checks include YAML structure, required fields, templates, input definitions, unique names and shortcut conflicts. This validates the configuration format, not arbitrary shell script behavior.
+`connect` hands off to a connection; `connect_and_return` reopens the menu afterward (Enter and Alt+Enter by default). Configure either action under `keybindings.menu` and `keybindings.dialog`. **F4** immediately edits this file using `$VISUAL` / `$EDITOR` / `vi`. If editing or validation fails, the recovery screen offers a retry and F1 for the format reference. Saving reloads only valid configurations. Checks include YAML structure, required fields, templates, input definitions, unique names and shortcut conflicts. This validates the configuration format, not arbitrary shell script behavior.
 
 ## Connection inputs
 

@@ -7,13 +7,34 @@ pub(super) fn edit(
     config: &mut launch::Config,
     profiles: &mut [usize],
 ) -> io::Result<()> {
-    let path = home.join(".ssh").join(launch::CONFIG_NAME);
-    let mut message = format!(
-        "{}\n\nEdit with $VISUAL, $EDITOR, or vi. Help explains the configuration format.\n\nSaving a valid configuration reloads it immediately. Invalid edits stay on disk for correction; the current configuration remains active.",
-        path.display()
-    );
+    let mut message = String::new();
+    let mut edit_requested = true;
     let mut bar_state = bar::State::default();
     loop {
+        if edit_requested {
+            edit_requested = false;
+            bar_state.reset();
+            match launch_editor(terminal, home) {
+                Ok(updated) => {
+                    for index in profiles.iter_mut() {
+                        let name = &config.profiles[*index].name;
+                        *index = updated
+                            .profiles
+                            .iter()
+                            .position(|p| &p.name == name)
+                            .unwrap_or(updated.default_index());
+                    }
+                    *config = updated;
+                    return Ok(());
+                }
+                Err(err) => {
+                    message = format!(
+                        "{}\n\n{err}\n\nConfiguration not reloaded.\nEdit to fix, open help, or cancel to keep the current configuration.",
+                        home.join(".ssh").join(launch::CONFIG_NAME).display()
+                    )
+                }
+            }
+        }
         terminal.draw(|frame| {
             frame.render_widget(
                 Block::default().style(Style::default().fg(theme::TEXT).bg(theme::BASE)),
@@ -58,57 +79,35 @@ pub(super) fn edit(
             KeyCode::Esc => return Ok(()),
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return Ok(()),
             KeyCode::F(1) => help::show(terminal, help::Context::Configuration, config)?,
-            KeyCode::Enter | KeyCode::F(4) => {
-                bar_state.reset();
-                if !home.join(".ssh").is_dir() {
-                    message =
-                        "~/.ssh does not exist. Create it before editing configuration.".into();
-                    continue;
-                }
-                let editor = env::var("VISUAL")
-                    .ok()
-                    .filter(|s| !s.trim().is_empty())
-                    .or_else(|| env::var("EDITOR").ok())
-                    .unwrap_or_else(|| "vi".into());
-                let words = match shell_words::split(&editor) {
-                    Ok(words) if !words.is_empty() => words,
-                    _ => {
-                        message = "Invalid VISUAL / EDITOR command.".into();
-                        continue;
-                    }
-                };
-                suspend_terminal()?;
-                let status = Command::new(&words[0])
-                    .args(&words[1..])
-                    .arg(&path)
-                    .status();
-                *terminal = init_terminal()?;
-                let loaded = match status {
-                    Ok(status) if status.success() => launch::Config::load(home),
-                    Ok(status) => Err(io::Error::other(format!("Editor exited with {status}"))),
-                    Err(err) => Err(err),
-                };
-                match loaded {
-                    Ok(updated) => {
-                        for index in profiles.iter_mut() {
-                            let name = &config.profiles[*index].name;
-                            *index = updated
-                                .profiles
-                                .iter()
-                                .position(|p| &p.name == name)
-                                .unwrap_or(updated.default_index());
-                        }
-                        *config = updated;
-                        return Ok(());
-                    }
-                    Err(err) => {
-                        message = format!(
-                            "{err}\n\nConfiguration not reloaded.\nEdit to fix, open help, or cancel to keep the current configuration."
-                        )
-                    }
-                }
-            }
+            KeyCode::Enter | KeyCode::F(4) => edit_requested = true,
             _ => {}
         }
     }
+}
+
+fn launch_editor(terminal: &mut DefaultTerminal, home: &Path) -> io::Result<launch::Config> {
+    if !home.join(".ssh").is_dir() {
+        return Err(io::Error::other(
+            "~/.ssh does not exist. Create it before editing configuration.",
+        ));
+    }
+    let editor = ["VISUAL", "EDITOR"]
+        .into_iter()
+        .find_map(|name| env::var(name).ok().filter(|value| !value.trim().is_empty()))
+        .unwrap_or_else(|| "vi".into());
+    let words = shell_words::split(&editor)
+        .ok()
+        .filter(|words| !words.is_empty())
+        .ok_or_else(|| io::Error::other("Invalid VISUAL / EDITOR command."))?;
+    suspend_terminal()?;
+    let status = Command::new(&words[0])
+        .args(&words[1..])
+        .arg(home.join(".ssh").join(launch::CONFIG_NAME))
+        .status();
+    *terminal = init_terminal()?;
+    let status = status?;
+    if !status.success() {
+        return Err(io::Error::other(format!("Editor exited with {status}")));
+    }
+    launch::Config::load(home)
 }
