@@ -138,7 +138,7 @@ SetEnv ENV=/home/remote/.profile LANG=C.UTF-8
 ''')
     effective = subprocess.run(['/usr/sbin/sshd', '-T', '-f', str(config)],
                                check=True, capture_output=True, text=True).stdout
-    if 'persourcepenalties ' in effective:
+    if 'persourcepenalties ' in effective.lower():
         # This loopback fixture deliberately rejects keys; don't rate-limit later cases.
         with config.open('a') as file:
             file.write('PerSourcePenalties no\n')
@@ -250,12 +250,16 @@ def run():
 
         definition = Path('/tests/fixture.terminfo')
         definition.write_text('ssh-menu-docker|integration test terminal,\n cols#80, lines#24, bel=^G, clear=\\E[H\\E[2J,\n')
-        subprocess.run(['tic', '-x', '-o', '/root/.terminfo', str(definition)], check=True)
-        # This TERM exists only under the local client's home before copying.
+        # Some ncurses builds ignore root's ~/.terminfo. Install the client's
+        # fixture in the system database, and check the remote's private database
+        # explicitly so a system fallback cannot make the copy test pass.
+        subprocess.run(['tic', '-x', str(definition)], check=True)
+        remote_definition = 'infocmp -x -A "$HOME/.terminfo" ssh-menu-docker'
+        assert remote(remote_definition, check=False).returncode != 0
         os.environ['TERM'] = 'ssh-menu-docker'
         # interactive() sets TERM for terminal apps; explicitly set it for this recipe.
         interactive('terminfo', ['env', 'TERM=ssh-menu-docker', 'sh', str(FIXTURES / 'terminfo.sh')])
-        assert 'cols#80' in remote('infocmp -x ssh-menu-docker').stdout
+        assert 'cols#80' in remote(remote_definition).stdout
         assert not list(Path('/tmp').glob('ssh-menu-terminfo.*'))
         os.environ['TERM'] = 'xterm-256color'
 

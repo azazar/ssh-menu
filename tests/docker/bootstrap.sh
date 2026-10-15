@@ -48,10 +48,14 @@ case "$1" in
     ;;
   opensuse)
     zypper --non-interactive refresh
-    zypper --non-interactive install python3 openssh sudo ca-certificates curl tar gzip diffutils ncurses-utils ncurses procps shadow
+    zypper --non-interactive install python3 openssh sudo ca-certificates curl tar gzip diffutils gawk ncurses-utils ncurses procps shadow
     ;;
   *) echo "Unknown distro: $1" >&2; exit 1 ;;
 esac
+# Minimal images do not consistently include these POSIX/ncurses utilities.
+for tool in awk cmp tic infocmp; do
+  command -v "$tool" >/dev/null || { echo "Missing test prerequisite: $tool" >&2; exit 1; }
+done
 mkdir -p /run/sshd /results /root/.ssh
 chmod 700 /root/.ssh
 useradd -m -U -s /bin/sh remote

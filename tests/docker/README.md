@@ -31,9 +31,11 @@ Images track distribution updates rather than immutable digests so repository/pa
 | Monitor | Decline/accept btop installation; start actual btop with the shipped compact config; quit and verify temporary config cleanup; reuse without another prompt |
 | Configure key-based auth | Generate a real Ed25519 key through the recipe; accept an empty passphrase for the disposable test key; authenticate with it; reuse without duplicate authorized keys; reject overwriting it; verify every expiry duration, expired-key rejection, renewal and removal of expiry |
 | Key auth + dotfiles | Run real ssh-copy-id/scp/SSH; copy dotfiles including hidden files; execute a fixture installer and verify its remote result |
-| Copy terminal definition | Compile a client-only terminfo fixture, export/copy it through the recipe, verify remote infocmp and temporary-file cleanup |
+| Copy terminal definition | Compile a unique system terminfo fixture for the root client, export/copy it through the recipe, verify it appears in the remote user's private database and temporary files are removed |
 
 The generated fixtures also include each profile's real `prepare_command`. No package-manager, SSH, tmux, btop or Zellij executables are mocked. A pseudo-terminal supplies known installation/password prompts and drives interactive applications. Downloads retain TLS and checksum verification; package signature checks stay enabled.
+
+Bootstrap checks for `awk`, `cmp`, `tic`, and `infocmp`; openSUSE explicitly installs gawk. The loopback SSH fixture disables per-source penalties when supported because the expiry tests deliberately attempt rejected authentication. The terminfo check uses the root client's system database and verifies the remote user's private database explicitly, accommodating ncurses builds that ignore root's home directory.
 
 **Excluded:** Mosh (UDP/client behavior), MC (VFS client), SFTP (interactive client), and Tunnel/SOCKS (client-side forwarding). These remain covered by the fast argument/terminal tests where applicable; this suite targets SSH-executable profiles and configuration recipes. The fixture exporter fails when a shipped profile or recipe is added or renamed without an explicit coverage decision.
 
