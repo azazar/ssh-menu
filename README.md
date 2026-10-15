@@ -1,28 +1,39 @@
 # SSH Menu
 
-**Find a remote, choose how to connect, and get to work.**
+**Your remotes, one terminal menu.**
 
-SSH Menu is a keyboard-driven terminal launcher for your remote machines. It finds hosts in your SSH config and shell history, lets you choose a different launch command for each host, and can run a setup recipe when you add a new remote.
+Find a machine, choose how to connect, and press Enter. SSH Menu brings your SSH hosts, recent connections, remote file browser, and session launcher into one searchable list. Each host can use its own launch profile, and new machines can run a setup recipe before the first connection.
 
-Type to filter. Use **← / →** to choose SSH, Mosh, Midnight Commander, Bash, or Zellij. Press **Enter** to connect.
+![SSH Menu showing a different launch profile for each remote](screenshot.png)
 
-![SSH Menu with per-host launch profiles](screenshot.png)
+**Type to filter · ↑↓ to select · ←→ to choose a profile · Enter to connect**
 
-- **Your existing hosts, ready to use.** Reads SSH config, Bash history, and Midnight Commander bookmarks.
-- **One host, several ways in.** Open a shell, browse remote files, attach to a Zellij session, or run your own command.
-- **Setup from the same menu.** Add a remote, pick an SSH keypair, and optionally install dotfiles with editable script inputs.
-- **A compact terminal interface.** Built with [Ratatui](https://ratatui.rs/), with a borderless [Catppuccin Mocha](https://catppuccin.com/palette/) theme and Powerline shortcuts.
-- **A portable executable.** Written in Rust, with static musl builds for Linux. Connection tools remain separate programs, using your existing credentials and SSH configuration.
+[Install](#install) · [Quick start](#quick-start) · [Add a remote](#add-a-remote) · [Configuration](#configuration) · [Development](#development)
 
-[Install](#install) · [Use](#use) · [Configure](#configure) · [Setup recipes](#setup-recipes) · [Development](#development)
+## What you can do
+
+| Choose | Open |
+| --- | --- |
+| **SSH** | Your usual remote shell, using existing SSH settings |
+| **Mosh** | A Mosh session for connections that need to survive network changes |
+| **MC** | Midnight Commander browsing the remote filesystem |
+| **Bash** | An interactive remote Bash login shell |
+| **Zellij** | An existing remote session, or a new session if none exists |
+| **Your own profile** | Any command or remote script defined in YAML |
+
+Hosts come from SSH config, Bash history, and Midnight Commander bookmarks. Launch choices are remembered through history, so you can return to the same machine with the same tool. Press **F2** to add a remote, choose an SSH keypair, and optionally install dotfiles.
+
+Written in Rust with [Ratatui](https://ratatui.rs/), SSH Menu uses a compact, borderless [Catppuccin Mocha](https://catppuccin.com/palette/) interface. Linux builds are static executables. SSH, Mosh, and other connection tools run as separate programs, with your terminal restored before handoff.
 
 ## Install
 
-### Download a binary
+### Get a binary
 
-Choose an archive from [GitHub Releases](https://github.com/azazar/ssh-menu/releases). Each contains the executable, example config, README, license, and screenshots. `SHA256SUMS` contains the archive checksums.
+The current release candidate is **`v0.1.0-rc.1`**. Its seven platform builds have passed; download them from the **Artifacts** section of the [RC workflow run](https://github.com/azazar/ssh-menu/actions/runs/38724584773). Downloading Actions artifacts requires signing in to GitHub. Each artifact ZIP contains a platform archive and its `.sha256` checksum file—extract that outer ZIP first.
 
-| Platform | Archive |
+Published versions are available on [GitHub Releases](https://github.com/azazar/ssh-menu/releases), with a combined `SHA256SUMS` file. The RC workflow prepares a draft prerelease; release assets become publicly downloadable when that draft is published.
+
+| System | Archive to choose |
 | --- | --- |
 | Linux x86-64 | `ssh-menu-x86_64-unknown-linux-musl.tar.gz` |
 | Linux ARM64 | `ssh-menu-aarch64-unknown-linux-musl.tar.gz` |
@@ -32,27 +43,57 @@ Choose an archive from [GitHub Releases](https://github.com/azazar/ssh-menu/rele
 | Windows x64 | `ssh-menu-x86_64-pc-windows-msvc.zip` |
 | Windows ARM64 | `ssh-menu-aarch64-pc-windows-msvc.zip` |
 
-These are the build workflow's targets. Linux binaries have no dynamic libc dependency; macOS and Windows builds use their OS libraries. Rust's embedded and WebAssembly targets cannot run this interactive terminal application.
+#### Linux and macOS
 
-For example, to install a published Linux x86-64 release:
+After downloading, choose your archive name and verify its checksum. For an Actions artifact:
 
 ```sh
+archive=ssh-menu-x86_64-unknown-linux-musl.tar.gz  # Change for your platform.
+sha256sum -c "$archive.sha256"                  # macOS: shasum -a 256 -c "$archive.sha256"
+```
+
+For a release download, extract the matching checksum from `SHA256SUMS` first:
+
+```sh
+awk -v name="$archive" '$2 == name' SHA256SUMS > "$archive.sha256"
+```
+
+Once verified, extract the executable and install it:
+
+```sh
+tar -xzf "$archive" ssh-menu
+mkdir -p "$HOME/.local/bin"
+install -m 755 ssh-menu "$HOME/.local/bin/ssh-menu"
+export PATH="$HOME/.local/bin:$PATH"
+ssh-menu
+```
+
+Add the `PATH` line to your shell's startup file to keep it across sessions. Linux builds have no dynamic libc dependency. macOS builds use system libraries and are not signed or notarized.
+
+<details>
+<summary>Download a published version from the command line</summary>
+
+Use an explicit version for release candidates; GitHub's `latest` download URL excludes prereleases. These commands work after the release has been published:
+
+```sh
+version=v0.1.0-rc.1
 archive=ssh-menu-x86_64-unknown-linux-musl.tar.gz
-base=https://github.com/azazar/ssh-menu/releases/latest/download
+base="https://github.com/azazar/ssh-menu/releases/download/$version"
 curl -fLO "$base/$archive"
 curl -fLO "$base/SHA256SUMS"
 awk -v name="$archive" '$2 == name' SHA256SUMS > "$archive.sha256"
-sha256sum -c "$archive.sha256"
-tar -xzf "$archive"
-mkdir -p "$HOME/.local/bin"
-install -m 755 ssh-menu "$HOME/.local/bin/ssh-menu"
+sha256sum -c "$archive.sha256"  # macOS: shasum -a 256 -c "$archive.sha256"
 ```
 
-On macOS, choose the matching archive and use `shasum -a 256 -c "$archive.sha256"` for verification. Add `~/.local/bin` to your `PATH` if it is not already there, then run `ssh-menu`.
+Then follow the extraction and installation steps above.
 
-On Windows, download and extract the matching ZIP. Compare its `Get-FileHash -Algorithm SHA256` output with `SHA256SUMS`, then put `ssh-menu.exe` in a directory on your `PATH`. Run it from **[Git Bash](https://git-scm.com/downloads/win)**: command templates require `sh`, and discovery uses `HOME` and `USER`. PowerShell alone does not provide that environment. WSL users should use a Linux build inside WSL.
+</details>
 
-For builds that have not been published, download an artifact from a successful [Binaries workflow](https://github.com/azazar/ssh-menu/actions/workflows/binaries.yml) run. GitHub wraps the platform archive and its checksum in an artifact ZIP. Tag builds prepare **draft** releases; the release download links work after a maintainer publishes a release.
+#### Windows
+
+Download the matching ZIP and compare `Get-FileHash -Algorithm SHA256 .\ssh-menu-x86_64-pc-windows-msvc.zip` in PowerShell with the supplied checksum. Extract `ssh-menu.exe` into a directory on your `PATH`.
+
+Run it from **[Git Bash](https://git-scm.com/downloads/win)**, which supplies the `sh`, `HOME`, and `USER` environment used by command templates and host discovery. PowerShell alone does not supply that environment. For WSL, install a Linux build inside WSL instead.
 
 ### Build from source
 
@@ -65,61 +106,76 @@ cargo build --locked --release
 ./target/release/ssh-menu
 ```
 
-The repository pins its Rust toolchain. On Linux x86-64, build a static executable with:
+The repository pins its Rust toolchain. To build the RC source specifically, run `git checkout v0.1.0-rc.1` before building. On Linux x86-64, add `--target x86_64-unknown-linux-musl` for a static build; the binary will be in `target/x86_64-unknown-linux-musl/release/`.
 
-```sh
-cargo build --locked --release --target x86_64-unknown-linux-musl
-./target/x86_64-unknown-linux-musl/release/ssh-menu
-```
+### Requirements
 
-Use a UTF-8 terminal and a Powerline-compatible font, such as a Nerd Font. Install `ssh` locally; install `mosh` or `mc` if you use those profiles. Mosh also needs `mosh-server` on the remote. The setup samples use `ssh-copy-id`, and the dotfiles sample additionally uses `scp`.
+Use a UTF-8 terminal with a Powerline-compatible font, such as a Nerd Font. Install the tools for the profiles you use: `ssh` for normal connections, `mosh` locally and `mosh-server` remotely for Mosh, or local `mc` for file browsing. Setup recipes use `ssh-copy-id`; the dotfiles sample also uses `scp`.
 
-## Use
+## Quick start
 
-Launch `ssh-menu`, type part of a host name, select a row, and press Enter. Left/Right changes the profile **only for that row**. Moving away or changing the filter preserves your choice while the menu is open.
+1. Run `ssh-menu`. Your existing hosts appear automatically.
+2. Type part of a hostname and select a matching row with **↑ / ↓**.
+3. Use **← / →** to choose how that host opens, then press **Enter**.
+
+Changing a profile affects only the selected host. Moving away or changing the filter preserves the choice while the menu is open.
 
 | Key | Action |
 | --- | --- |
 | Type | Filter hosts, case-insensitively |
-| ↑ / ↓ | Select a host |
-| PgUp / PgDn | Move by a page |
-| ← / → | Change the selected host's launch profile |
+| ↑ / ↓ · PgUp / PgDn | Move through hosts |
+| ← / → | Change the selected host's profile |
 | Enter | Connect |
-| F2 | Add a remote, with optional setup |
+| F2 | Add a remote with optional setup |
 | F8 | Toggle plain SSH / Mosh for the selected host |
 | Backspace / Delete | Remove the last character |
 | Ctrl-Backspace / Ctrl-Delete | Remove the last word |
 | Esc / Ctrl-Q / Ctrl-C | Quit |
 
-Editing happens at the end of the filter. Ctrl-Backspace also accepts the legacy Ctrl-H encoding. The terminal's cursor, styles, and input mode are restored before handing control to your command.
+Editing happens at the end of the text. Ctrl-Backspace also accepts the legacy Ctrl-H encoding. Use `ssh-menu --dump` to list hosts without opening the UI; `--help` and `--version` are also available.
 
-### Included launch profiles
+<details>
+<summary>Where hosts and remembered profiles come from</summary>
 
-| Profile | What it does |
+SSH Menu reads `~/.ssh/config`, `~/.bash_history`, and `~/.config/mc/hotlist`. Duplicate targets are merged; recently encountered connections appear first. The SSH config reader handles explicit `Host` and `User` sections and skips wildcard aliases. It does not expand `Include` or `Match`; SSH itself resolves connection settings at launch.
+
+On startup, history entries are matched against configured profiles. Host, username, and explicit port distinguish entries. Unknown or ambiguous commands fall back to the default profile. History is parsed as data, never executed.
+
+Launching appends its command to an existing `.bash_history`; adding a remote creates that file if needed. Switching profiles and quitting writes nothing. Generated commands include a target comment so custom commands can be rediscovered. Run `history -a` in another Bash session to make its recent commands visible.
+
+</details>
+
+<details>
+<summary>How the Zellij profile works</summary>
+
+The recipe attaches to an existing remote session, or creates one if none exists. It reuses an installed Zellij; otherwise it installs pinned **0.45.1** into remote `~/.local/bin` and verifies the executable's SHA-256 against the published checksum. It uses no sudo and leaves existing installations in place.
+
+Automatic installation supports Linux x86-64 and ARM64 and requires `tar`, `curl` or `wget`, and `sha256sum` or `shasum`. See the [bootstrap script](https://github.com/azazar/ssh-menu/blob/master/scripts/zellij-remote.sh) for the complete recipe.
+
+</details>
+
+## Add a remote
+
+Press **F2**, enter `user@host[:port]` (or `user@[IPv6]:port`), and choose an optional setup recipe. Tab/Shift-Tab or Up/Down moves between fields; Left/Right changes a recipe or dropdown choice.
+
+![New remote dialog with SSH keypair and dotfiles inputs](screenshot-new-remote.png)
+
+The samples included in the config are:
+
+| Recipe | What it does |
 | --- | --- |
-| SSH | Connects with your normal remote shell |
-| Mosh | Opens a Mosh session |
-| MC | Opens Midnight Commander at the remote `/sh://` path |
-| Bash | Starts an interactive remote Bash login shell |
-| Zellij | Attaches to an existing remote session, or creates one |
+| **ssh-copy-id** | Lets you pick a local SSH keypair and copies its public key to the remote |
+| **ssh-copy-id + dotfiles** | Copies the key, uploads a dotfiles directory, and runs its installer |
 
-The Zellij recipe reuses a remote installation if available. Otherwise it installs pinned Zellij **0.45.1** into remote `~/.local/bin`, verifying the executable's SHA-256 against the published checksum. Automatic installation supports Linux x86-64 and ARM64, needs `tar`, `curl` or `wget`, and `sha256sum` or `shasum`, and uses no sudo. Existing installations are left in place. See the [bootstrap script](https://github.com/azazar/ssh-menu/blob/master/scripts/zellij-remote.sh) for the full recipe.
+The dotfiles sample defaults to local `~/src/dotfiles`, installer `install.sh`, and shell `sh`. Change the dialog values or edit the recipe for your own repository. Both samples are hidden when no matching `~/.ssh/id_*` private/public keypairs exist. The key selector reads filenames, not key contents.
 
-### Hosts and remembered choices
+Setup defaults to **None**. **Enter** runs the selected setup, saves the connection to history, and connects using the default launch profile. **Esc** cancels. Authentication prompts run with the terminal restored. Failed setup stops the connection and does not save the entry. Setup is not repeated on later connections, and SSH config is not modified.
 
-Hosts are discovered from `~/.ssh/config`, `~/.bash_history`, and `~/.config/mc/hotlist`. Duplicate targets are merged; recently encountered connections appear first. The config reader handles explicit `Host` and `User` sections and skips wildcard aliases. It does not expand `Include` or `Match`; SSH itself still resolves connection settings when launched.
+## Configuration
 
-On startup, SSH Menu matches history entries against your configured profiles to restore each host's last choice. Host, username, and explicit port distinguish entries. Unknown or ambiguous commands fall back to the configured default. History is parsed as data, never executed.
+Edit **`~/.ssh/ssh-menu-config.yml`** and restart SSH Menu to reload it. The file is created from the [commented example](ssh-menu-config.example.yml) on the first interactive launch if `~/.ssh` already exists. Existing configs are preserved. With no `~/.ssh` directory, built-in defaults are used.
 
-Launching appends a command to an existing `.bash_history`; adding a remote creates that file if needed. Switching profiles and quitting writes nothing. Generated history lines include a target comment so custom commands can be rediscovered. Only history already written to disk is visible—run `history -a` in another Bash session to expose its recent commands.
-
-Use `ssh-menu --dump` to list discovered targets without opening the UI. `--help` and `--version` are also available.
-
-## Configure
-
-Configuration lives in **`~/.ssh/ssh-menu-config.yml`**. On the first interactive launch, SSH Menu creates it from the [example configuration](ssh-menu-config.example.yml) if `~/.ssh` already exists. It uses owner-only permissions on Unix, preserves existing configs, and uses built-in defaults when that directory is absent. Noninteractive commands do not create it.
-
-Edit the file and restart to reload it. A minimal configuration is:
+Launch profiles are shell command templates. A minimal config is:
 
 ```yaml
 default: SSH
@@ -132,7 +188,12 @@ profiles:
     command: mc /sh://%t/
 ```
 
-Each profile has a unique `name` and a `command`; `default` names one of them. Commands run through local `sh -c`. Additional string fields can hold reusable commands or scripts. The built-in recipes are ordinary YAML templates, so you can add any application or shell command.
+Each profile needs a unique `name` and a `command`; `default` names one of them. Commands run through local `sh -c`, and additional string fields can hold reusable commands or scripts. **Placeholders are shell-escaped automatically—leave them unquoted.**
+
+The example above lets SSH config manage ports. The shipped defaults also handle explicitly entered ports. See the reference below for that template and remote-script quoting.
+
+<details>
+<summary>Launch profile reference: placeholders, ports, and remote scripts</summary>
 
 ### Placeholders and ports
 
@@ -171,20 +232,10 @@ Use a reusable `remote` field to preserve quoting through both the local and rem
 
 Each named-field substitution adds a shell-quoting layer. Fields without `%{...}` references remain literal, including shell expressions in a script. Missing references, reference cycles, and quoted placeholders are rejected when configuration is loaded.
 
-## Setup recipes
+</details>
 
-Press **F2**, enter `user@host[:port]` (or `user@[IPv6]:port`), and choose an optional setup recipe. Tab/Shift-Tab or Up/Down moves between fields; Left/Right changes a recipe or dropdown choice. **Enter adds and connects** with the default launch profile. Esc cancels the dialog.
-
-![New remote dialog with SSH keypair and dotfiles inputs](screenshot-new-remote.png)
-
-The included recipes offer:
-
-- **ssh-copy-id:** choose a local SSH keypair and copy its public key to the remote.
-- **ssh-copy-id + dotfiles:** copy the key, upload a local dotfiles directory, and run its installer. Inputs default to local `~/src/dotfiles`, `install.sh`, and `sh`; edit them to suit your repository.
-
-Both recipes are hidden when no matching `~/.ssh/id_*` private/public keypairs exist. The key selector reads filenames, not key contents, and passes the chosen public key to `ssh-copy-id -i`.
-
-Setup defaults to **None**. The terminal is restored before setup so authentication prompts work normally. Failed setup stops the connection and does not save the new entry. Successful setup is followed by saving the launch command to history and connecting; SSH config is not modified. Setup is not replayed on subsequent connections.
+<details>
+<summary>Setup recipe reference: custom inputs, generated choices, and availability checks</summary>
 
 ### Custom fields
 
@@ -250,6 +301,8 @@ configuration_scripts:
 Exit **0** shows the recipe; another status or failure to start hides it. Without a check, the recipe is always available. Checks run once each time the dialog opens, and **None** is always an option. Hidden recipes' input generators do not run.
 
 Availability checks and input generators are literal local `sh -c` commands with stdin closed. Use quick, noninteractive commands; menu placeholders are not expanded inside them. Availability output is discarded; generator stdout is parsed as configuration. Neither runs during config loading or ordinary connections.
+
+</details>
 
 ## Development
 
