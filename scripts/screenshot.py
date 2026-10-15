@@ -21,6 +21,7 @@ modes.add_argument('--search', action='store_true', help='capture a search match
 modes.add_argument('--monitor', action='store_true', help='capture the real btop dashboard (requires local btop)')
 modes.add_argument('--shortcuts', action='store_true', help='capture the Alt shortcut bar')
 modes.add_argument('--connection', action='store_true', help='capture the connection dialog')
+modes.add_argument('--configure', action='store_true', help='capture setup for the selected host')
 modes.add_argument('--dialog', action='store_true', help='capture the new-remote dialog')
 modes.add_argument('--help-viewer', action='store_true', help='capture built-in help')
 args = parser.parse_args()
@@ -36,9 +37,12 @@ elif args.shortcuts:
 elif args.connection:
     keys = b'\x1b[13;5u'
     title, output_name, quit_keys = 'CONNECT', 'screenshot-connection.png', b'\x03\x03'
+elif args.configure:
+    keys = b'\x1bOQ\t\t\x1b[C\t'
+    title, output_name, quit_keys = 'REMOTE SETUP', 'screenshot-configure-remote.png', b'\x03\x03'
 elif args.dialog:
-    keys = b'\x1bOQdeploy@new.example.org:2222\t\x1b[C\x1b[C\t'
-    title, output_name, quit_keys = 'NEW REMOTE', 'screenshot-new-remote.png', b'\x03\x03'
+    keys = b'\x1bOQ\x1b[C\tdeploy@new.example.org:2222\t\x1b[C\x1b[C\t'
+    title, output_name, quit_keys = 'REMOTE SETUP', 'screenshot-new-remote.png', b'\x03\x03'
 elif args.help_viewer:
     keys = b'\x1bOP\x1b[C'
     title, output_name, quit_keys = 'HELP', 'screenshot-help.png', b'\x03\x03'

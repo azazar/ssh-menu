@@ -250,7 +250,9 @@ profiles:
       printf 'SOCKS proxy on 127.0.0.1:%s. Ctrl+C stops the proxy.\n' "$listen"
       exec ssh ${port:+-p "$port"} -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -D "127.0.0.1:$listen" -- %h
 
-# Optional one-time setup when adding a remote (F2). None is selected by default.
+# F2 configures the selected host; switch Action to Add new to add and connect.
+# Configure host runs one recipe and returns to the menu without saving history.
+# None is selected by default; a recipe is required only in Configure host mode.
 # Same command templates and named fields as launch profiles; runs locally.
 configuration_scripts:
   - name: Configure key-based auth

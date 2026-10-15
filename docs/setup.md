@@ -1,10 +1,17 @@
 # Setting up a remote
 
-Default keys: Enter adds and connects, Alt+Enter adds and connects with a return to the menu afterward. All dialog controls can be rebound under `keybindings.dialog`.
+Press **F2** to open remote setup for the selected host. With no selected host, the dialog starts in **Add new** mode.
 
-Enter `user@host[:port]` (or `user@[IPv6]:port`), and choose an optional setup recipe. Tab/Shift-Tab or Up/Down moves between fields; Left/Right changes a recipe or dropdown choice.
+Use Left/Right on **Action** to switch between:
 
-![New remote dialog with SSH keypair and dotfiles inputs](../screenshot-new-remote.png)
+- **Configure host**: the selected address is filled in. Choose a setup recipe and press **Enter** to apply it. SSH Menu returns to the host list with a success or failure message, preserving your filter and profile choices. It does not launch a connection or save a history entry.
+- **Add new**: enter `user@host[:port]` (or `user@[IPv6]:port`), and optionally choose a setup recipe. **Enter** adds and connects using the default launch profile; **Alt+Enter** returns to the menu after the connection ends.
+
+Each action retains its own address draft while you switch. Tab/Shift-Tab or Up/Down moves between fields; Left/Right changes the action, recipe, or dropdown choice. **Esc** cancels. All controls can be rebound under `keybindings.dialog`.
+
+![Configuring the selected host with a setup recipe](../screenshot-configure-remote.png)
+
+![Adding a remote with SSH keypair and dotfiles inputs](../screenshot-new-remote.png)
 
 The included setup recipes are:
 
@@ -21,7 +28,7 @@ Generation runs only after confirming setup, never while opening or canceling th
 
 Existing configuration files are preserved. To adopt these samples in an existing installation, copy the desired entries under `configuration_scripts` from the [updated example](../ssh-menu-config.example.yml); keep your custom recipes.
 
-Setup defaults to **None**. **Enter** runs the selected setup, saves the connection to history, and connects using the default launch profile. **Esc** cancels. Authentication prompts run with the terminal restored. Failed setup stops the connection and does not save the entry. Setup is not repeated on later connections, and SSH config is not modified.
+Setup defaults to **None**. Configure mode requires a recipe; adding a remote can skip setup. Authentication prompts run with the terminal restored. Failed setup prevents adding or connecting. In configure mode, failures return to the menu so you can retry. Setup is not repeated on later connections. The dialog itself does not edit SSH config; the selected recipe determines what changes on the local or remote machine.
 
 ## Terminal tools and compatibility
 

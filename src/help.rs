@@ -4,7 +4,7 @@ use ratatui::{Frame, layout::Alignment, widgets::Wrap};
 #[derive(Clone, Copy)]
 pub(super) enum Context {
     Hosts,
-    NewRemote,
+    Setup,
     Connection,
     Configuration,
 }
@@ -22,7 +22,7 @@ impl Context {
                 ("Bindings", include_str!("../docs/keybindings.md")),
                 ("Setup", include_str!("../docs/setup.md")),
             ],
-            Self::NewRemote => &[("Setup", include_str!("../docs/setup.md"))],
+            Self::Setup => &[("Setup", include_str!("../docs/setup.md"))],
         }
     }
 }
@@ -67,7 +67,7 @@ impl Help {
         topics.push(("Keys", ""));
         let scope = match context {
             Context::Hosts => "menu",
-            Context::NewRemote | Context::Connection => "dialog",
+            Context::Setup | Context::Connection => "dialog",
             Context::Configuration => "editor",
         };
         let count = topics.len();
@@ -281,7 +281,7 @@ mod tests {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             for context in [
                 Context::Hosts,
-                Context::NewRemote,
+                Context::Setup,
                 Context::Connection,
                 Context::Configuration,
             ] {

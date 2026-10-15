@@ -7,6 +7,7 @@ pub(super) struct Item {
     priority: u8,
     selected: bool,
     alternatives: Vec<String>,
+    action: Option<String>,
 }
 impl Item {
     pub fn new(key: impl Into<String>, label: impl Into<String>, priority: u8) -> Self {
@@ -17,6 +18,7 @@ impl Item {
             priority,
             selected: false,
             alternatives: Vec::new(),
+            action: None,
         }
     }
     pub fn action(
@@ -28,6 +30,7 @@ impl Item {
     ) -> Self {
         let mut item = Self::new(bindings.hint(scope, action), label, priority);
         item.alternatives = bindings.key_labels(scope, action);
+        item.action = Some(action.to_owned());
         item
     }
     pub fn pair(
@@ -325,7 +328,7 @@ impl State {
                     "cancel" => "Cancel",
                     "help" => "Help",
                     "close" => "Close",
-                    "new_remote" => "New",
+                    "new_remote" => "Setup",
                     "edit_config" => "Config",
                     "edit" => "Edit",
                     "toggle_transport" => "SSH/Mosh",
@@ -343,6 +346,10 @@ impl State {
                     "end" => "End",
                     other => other,
                 };
+                let label = items
+                    .iter()
+                    .find(|item| item.action.as_deref() == Some(action.as_str()))
+                    .map_or(label, |item| item.label.as_str());
                 revealed.push(Item::new(keys.join("/"), label, 2));
             }
             if scope == "menu" {

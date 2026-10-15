@@ -12,6 +12,9 @@ import tempfile
 import termios
 import time
 
+# F2 starts on the selected host; choose Add new and focus its blank remote.
+ADD_REMOTE = b"\x1bOQ\x1b[C\t"
+
 source_binary = Path(sys.argv[1]).resolve()
 with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
     root = Path(directory)
@@ -42,6 +45,7 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
         before = termios.tcgetattr(slave)
         tty_before = subprocess.check_output(["stty", "-g"], stdin=slave).strip()
         (root / "command.tty").unlink(missing_ok=True)
+        (root / "command.setup-tty").unlink(missing_ok=True)
         process = subprocess.Popen([binary], stdin=slave, stdout=slave, stderr=slave, env=child_env, cwd=root)
         output = bytearray()
         def read_for(seconds):
@@ -65,6 +69,8 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
             assert b"\x1b[0m" in cleanup[cleanup.rfind(b"\x1b[?1049l"):], "styles not reset"
             if b"SSH_MENU_EDITOR" in output:
                 assert (root / "command.editor-tty").read_bytes().strip() == tty_before, "editor inherited modified tty"
+            if (root / "command.setup-tty").exists():
+                assert (root / "command.setup-tty").read_bytes().strip() == tty_before, "setup inherited modified tty"
             if handoff >= 0:
                 assert (root / "command.tty").read_bytes().strip() == tty_before, "child inherited modified tty settings"
             return output
@@ -181,25 +187,25 @@ profiles:
         stub = root / "bin" / name
         stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SSH_MENU_TEST_LOG.' + name + '"\n')
         stub.chmod(0o755)
-    session([b"\x1bOQ", b"setup@example.org:2200", b"\x1b[C", b"\r"])
+    session([ADD_REMOTE, b"setup@example.org:2200", b"\x1b[C", b"\r"])
     assert (root / "command.ssh-copy-id").read_text().splitlines() == ["-p", "2200", "-i", str(root / ".ssh/id_ed25519.pub"), "setup@example.org"]
     (root / "src/dotfiles").mkdir(parents=True)
     (root / "src/dotfiles/install.sh").write_text("exit 0\n")
     ssh = root / "bin/ssh"
     original_ssh = ssh.read_text()
     ssh.write_text(original_ssh + 'printf "%s\\n" "$@" >> "$SSH_MENU_TEST_LOG.calls"\n')
-    session([b"\x1bOQ", b"dotfiles@example.org:2201", b"\x1b[C", b"\x1b[C", b"\r"])
+    session([ADD_REMOTE, b"dotfiles@example.org:2201", b"\x1b[C", b"\x1b[C", b"\r"])
     assert (root / "command.ssh-copy-id").read_text().splitlines() == ["-p", "2201", "-i", str(root / ".ssh/id_ed25519.pub"), "dotfiles@example.org"]
     assert (root / "command.scp").read_text().splitlines() == ["-P", "2201", "-r", str(root / "src/dotfiles") + "/.", "dotfiles@example.org:src/dotfiles/"]
     assert 'exec "$2" "./$1"' in (root / "command.calls").read_text()
     ssh.write_text(original_ssh)
     # Adding a remote persists through ordinary history, even if no history existed.
     (root / ".bash_history").unlink()
-    session([b"\x1bOQ", b"new@example.org:2200", b"\r"])
+    session([ADD_REMOTE, b"new@example.org:2200", b"\r"])
     assert (root / "command").read_text().splitlines()[1:] == ["-p", "2200", "--", "new@example.org"]
     assert "new@example.org:2200" in subprocess.check_output([binary, "--dump"], env=child_env, text=True)
     before = (root / ".bash_history").read_text()
-    session([b"\x1bOQ", b"invalid:0", b"\r", b"\x1b", b"\x03"])
+    session([ADD_REMOTE, b"invalid:0", b"\r", b"\x1b", b"\x03"])
     assert (root / ".bash_history").read_text() == before
     # Configured setup receives escaped target/port and a restored terminal before connect.
     stub = root / "bin/setup-test"
@@ -212,16 +218,40 @@ configuration_scripts:
     command: setup-test %h %p %{value}
     value: literal ; $HOME
 """)
-    session([b"\x1bOQ", b"added:2222", b"\t", b"\x1b[C", b"\r"])
+    session([ADD_REMOTE, b"added:2222", b"\t", b"\x1b[C", b"\r"])
     assert (root / "command.setup").read_text().splitlines() == ["added", "2222", "literal ; $HOME"]
-    assert (root / "command.setup-tty").read_bytes() == (root / "command.tty").read_bytes()
     before = (root / ".bash_history").read_text()
     (root / "command").unlink()
     child_env["SETUP_EXIT"] = "7"
-    session([b"\x1bOQ", b"failed", b"\x1b[C", b"\r"], expected_status=1)
+    session([ADD_REMOTE, b"failed", b"\x1b[C", b"\r"], expected_status=1)
     assert not (root / "command").exists()
     assert (root / ".bash_history").read_text() == before
     del child_env["SETUP_EXIT"]
+    # Configure the selected remote: prefilled target, setup only, return to menu.
+    before = (root / ".bash_history").read_text()
+    config_before = (root / ".ssh/config").read_text()
+    (root / "command").unlink(missing_ok=True)
+    output = session([b"added:2222", b"\x1bOQ", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
+    assert b"Configure host" in output and b"completed" in output
+    assert (root / "command.setup").read_text().splitlines() == ["added", "2222", "literal ; $HOME"]
+    assert not (root / "command").exists(), "configure-only launched a connection"
+    assert (root / ".bash_history").read_text() == before
+    assert (root / ".ssh/config").read_text() == config_before
+    child_env["SETUP_EXIT"] = "7"
+    output = session([b"added:2222", b"\x1bOQ", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
+    assert b"failed" in output and not (root / "command").exists()
+    assert (root / ".bash_history").read_text() == before
+    del child_env["SETUP_EXIT"]
+    # No recipe means no side effects; cancelling and changing modes preserve drafts.
+    (root / "command.setup").unlink()
+    output = session([b"added:2222", b"\x1bOQ", b"\r", b"\x1b", b"\x03"])
+    assert b"Choose a setup recipe" in output
+    assert not (root / "command.setup").exists()
+    session([b"added:2222", b"\x1bOQ", b"\x1b[C", b"\t", b"draft", b"\x1b[Z", b"\x1b[D", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
+    assert (root / "command.setup").read_text().splitlines()[:2] == ["added", "2222"]
+    # With no selected match, F2 still starts with an empty Add new form.
+    session([b"no-such-host", b"\x1bOQ", b"no-selection", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "no-selection"]
     # Script-specific fields, required validation, choices, cancellation and literal input.
     config_file.write_text("""default: SSH
 profiles: [{name: SSH, command: 'ssh -- %h'}]
@@ -239,14 +269,29 @@ configuration_scripts:
   - name: Other
     command: setup-test %h
 """)
+    # Configure mode uses recipe inputs, skipping even a default profile's required fields.
+    setup_config = config_file.read_text()
+    config_file.write_text(setup_config.replace(
+        "profiles: [{name: SSH, command: 'ssh -- %h'}]",
+        """profiles:
+  - name: SSH
+    command: ssh -- %h %{input:launch}
+    inputs: [{id: launch, type: promptString, required: true}]"""))
+    (root / "command").unlink()
+    output = session([b"added:2222", b"\x1bOQ", b"\t", b"\t", b"\x1b[C", b"\r",
+                      b"configure-value", b"\t", b"\x1b[C", b"\x1b\r", b"\x03"], rows=9, cols=90)
+    assert b"is required" in output and b"completed" in output
+    assert (root / "command.setup").read_text().splitlines() == ["added", "configure-value", "full"]
+    assert not (root / "command").exists()
+    config_file.write_text(setup_config)
     literal = "a ' ; $(touch SHOULD_NOT_EXIST) %{input:mode}"
-    output = session([b"\x1bOQ", b"inputs-host", b"\t", b"\x1b[C", b"\r", literal.encode(), b"\x1bOP", b"\x1b[6~", b"\x1bOP", b"\t", b"\x1b[C",
+    output = session([ADD_REMOTE, b"inputs-host", b"\t", b"\x1b[C", b"\r", literal.encode(), b"\x1bOP", b"\x1b[6~", b"\x1bOP", b"\t", b"\x1b[C",
                        b"\x1b[Z", b"\x1b[Z", b"\x1b[C", b"\x1b[D", b"\r"], rows=9, cols=90)
     assert b"is required" in output
     assert (root / "command.setup").read_text().splitlines() == ["inputs-host", literal, "full"]
     assert literal not in (root / ".bash_history").read_text(), "setup values must not enter history"
     before = (root / ".bash_history").read_text()
-    session([b"\x1bOQ", b"cancelled", b"\x1b[C", b"\t", b"\t", b"discard me", b"\x1b", b"\x03"])
+    session([ADD_REMOTE, b"cancelled", b"\x1b[C", b"\t", b"\t", b"discard me", b"\x1b", b"\x03"])
     assert (root / ".bash_history").read_text() == before
     # Generators run on selection, cache results in this dialog, and pass resolved choices.
     config_file.write_text("""default: SSH
@@ -273,11 +318,11 @@ configuration_scripts:
 """)
     session([b"\x03"])
     assert not (root / "generator-runs").exists(), "generators ran during config load"
-    session([b"\x1bOQ", b"generated", b"\t", b"\x1b[C", b"\x1b[D", b"\x1b[C", b"\r"])
+    session([ADD_REMOTE, b"generated", b"\t", b"\x1b[C", b"\x1b[D", b"\x1b[C", b"\r"])
     assert (root / "command.setup").read_text().splitlines() == ["generated text", "second"]
     assert (root / "generator-runs").read_text().splitlines() == ["run"], "generator was rerun instead of cached"
     (root / "command.setup").unlink()
-    output = session([b"\x1bOQ", b"broken", b"\x1b[D", b"\r", b"\t", b"\t", b"\x1b[C", b"\x1b", b"\x03"])
+    output = session([ADD_REMOTE, b"broken", b"\x1b[D", b"\r", b"\t", b"\t", b"\x1b[C", b"\x1b", b"\x03"])
     assert b"generator test failure" in output
     assert not (root / "command.setup").exists(), "failed generator allowed setup to run"
     # Availability filters choices, preserves original script identity, and skips generators.
@@ -299,31 +344,31 @@ configuration_scripts:
 """)
     session([b"\x03"])
     assert not (root / "availability-checks").exists()
-    output = session([b"\x1bOQ", b"available", b"\x1b[C", b"\r"])
+    output = session([ADD_REMOTE, b"available", b"\x1b[C", b"\r"])
     assert b"Running Visible for available" in output
     assert (root / "command.setup").read_text().splitlines() == ["visible"]
     assert (root / "availability-checks").read_text().splitlines() == ["checked"]
     assert not (root / "hidden-generator").exists()
     config_file.write_text(original_config)
     (root / ".ssh/id_ed25519").unlink()  # Public files alone do not make a keypair.
-    output = session([b"\x1bOQ", b"no-keys", b"\x1b[C", b"\x1b[D", b"\r"])
+    output = session([ADD_REMOTE, b"no-keys", b"\x1b[C", b"\x1b[D", b"\r"])
     assert not (root / ".ssh/id_ed25519").exists(), "opening setup must not generate keys"
     assert (root / "command").read_text().splitlines()[1:] == ["--", "no-keys"]
     (root / ".ssh/id_ed25519").write_text("fake private key")
-    output = session([b"\x1bOQ", b"\x1b[C", b"\x1b", b"\x03"])
+    output = session([ADD_REMOTE, b"\x1b[C", b"\x1b", b"\x03"])
     assert (root / ".ssh/id_ed25519").read_text() == "fake private key"
     config_file.write_text(original_config)
     # Help is embedded and returns to the same filter/profile without launching anything.
     before = (root / ".bash_history").read_text()
     output = session([b"\x1bOP", b"\x1b[F", b"\x1b[H", b"\t", b"\x1b[6~", b"\x1b[5~", b"\x1b[Z", b"\x1bOP", b"\x03"], rows=10, cols=40)
     assert b"HELP" in output and b"Profiles" in output
-    assert b"Setup" not in output, "host help offered dialog-only topics"
+    assert b"Setting up a remote" not in output, "host help offered dialog-only topics"
     assert (root / ".bash_history").read_text() == before
     (root / ".bash_history").write_text("ssh alpha\n")
     session([b"alpha", b"\x1b[C", b"\x1bOP", b"\x1b[C", b"\x1bOP", b"\r"])
     assert (root / "command").read_text().splitlines()[0].endswith("/mosh")
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
-    output = session([b"\x1bOQ", b"help-host:2222", b"\x1bOP", b"\t", b"\x1b[D", b"\x1bOP", b"\r"])
+    output = session([ADD_REMOTE, b"help-host:2222", b"\x1bOP", b"\t", b"\x1b[D", b"\x1bOP", b"\r"])
     assert b"Setting up a remote" in output
     assert b"Profiles" not in output and b"Keys" in output, "dialog help should offer only setup and active keys"
     assert (root / "command").read_text().splitlines()[1:] == ["-p", "2222", "--", "help-host"]
@@ -331,7 +376,7 @@ configuration_scripts:
     session([b"\x11", b"alpha", b"\r"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     session([b"\x1bOP", b"\x11", b"\x1bOP", b"\x03"])
-    output = session([b"\x1bOQ", b"\x11", b"ctrlq-host", b"\r"])
+    output = session([ADD_REMOTE, b"\x11", b"ctrlq-host", b"\r"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "ctrlq-host"]
     # Launch availability is evaluated once at load, before history and navigation.
     config_file.write_text("""default: Missing
@@ -389,7 +434,7 @@ profiles:
     session([b"m", b"\x03"])  # Plain typing must not launch the Alt+M profile.
     session([b"no-such-host", b"\x1bm", b"\x03"])
     session([b"\x1bOP", b"\x1bm", b"\x1bOP", b"\x03"])  # Help does not launch profiles.
-    session([b"\x1bOQ", b"\x1bm", b"\x1b", b"\x03"])  # Neither does the dialog.
+    session([ADD_REMOTE, b"\x1bm", b"\x1b", b"\x03"])  # Neither does the dialog.
     assert not (root / "command").exists()
     assert (root / ".bash_history").read_text() == before
     config_file.write_text(original_config)
@@ -492,8 +537,14 @@ keybindings:
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     output = session([b"alpha", b"\x1b[15~", b"\r", b"\x1b[15~", b"\x11"])
     assert output.count(b"SSH_MENU_HANDOFF") == 1
-    session([b"\x1b[20~", b"new-rebound", b"\x1bOR"])
+    session([b"\x1b[20~\x1b[C\t", b"new-rebound", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "new-rebound"]
+    config_file.write_text(config_file.read_text() + "\nconfiguration_scripts: [{name: Rebound setup, command: 'setup-test %h'}]\n")
+    (root / "command").unlink()
+    output = session([b"alpha", b"\x1b[20~", b"\t", b"\t", b"\x1b[C", b"\x1bOR", b"\x11"])
+    assert b"completed" in output and b"Apply" in output
+    assert (root / "command.setup").read_text().splitlines() == ["alpha"]
+    assert not (root / "command").exists()
     # Editor error actions use their own bindings and help returns to the error screen.
     session([b"alpha", b"\x1b[21~", b"\x1b[17~", b"x", b"\x1b[18~", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
@@ -553,19 +604,19 @@ printf 'generated public key' > "$private.pub"
     for suffix in ("keygen", "ssh-copy-id"):
         (root / ("command." + suffix)).unlink(missing_ok=True)
     before = (root / ".bash_history").read_text()
-    output = session([b"\x1bOQ", b"\x1b[C", b"\x1b", b"\x03"])
+    output = session([ADD_REMOTE, b"\x1b[C", b"\x1b", b"\x03"])
     assert not (root / "command.keygen").exists()
     assert not (root / ".ssh/id_ed25519").exists()
     # Never overwrite a partial default pair, and don't copy anything after failure.
     (root / ".ssh/id_ed25519.pub").write_text("existing public key")
-    session([b"\x1bOQ", b"blocked", b"\x1b[C", b"\r"], expected_status=1)
+    session([ADD_REMOTE, b"blocked", b"\x1b[C", b"\r"], expected_status=1)
     assert (root / ".ssh/id_ed25519.pub").read_text() == "existing public key"
     assert not (root / "command.keygen").exists()
     assert not (root / "command.ssh-copy-id").exists()
     assert (root / ".bash_history").read_text() == before
     (root / ".ssh/id_ed25519.pub").unlink()
     (root / "keygen-fail").touch()
-    session([b"\x1bOQ", b"failed", b"\x1b[C", b"\r"], expected_status=1)
+    session([ADD_REMOTE, b"failed", b"\x1b[C", b"\r"], expected_status=1)
     assert not (root / "command.ssh-copy-id").exists()
     assert (root / ".bash_history").read_text() == before
     (root / "keygen-fail").unlink()
@@ -573,8 +624,8 @@ printf 'generated public key' > "$private.pub"
     for steps, host in [(1, "generated"), (2, "generated-dotfiles")]:
         for name in ("id_ed25519", "id_ed25519.pub"):
             (root / ".ssh" / name).unlink(missing_ok=True)
-        session([b"\x1bOQ", (host + ":2202").encode()] + [b"\x1b[C"] * steps + [b"\r"])
+        session([ADD_REMOTE, (host + ":2202").encode()] + [b"\x1b[C"] * steps + [b"\r"])
         assert (root / "command.keygen").read_text().splitlines() == ["-q", "-t", "ed25519", "-f", str(root / ".ssh/id_ed25519")]
         assert (root / "command.ssh-copy-id").read_text().splitlines() == ["-p", "2202", "-i", str(root / ".ssh/id_ed25519.pub"), host]
         assert (root / "command.keygen-tty").read_bytes() == (root / "command.tty").read_bytes()
-    print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, new remotes and setup recipes, embedded help, terminal restoration")
+    print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, adding/configuring remotes and setup recipes, embedded help, terminal restoration")

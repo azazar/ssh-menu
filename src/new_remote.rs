@@ -32,8 +32,9 @@ fn parse_remote(text: &str) -> Option<Target> {
 pub(super) fn dialog(
     terminal: &mut DefaultTerminal,
     config: &launch::Config,
+    selected: Option<&Target>,
 ) -> io::Result<Option<Selection>> {
-    form(terminal, config, None, false)
+    form(terminal, config, None, false, selected)
 }
 
 pub(super) fn connect(
@@ -43,7 +44,13 @@ pub(super) fn connect(
     profile: usize,
     fixed_remote: bool,
 ) -> io::Result<Option<Selection>> {
-    form(terminal, config, Some((target, profile)), fixed_remote)
+    form(
+        terminal,
+        config,
+        Some((target, profile)),
+        fixed_remote,
+        None,
+    )
 }
 
 fn form(
@@ -51,11 +58,24 @@ fn form(
     config: &launch::Config,
     connection: Option<(&Target, usize)>,
     fixed_remote: bool,
+    selected: Option<&Target>,
 ) -> io::Result<Option<Selection>> {
     let connecting = connection.is_some();
-    let mut remote = connection.map_or_else(String::new, |(t, _)| t.label());
+    let mut configuring = selected.is_some();
+    let mut remote = connection
+        .map(|(t, _)| t.label())
+        .or_else(|| selected.map(Target::label))
+        .unwrap_or_default();
+    let mut alternate_remote = String::new();
+    let remote_field = usize::from(!connecting);
+    let recipe_field = remote_field + 1;
+    let input_start = recipe_field + 1;
     let mut setup = connection.map_or(0, |(_, p)| p + 1);
-    let mut focus = 0usize;
+    let mut focus = if connecting || configuring {
+        0
+    } else {
+        remote_field
+    };
     let available: Vec<_> = if connecting {
         (0..config.profiles.len()).collect()
     } else {
@@ -103,7 +123,7 @@ fn form(
         }
         let script = setup.checked_sub(1).map(|i| &scripts[i]);
         let inputs = script.map_or(&[][..], |s| s.inputs.as_slice());
-        let field_count = inputs.len() + 2;
+        let field_count = inputs.len() + input_start;
         focus = focus.min(field_count - 1);
         terminal.draw(|frame| {
             let area = frame.area();
@@ -112,7 +132,8 @@ fn form(
                 area,
             );
             let width = area.width.min(90);
-            let height = (inputs.len().saturating_add(8)).min(usize::from(area.height)) as u16;
+            let height = (inputs.len().saturating_add(8 + remote_field))
+                .min(usize::from(area.height)) as u16;
             let rect = Rect::new(
                 area.x + (area.width - width) / 2,
                 area.y + (area.height - height) / 2,
@@ -130,7 +151,7 @@ fn form(
                 Paragraph::new(if connecting {
                     " CONNECT "
                 } else {
-                    " NEW REMOTE "
+                    " REMOTE SETUP "
                 })
                 .style(
                     Style::default()
@@ -140,14 +161,25 @@ fn form(
                 ),
                 areas[0],
             );
-            let mut fields = vec![
+            let mut fields = Vec::new();
+            if !connecting {
+                fields.push(format!(
+                    "Action  ← {} →",
+                    if configuring {
+                        "Configure host"
+                    } else {
+                        "Add new"
+                    }
+                ));
+            }
+            fields.extend([
                 format!("Remote  {remote}"),
                 format!(
                     "{}   ← {} →",
                     if connecting { "Profile" } else { "Setup" },
                     script.map_or("None", |s| s.name.as_str())
                 ),
-            ];
+            ]);
             for input in inputs {
                 let value = &values[setup - 1][&input.id];
                 let label = format!(
@@ -193,7 +225,9 @@ fn form(
                 Paragraph::new(if !generation_error.is_empty() {
                     &generation_error
                 } else if error.is_empty() {
-                    if fixed_remote {
+                    if configuring {
+                        " Runs setup only · returns to menu · * required"
+                    } else if fixed_remote {
                         " Remote fixed for setup · * required"
                     } else {
                         " user@host[:port] · * required"
@@ -231,10 +265,22 @@ fn form(
                         keys,
                         "dialog",
                         "connect",
-                        if connecting { "Open" } else { "Add" },
+                        if connecting {
+                            "Open"
+                        } else if configuring {
+                            "Apply"
+                        } else {
+                            "Add+open"
+                        },
                         2,
                     ),
-                    bar::Item::action(keys, "dialog", "connect_and_return", "Return", 5),
+                    bar::Item::action(
+                        keys,
+                        "dialog",
+                        "connect_and_return",
+                        if configuring { "Apply" } else { "Return" },
+                        5,
+                    ),
                     bar::Item::action(keys, "dialog", "help", "Help", 0),
                     bar::Item::action(keys, "dialog", "cancel", "Cancel", 1),
                 ],
@@ -283,7 +329,7 @@ fn form(
                     if connecting {
                         crate::help::Context::Connection
                     } else {
-                        crate::help::Context::NewRemote
+                        crate::help::Context::Setup
                     },
                     config,
                 )?;
@@ -302,7 +348,10 @@ fn form(
                         (current + len - 1) % len
                     }
                 };
-                if focus < 2 {
+                if !connecting && focus == 0 {
+                    configuring = !configuring;
+                    std::mem::swap(&mut remote, &mut alternate_remote);
+                } else if focus <= recipe_field {
                     setup = if connecting {
                         next(setup - 1, scripts.len()) + 1
                     } else {
@@ -310,7 +359,7 @@ fn form(
                     };
                     generation_error.clear();
                 } else {
-                    let input = &inputs[focus - 2];
+                    let input = &inputs[focus - input_start];
                     if input.kind == launch::InputType::PickString && !input.options.is_empty() {
                         let value = values[setup - 1].get_mut(&input.id).unwrap();
                         let index = input.options.iter().position(|v| v == value).unwrap_or(0);
@@ -323,9 +372,14 @@ fn form(
                 if !generation_error.is_empty() {
                     continue;
                 }
+                if configuring && setup == 0 {
+                    error = " Choose a setup recipe to configure this host".into();
+                    focus = recipe_field;
+                    continue;
+                }
                 let Some(target) = parse_remote(&remote) else {
                     error = " Enter a valid host and optional port (1–65535)".into();
-                    focus = 0;
+                    focus = remote_field;
                     continue;
                 };
                 let selected_values = setup
@@ -338,7 +392,7 @@ fn form(
                         .position(|i| i.required && selected_values[&i.id].trim().is_empty())
                     {
                         error = format!(" {} is required", inputs[index].label());
-                        focus = index + 2;
+                        focus = index + input_start;
                         continue;
                     }
                     match script.command_with_inputs(&target, &selected_values) {
@@ -367,15 +421,18 @@ fn form(
                         None
                     },
                     setup_command: if connecting { None } else { setup_command },
-                    new: !connecting,
+                    new: !connecting && !configuring,
+                    configure_only: configuring,
                     return_to_menu: key.modifiers.contains(KeyModifiers::ALT),
                 }));
             }
             _ => {
-                let editable = if focus == 0 && !fixed_remote {
+                let editable = if focus == remote_field && !fixed_remote {
                     Some(&mut remote)
-                } else if focus >= 2 && inputs[focus - 2].kind == launch::InputType::PromptString {
-                    values[setup - 1].get_mut(&inputs[focus - 2].id)
+                } else if focus >= input_start
+                    && inputs[focus - input_start].kind == launch::InputType::PromptString
+                {
+                    values[setup - 1].get_mut(&inputs[focus - input_start].id)
                 } else {
                     None
                 };

@@ -20,7 +20,7 @@ Changing a profile affects only the selected host. Moving away or changing the f
 | Alt+F / Alt+H | Open SFTP / remote monitor |
 | Ctrl+Alt+L / Ctrl+Alt+D | Configure a local tunnel / SOCKS proxy |
 | F1 | Open built-in help |
-| F2 | Add a remote with optional setup |
+| F2 | Configure the selected host or add a new remote |
 | F4 | Edit configuration with format help and validation |
 | F8 | Toggle plain SSH / Mosh for the selected host |
 | Backspace / Delete | Remove the last character |
@@ -47,7 +47,7 @@ Automatic installation supports Linux x86-64 and ARM64 and requires `tar`, `curl
 
 ## Built-in help
 
-Press **F1** from the host list or new-remote dialog to read these docs without leaving SSH Menu. The host list shows Guide, Profiles and Bindings; dialogs show relevant connection/setup documentation. Every screen includes a Keys topic with its active shortcuts.
+Press **F1** from the host list or remote setup dialog to read these docs without leaving SSH Menu. The host list shows Guide, Profiles and Bindings; dialogs show relevant connection/setup documentation. Every screen includes a Keys topic with its active shortcuts.
 
 - **Left/Right or Tab/Shift-Tab:** switch topics.
 - **Up/Down:** scroll one line.

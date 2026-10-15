@@ -1,6 +1,6 @@
 # SSH Menu documentation
 
-Press **F1** in SSH Menu to open help for the current screen: Guide, Profiles and Bindings from the host list, Setup from the new-remote dialog, Connection from one-off settings, or Profiles, Bindings and Setup from the configuration editor. Every context includes a live Keys topic. No network connection or separate documentation install is needed.
+Press **F1** in SSH Menu to open help for the current screen: Guide, Profiles and Bindings from the host list, Setup from the remote setup dialog, Connection from one-off settings, or Profiles, Bindings and Setup from the configuration editor. Every context includes a live Keys topic. No network connection or separate documentation install is needed.
 
 - [Using SSH Menu](usage.md): navigation, shortcuts, host discovery, history, and Zellij.
 - [Keybindings](keybindings.md): binding rules, modifier hints and connect-and-return behavior.

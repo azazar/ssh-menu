@@ -4,7 +4,9 @@ All app shortcuts can be changed under `keybindings` in `~/.ssh/ssh-menu-config.
 
 The complete default action map and remapping examples are documented in the config comments. The Keys help topic shows your active bindings.
 
-`connect` hands the terminal to the selected connection. `connect_and_return` waits for the command to exit and reopens the same menu, preserving the filter and profile choices. It works both from the host list and when confirming a connection or new-remote dialog. If invoked from the host list on a profile requiring inputs, returning remains enabled when you confirm that dialog. Profile shortcuts still perform ordinary connections; use the return action with the selected profile when desired.
+`connect` hands the terminal to the selected connection. `connect_and_return` waits for the command to exit and reopens the same menu, preserving the filter and profile choices. It works both from the host list and when confirming a connection or remote setup dialog. If invoked from the host list on a profile requiring inputs, returning remains enabled when you confirm that dialog. Profile shortcuts still perform ordinary connections; use the return action with the selected profile when desired.
+
+`menu.new_remote` opens remote setup (F2 by default), prefilled with the selected host. In **Configure host** mode, both dialog submit actions run the chosen recipe and return to the menu. Switch Action to **Add new** to add and connect instead.
 
 Supported keys: letters with `Ctrl+`, `Alt+`, or `Ctrl+Alt+`; `F1`–`F24`; `Enter`, `Esc`, `Tab`, `Shift+Tab`, `Backspace`, `Delete`, arrows, `PgUp`, `PgDn`, `Home`, `End`, and `Space`. Named keys also accept Ctrl/Alt/Shift combinations. Shift-modified text characters are not supported. Unmodified text keys are allowed only in the help viewer so typing continues to filter hosts or edit fields.
 

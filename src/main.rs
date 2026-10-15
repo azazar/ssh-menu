@@ -252,6 +252,7 @@ struct Selection {
     setup: Option<usize>,
     setup_command: Option<(String, Vec<String>)>,
     new: bool,
+    configure_only: bool,
     return_to_menu: bool,
     connection_command: Option<(String, Vec<String>)>,
 }
@@ -261,6 +262,7 @@ struct MenuState {
     query: String,
     selection: usize,
     profiles: Vec<usize>,
+    notice: Option<String>,
 }
 
 fn menu(
@@ -274,6 +276,7 @@ fn menu(
         query,
         selection,
         profiles,
+        notice,
     } = state;
     let mut bar_state = bar::State::default();
     let host_config = search::host_config(home, &env::var("USER").unwrap_or_default());
@@ -390,7 +393,7 @@ fn menu(
                     bar::Item::action(keys, "menu", "connect", "Open", 2),
                     bar::Item::action(keys, "menu", "connect_and_return", "Return", 4),
                     bar::Item::action(keys, "menu", "connection_settings", "Edit", 5),
-                    bar::Item::action(keys, "menu", "new_remote", "New", 6),
+                    bar::Item::action(keys, "menu", "new_remote", "Setup", 6),
                     bar::Item::action(keys, "menu", "edit_config", "Config", 7),
                     bar::Item::action(keys, "menu", "help", "Help", 0),
                     bar::Item::action(keys, "menu", "quit", "Quit", 1),
@@ -400,6 +403,22 @@ fn menu(
                 && let Some(block) = host_config.get(&targets[*i].host)
             {
                 search::hint(frame, areas[1], block);
+            }
+            if let Some(message) = notice.as_deref() {
+                // Results must remain visible even where ordinary host hints are hidden.
+                let rect = ratatui::layout::Rect::new(
+                    areas[1].x,
+                    areas[1].bottom() - areas[1].height.min(2),
+                    areas[1].width,
+                    areas[1].height.min(2),
+                );
+                frame.render_widget(ratatui::widgets::Clear, rect);
+                frame.render_widget(
+                    Paragraph::new(message)
+                        .wrap(ratatui::widgets::Wrap { trim: false })
+                        .style(Style::default().fg(theme::USERNAME).bg(theme::SURFACE)),
+                    rect,
+                );
             }
         })?;
         let event = event::read()?;
@@ -413,6 +432,7 @@ fn menu(
             if key.kind == KeyEventKind::Release {
                 continue;
             }
+            notice.take();
             if key.kind == KeyEventKind::Press
                 && let Some(profile) = config
                     .profiles
@@ -435,6 +455,7 @@ fn menu(
                         setup: None,
                         setup_command: None,
                         new: false,
+                        configure_only: false,
                         return_to_menu: key.modifiers.contains(KeyModifiers::ALT)
                             && key.code == KeyCode::Enter,
                         connection_command: None,
@@ -473,8 +494,14 @@ fn menu(
                 }
                 KeyCode::F(2) => {
                     bar_state.reset();
-                    if let Some(mut selection) = new_remote::dialog(terminal, config)? {
-                        if !config.profiles[selection.profile].inputs.is_empty() {
+                    if let Some(mut selection) = new_remote::dialog(
+                        terminal,
+                        config,
+                        visible.get(*selection).map(|i| &targets[*i]),
+                    )? {
+                        if !selection.configure_only
+                            && !config.profiles[selection.profile].inputs.is_empty()
+                        {
                             let Some(connection) = new_remote::connect(
                                 terminal,
                                 config,
@@ -588,6 +615,7 @@ fn menu(
                             setup: None,
                             setup_command: None,
                             new: false,
+                            configure_only: false,
                             return_to_menu: key.modifiers.contains(KeyModifiers::ALT)
                                 && key.code == KeyCode::Enter,
                             connection_command: None,
@@ -678,6 +706,7 @@ fn run() -> io::Result<()> {
             setup,
             setup_command,
             new,
+            configure_only,
             connection_command,
             return_to_menu,
         }) = result?
@@ -686,7 +715,20 @@ fn run() -> io::Result<()> {
                 let script = &config.configuration_scripts[index];
                 println!("Running {} for {}", script.name, target.label());
                 let (program, args) = setup_command.expect("validated setup command");
-                let status = Command::new(program).args(args).status()?;
+                let status = Command::new(program).args(args).status();
+                if configure_only {
+                    state.notice = Some(match status {
+                        Ok(status) if status.success() => {
+                            format!("{}: {} completed", target.label(), script.name)
+                        }
+                        Ok(status) => {
+                            format!("{}: {} failed ({status})", target.label(), script.name)
+                        }
+                        Err(err) => format!("{}: {} failed: {err}", target.label(), script.name),
+                    });
+                    continue;
+                }
+                let status = status?;
                 if !status.success() {
                     return Err(io::Error::other(format!(
                         "configuration script {} failed ({status}); connection cancelled",
