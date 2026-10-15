@@ -1,6 +1,6 @@
 # Setting up a remote
 
-Press **F2**, enter `user@host[:port]` (or `user@[IPv6]:port`), and choose an optional setup recipe. Tab/Shift-Tab or Up/Down moves between fields; Left/Right changes a recipe or dropdown choice.
+Enter `user@host[:port]` (or `user@[IPv6]:port`), and choose an optional setup recipe. Tab/Shift-Tab or Up/Down moves between fields; Left/Right changes a recipe or dropdown choice.
 
 ![New remote dialog with SSH keypair and dotfiles inputs](../screenshot-new-remote.png)
 

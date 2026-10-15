@@ -394,7 +394,7 @@ fn menu(
                 continue;
             }
             match key.code {
-                KeyCode::F(1) => help::show(terminal, 0)?,
+                KeyCode::F(1) => help::show(terminal, help::Context::Hosts)?,
                 KeyCode::F(2) => {
                     if let Some(selection) = new_remote::dialog(terminal, config)? {
                         return Ok(Some(selection));

@@ -1,11 +1,22 @@
 use crate::*;
 use ratatui::{Frame, widgets::Wrap};
 
-const TOPICS: &[(&str, &str)] = &[
-    ("Guide", include_str!("../docs/usage.md")),
-    ("Profiles", include_str!("../docs/configuration.md")),
-    ("Setup", include_str!("../docs/setup.md")),
-];
+#[derive(Clone, Copy)]
+pub(super) enum Context {
+    Hosts,
+    NewRemote,
+}
+impl Context {
+    fn topics(self) -> &'static [(&'static str, &'static str)] {
+        match self {
+            Self::Hosts => &[
+                ("Guide", include_str!("../docs/usage.md")),
+                ("Profiles", include_str!("../docs/configuration.md")),
+            ],
+            Self::NewRemote => &[("Setup", include_str!("../docs/setup.md"))],
+        }
+    }
+}
 
 #[derive(Clone)]
 struct HelpStyle;
@@ -32,16 +43,19 @@ impl tui_markdown::StyleSheet for HelpStyle {
 }
 
 struct Help {
+    topics: &'static [(&'static str, &'static str)],
     topic: usize,
     offsets: Vec<usize>,
     page_height: usize,
     max_offset: usize,
 }
 impl Help {
-    fn new(topic: usize) -> Self {
+    fn new(context: Context) -> Self {
+        let topics = context.topics();
         Self {
-            topic: topic.min(TOPICS.len() - 1),
-            offsets: vec![0; TOPICS.len()],
+            topics,
+            topic: 0,
+            offsets: vec![0; topics.len()],
             page_height: 1,
             max_offset: 0,
         }
@@ -68,11 +82,11 @@ impl Help {
             tabs.push(Span::raw(format!(
                 " {}/{} {}",
                 self.topic + 1,
-                TOPICS.len(),
-                TOPICS[self.topic].0
+                self.topics.len(),
+                self.topics[self.topic].0
             )));
         } else {
-            for (i, (title, _)) in TOPICS.iter().enumerate() {
+            for (i, (title, _)) in self.topics.iter().enumerate() {
                 tabs.push(Span::styled(
                     format!(" {title} "),
                     if i == self.topic {
@@ -88,7 +102,7 @@ impl Help {
         }
         frame.render_widget(Paragraph::new(Line::from(tabs)), areas[0]);
         let options = tui_markdown::Options::new(HelpStyle).table_width(areas[1].width.max(1));
-        let text = tui_markdown::from_str_with_options(TOPICS[self.topic].1, &options);
+        let text = tui_markdown::from_str_with_options(self.topics[self.topic].1, &options);
         let paragraph = Paragraph::new(text).wrap(Wrap { trim: false });
         let total = paragraph.line_count(areas[1].width);
         self.page_height = usize::from(areas[1].height).max(1);
@@ -100,12 +114,14 @@ impl Help {
         frame.render_widget(paragraph.scroll((*offset as u16, 0)), areas[1]);
         let position = format!(
             " {} · {}–{}/{}",
-            TOPICS[self.topic].0,
+            self.topics[self.topic].0,
             (*offset + 1).min(total),
             (*offset + self.page_height).min(total),
             total
         );
-        let keys = if frame.area().width < 65 {
+        let keys = if self.topics.len() == 1 {
+            " ↑↓/Pg SCROLL · Home/End · F1/Esc CLOSE"
+        } else if frame.area().width < 65 {
             " ←→ Topic · ↑↓ Scroll · F1 Close"
         } else {
             " ←→/Tab TOPIC · ↑↓/Pg SCROLL · Home/End · F1/Esc CLOSE"
@@ -120,8 +136,8 @@ impl Help {
     }
 }
 
-pub(super) fn show(terminal: &mut DefaultTerminal, topic: usize) -> io::Result<()> {
-    let mut help = Help::new(topic);
+pub(super) fn show(terminal: &mut DefaultTerminal, context: Context) -> io::Result<()> {
+    let mut help = Help::new(context);
     loop {
         terminal.draw(|frame| help.draw(frame))?;
         let Event::Key(key) = event::read()? else {
@@ -133,9 +149,9 @@ pub(super) fn show(terminal: &mut DefaultTerminal, topic: usize) -> io::Result<(
         match key.code {
             KeyCode::Esc | KeyCode::F(1) | KeyCode::Char('q') => return Ok(()),
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return Ok(()),
-            KeyCode::Right | KeyCode::Tab => help.topic = (help.topic + 1) % TOPICS.len(),
+            KeyCode::Right | KeyCode::Tab => help.topic = (help.topic + 1) % help.topics.len(),
             KeyCode::Left | KeyCode::BackTab => {
-                help.topic = (help.topic + TOPICS.len() - 1) % TOPICS.len()
+                help.topic = (help.topic + help.topics.len() - 1) % help.topics.len()
             }
             KeyCode::Up => help.offsets[help.topic] = help.offsets[help.topic].saturating_sub(1),
             KeyCode::Down => help.offsets[help.topic] = help.offsets[help.topic].saturating_add(1),
@@ -160,11 +176,14 @@ mod tests {
     fn documents_render_at_small_sizes_and_scroll_is_clamped() {
         for (width, height) in [(1, 1), (20, 6), (80, 24)] {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-            for topic in 0..TOPICS.len() {
-                let mut help = Help::new(topic);
-                help.offsets[topic] = usize::MAX;
-                terminal.draw(|frame| help.draw(frame)).unwrap();
-                assert!(help.offsets[topic] <= help.max_offset);
+            for context in [Context::Hosts, Context::NewRemote] {
+                let mut help = Help::new(context);
+                for topic in 0..help.topics.len() {
+                    help.topic = topic;
+                    help.offsets[topic] = usize::MAX;
+                    terminal.draw(|frame| help.draw(frame)).unwrap();
+                    assert!(help.offsets[topic] <= help.max_offset);
+                }
             }
         }
     }

@@ -302,12 +302,14 @@ configuration_scripts:
     before = (root / ".bash_history").read_text()
     output = session([b"\x1bOP", b"\x1b[F", b"\x1b[H", b"\t", b"\x1b[6~", b"\x1b[5~", b"\x1b[Z", b"\x1bOP", b"\x11"], rows=10, cols=40)
     assert b"HELP" in output and b"Profiles" in output
+    assert b"Setup" not in output, "host help offered dialog-only topics"
     assert (root / ".bash_history").read_text() == before
     (root / ".bash_history").write_text("ssh alpha\n")
     session([b"alpha", b"\x1b[C", b"\x1bOP", b"\x1b[C", b"\x1bOP", b"\r"])
     assert (root / "command").read_text().splitlines()[0].endswith("/mosh")
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
-    output = session([b"\x1bOQ", b"help-host:2222", b"\x1bOP", b"\x1bOP", b"\r"])
+    output = session([b"\x1bOQ", b"help-host:2222", b"\x1bOP", b"\t", b"\x1b[D", b"\x1bOP", b"\r"])
     assert b"Setting up a remote" in output
+    assert b"Profiles" not in output and b"TOPIC" not in output, "dialog help offered irrelevant topics"
     assert (root / "command").read_text().splitlines()[1:] == ["-p", "2222", "--", "help-host"]
     print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, new remotes and setup recipes, embedded help, terminal restoration")

@@ -38,7 +38,7 @@ Automatic installation supports Linux x86-64 and ARM64 and requires `tar`, `curl
 
 ## Built-in help
 
-Press **F1** from the host list or new-remote dialog to read these docs without leaving SSH Menu. The dialog opens help at Setup.
+Press **F1** from the host list or new-remote dialog to read these docs without leaving SSH Menu. The host list shows Guide and Profiles; the new-remote dialog shows only Setup.
 
 - **Left/Right or Tab/Shift-Tab:** switch topics.
 - **Up/Down:** scroll one line.
