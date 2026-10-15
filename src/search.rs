@@ -41,94 +41,135 @@ pub(super) fn matching(targets: &[Target], query: &str) -> Vec<usize> {
     matches.into_iter().map(|(_, _, i)| i).collect()
 }
 
-pub(super) fn comments(home: &Path, user: &str) -> HashMap<String, String> {
-    parse_comments(
+pub(super) fn host_config(home: &Path, user: &str) -> HashMap<String, String> {
+    parse_host_config(
         &fs::read_to_string(home.join(".ssh/config")).unwrap_or_default(),
         user,
     )
 }
 
-fn parse_comments(text: &str, user: &str) -> HashMap<String, String> {
+fn parse_host_config(text: &str, user: &str) -> HashMap<String, String> {
     let mut result = HashMap::new();
     let mut hosts = Vec::new();
     let mut login = None;
-    let mut notes = Vec::new();
+    let mut lines = Vec::new();
     let mut pending = Vec::new();
     let flush = |hosts: &Vec<String>,
                  login: &Option<String>,
-                 notes: &Vec<String>,
+                 lines: &Vec<String>,
                  result: &mut HashMap<String, String>| {
         if let Some(login) = login {
             for host in hosts {
                 if !host.contains(['*', '?', '!'])
-                    && !notes.is_empty()
                     && let Some(target) = target(&format!("{login}@{host}"), user)
                 {
-                    result.insert(target.host, notes.join("\n"));
+                    let block = lines.join("\n").trim_end().to_owned();
+                    result
+                        .entry(target.host)
+                        .and_modify(|text| {
+                            text.push_str("\n\n");
+                            text.push_str(&block);
+                        })
+                        .or_insert(block);
                 }
             }
         }
     };
     for line in text.lines() {
+        let line = line
+            .replace('\t', "    ")
+            .chars()
+            .filter(|c| !c.is_control())
+            .collect::<String>();
         let trimmed = line.trim();
-        if let Some(comment) = trimmed.strip_prefix('#') {
-            let comment = comment
-                .trim()
-                .chars()
-                .filter(|c| !c.is_control())
-                .collect::<String>();
-            if line.starts_with(char::is_whitespace) && !hosts.is_empty() {
-                notes.push(comment);
-            } else {
-                pending.push(comment);
+        // Delay all standalone comments, regardless of indentation. If the next
+        // directive is Host, they describe that block; otherwise they stay inside.
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            // A less-indented comment starts a new heading after an indented
+            // trailing note in the preceding block.
+            if trimmed.starts_with('#')
+                && !hosts.is_empty()
+                && let Some(previous) = pending
+                    .iter()
+                    .rev()
+                    .find(|s: &&String| !s.trim().is_empty())
+                && previous.len() - previous.trim_start().len()
+                    > line.len() - line.trim_start().len()
+            {
+                lines.append(&mut pending);
             }
+            pending.push(line);
             continue;
         }
-        let (code, inline) = trimmed
-            .split_once('#')
-            .map_or((trimmed, None), |(a, b)| (a, Some(b.trim())));
-        let words: Vec<_> = code.split_whitespace().collect();
-        if words
-            .first()
-            .is_some_and(|w| w.eq_ignore_ascii_case("host") || w.eq_ignore_ascii_case("match"))
-        {
-            flush(&hosts, &login, &notes, &mut result);
-            hosts = if words[0].eq_ignore_ascii_case("host") {
-                words[1..].iter().map(|s| (*s).into()).collect()
+        let code = without_comment(trimmed);
+        let (key, value) = code
+            .split_once(|c: char| c.is_whitespace() || c == '=')
+            .unwrap_or((code, ""));
+        let values =
+            shell_words::split(value.trim_start_matches(|c: char| c.is_whitespace() || c == '='))
+                .unwrap_or_default();
+        if key.eq_ignore_ascii_case("host") || key.eq_ignore_ascii_case("match") {
+            flush(&hosts, &login, &lines, &mut result);
+            hosts = if key.eq_ignore_ascii_case("host") {
+                values
             } else {
                 Vec::new()
             };
             login = None;
-            notes = std::mem::take(&mut pending);
-        } else if words
-            .first()
-            .is_some_and(|w| w.eq_ignore_ascii_case("user"))
-            && words.len() > 1
-        {
-            login = Some(words[1].to_owned());
-        }
-        if !words.is_empty() {
-            notes.append(&mut pending);
-            if let Some(comment) = inline {
-                notes.push(comment.chars().filter(|c| !c.is_control()).collect());
+            lines = std::mem::take(&mut pending);
+            // Leading blank separators don't belong in the popup.
+            let first = lines
+                .iter()
+                .position(|line| !line.trim().is_empty())
+                .unwrap_or(lines.len());
+            lines.drain(..first);
+        } else {
+            lines.append(&mut pending);
+            if key.eq_ignore_ascii_case("user") && login.is_none() {
+                login = values.first().cloned();
             }
         }
+        lines.push(line);
     }
-    flush(&hosts, &login, &notes, &mut result);
+    lines.append(&mut pending);
+    flush(&hosts, &login, &lines, &mut result);
     result
+}
+
+// A # inside a quoted value (IdentityFile, ProxyCommand, etc.) is not a comment.
+fn without_comment(line: &str) -> &str {
+    let mut quote = None;
+    let mut escaped = false;
+    for (index, ch) in line.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        match (quote, ch) {
+            (None, '#') => return &line[..index],
+            (None, '\'' | '"') => quote = Some(ch),
+            (Some(open), close) if open == close => quote = None,
+            _ => {}
+        }
+    }
+    line
 }
 
 pub(super) fn hint(frame: &mut Frame, area: Rect, text: &str) {
     if area.width < 45 || area.height < 5 {
         return;
     }
-    let width = (area.width / 2).min(60);
+    let width = (area.width / 2).min(80);
     let paragraph = Paragraph::new(text)
         .wrap(Wrap { trim: false })
         .style(Style::default().fg(theme::USERNAME).bg(theme::SURFACE));
     let height = paragraph
         .line_count(width)
-        .min(usize::from(area.height / 3))
+        .min(usize::from(area.height.saturating_sub(2)))
         .max(1) as u16;
     let rect = Rect::new(area.right() - width, area.bottom() - height, width, height);
     frame.render_widget(Clear, rect);
@@ -156,18 +197,38 @@ mod tests {
         assert!(matching(&targets, "zz").is_empty());
     }
     #[test]
-    fn comments_follow_explicit_user_and_alias() {
-        let parsed = parse_comments(
+    fn host_config_preserves_settings_and_comments_for_user_and_alias() {
+        let parsed = parse_host_config(
             "# Production\nHost prod p\n User alice # Deploy user\n # Back up first\n# Staging\nHost stage\n User bob\nHost implicit\n # Not for root\nHost *\n User wildcard\n",
             "bob",
         );
         assert_eq!(
             parsed["alice@prod"],
-            "Production\nDeploy user\nBack up first"
+            "# Production\nHost prod p\n User alice # Deploy user\n # Back up first"
         );
         assert_eq!(parsed["alice@p"], parsed["alice@prod"]);
-        assert_eq!(parsed["stage"], "Staging");
+        assert_eq!(parsed["stage"], "# Staging\nHost stage\n User bob");
         assert!(!parsed.contains_key("root@prod"));
         assert!(!parsed.contains_key("implicit"));
+    }
+    #[test]
+    fn config_hint_handles_leading_comments_quotes_repeated_hosts_and_match() {
+        let parsed = parse_host_config(
+            "Host first\n User alice\n Port 2201\n\n  # Before second\n  # More context\nHost=second alias # Host note\n User = \"bob\"\n IdentityFile \"~/.ssh/key#work\" # Key note\n # Internal note\n ProxyCommand ssh jump -W %h:%p\n\nHost second\n User bob\n ServerAliveInterval 30\n # Trailing note\nMatch user bob\n # Not part of a Host block\n Port 9999\n",
+            "bob",
+        );
+        assert_eq!(parsed["alice@first"], "Host first\n User alice\n Port 2201");
+        let hint = &parsed["second"];
+        assert!(
+            hint.starts_with("  # Before second\n  # More context\nHost=second alias # Host note")
+        );
+        assert!(hint.contains("IdentityFile \"~/.ssh/key#work\" # Key note"));
+        assert!(hint.contains("# Internal note\n ProxyCommand ssh jump -W %h:%p"));
+        assert!(hint.contains("\n\nHost second\n User bob\n ServerAliveInterval 30"));
+        assert!(!hint.contains("Match"));
+        assert!(!hint.contains("9999"));
+        assert!(!parsed["alias"].contains("ServerAliveInterval"));
+        let eof = parse_host_config("# Before\nHost end\n User bob\n # Last comment\n", "bob");
+        assert!(eof["end"].ends_with(" # Last comment"));
     }
 }

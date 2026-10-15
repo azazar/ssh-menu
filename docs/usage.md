@@ -57,9 +57,9 @@ Press **F1** from the host list or new-remote dialog to read these docs without 
 
 The app version appears in the top-right corner of help. The help viewer wraps text to the terminal width and shows your position in each topic. Resizing adjusts the layout. It preserves your host filter, selected profile, and unfinished dialog inputs. Links are displayed as text; use the topic keys to navigate. The documentation is embedded in the binary, so help works offline without installed documentation files.
 
-## Host comments
+## Host configuration hint
 
-When a selected SSH config entry has an explicit `User`, its comments appear in a borderless hint at the bottom right. Comments immediately before `Host`, indented comments inside the section, and inline comments are included. Notes match the configured username and alias, including entries rediscovered from history; they are not copied to synthetic root entries. Wildcards, `Include`, and `Match` expansion are not supported. Small terminals hide the hint to leave room for hosts.
+When a selected SSH config entry has an explicit `User`, its complete source block appears in a borderless hint at the bottom right: the `Host` line, settings, and comments. A comment group immediately before `Host` belongs to that entry, even when indented; comments inside the block and inline comments remain in place. Multiple matching blocks are shown in file order. Hints match the configured username and alias, including entries rediscovered from history; they are not copied to synthetic root entries. This is the source configuration, not SSH’s resolved settings: wildcards, `Include`, and `Match` expansion are not supported. The popup grows with the block up to the available screen height; very long blocks can still be clipped, and small terminals hide the hint to leave room for hosts.
 
 ## After disconnecting
 

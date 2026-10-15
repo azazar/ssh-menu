@@ -63,7 +63,7 @@ with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
         config = (repo / 'ssh-menu-config.example.yml').read_text()
         config = re.sub(r'(?m)^      disks_filter = .*$', '      disks_filter = "/"', config)
         (home / '.ssh/ssh-menu-config.yml').write_text(config)
-    (home / ".ssh/config").write_text("# Production · deploy window 02:00 UTC\nHost production.example.org\n User deploy\n # Check backups before maintenance\n")
+    (home / ".ssh/config").write_text("# Production · deploy window 02:00 UTC\nHost production.example.org\n User deploy\n HostName 192.0.2.10\n Port 2222\n # Check backups before maintenance\n")
     (home / ".ssh/id_ed25519").write_text("demo fixture")
     (home / ".ssh/id_ed25519.pub").write_text("demo fixture")
     (home / '.bash_history').write_text(

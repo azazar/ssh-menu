@@ -393,11 +393,14 @@ profiles:
     assert not (root / "command").exists()
     assert (root / ".bash_history").read_text() == before
     config_file.write_text(original_config)
-    # Fuzzy abbreviations and user-specific SSH comments.
+    # Fuzzy abbreviations and complete user-specific SSH config hints.
     (root / ".bash_history").write_text("ssh alpha\n")
-    (root / ".ssh/config").write_text("# Production note\nHost alpha\n User tester\n")
+    (root / ".ssh/config").write_text("  # Production note\nHost alpha # primary\n User tester\n HostName 192.0.2.10\n Port 2222\n")
     output = session([b"aph", b"\r"])
     assert b"Production note" in output
+    assert b"Host alpha # primary" in output
+    assert b"HostName 192.0.2.10" in output
+    assert b"Port 2222" in output
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
 
     # One-off inputs remain literal and do not enter history.

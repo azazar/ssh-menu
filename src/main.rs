@@ -279,7 +279,7 @@ fn menu(
         profiles,
     } = state;
     let mut bar_state = bar::State::default();
-    let comments = search::comments(home, &env::var("USER").unwrap_or_default());
+    let host_config = search::host_config(home, &env::var("USER").unwrap_or_default());
     loop {
         let footer_height = 1;
         let visible = matching(targets, query);
@@ -400,9 +400,9 @@ fn menu(
                 ],
             );
             if let Some(i) = visible.get(*selection)
-                && let Some(comment) = comments.get(&targets[*i].host)
+                && let Some(block) = host_config.get(&targets[*i].host)
             {
-                search::hint(frame, areas[1], comment);
+                search::hint(frame, areas[1], block);
             }
         })?;
         let event = event::read()?;
