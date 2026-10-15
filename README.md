@@ -27,7 +27,53 @@ Written in Rust with [Ratatui](https://ratatui.rs/), SSH Menu uses a compact, bo
 
 ## Get started
 
-Download an archive for Linux, macOS, or Windows from [GitHub Releases](https://github.com/azazar/ssh-menu/releases). Follow the [installation guide](docs/installation.md) for platform requirements, checksums, and source builds.
+Install the published **v0.1.0-rc.1** release with the command for your system. Linux and macOS install the executable into `~/.local/bin` without sudo.
+
+**Linux x86-64 (including WSL)**
+
+```sh
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.1/ssh-menu-x86_64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+```
+
+**Linux ARM64**
+
+```sh
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.1/ssh-menu-aarch64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+```
+
+**Linux ARMv7 (hard-float)**
+
+```sh
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.1/ssh-menu-armv7-unknown-linux-musleabihf.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+```
+
+**macOS Apple Silicon**
+
+```sh
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.1/ssh-menu-aarch64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+```
+
+**macOS Intel**
+
+```sh
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.1/ssh-menu-x86_64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+```
+
+**Windows x64 — PowerShell**
+
+```powershell
+& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.1/ssh-menu-x86_64-pc-windows-msvc.zip -OutFile "$env:TEMP/ssh-menu.zip"; Expand-Archive "$env:TEMP/ssh-menu.zip" -DestinationPath "$HOME/.local/bin" -Force }
+```
+
+**Windows ARM64 — PowerShell**
+
+```powershell
+& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.1/ssh-menu-aarch64-pc-windows-msvc.zip -OutFile "$env:TEMP/ssh-menu.zip"; Expand-Archive "$env:TEMP/ssh-menu.zip" -DestinationPath "$HOME/.local/bin" -Force }
+```
+
+Add `~/.local/bin` to your `PATH` (in Bash or Zsh: `export PATH="$HOME/.local/bin:$PATH"`). On Windows, run SSH Menu from [Git Bash](https://git-scm.com/downloads/win); PowerShell is only used for installation. macOS binaries are unsigned. See the [installation guide](docs/installation.md) for checksum verification, platform requirements, and source builds, or browse [GitHub Releases](https://github.com/azazar/ssh-menu/releases).
+
+The published RC predates F1 help; use a [current development build](https://github.com/azazar/ssh-menu/actions/workflows/binaries.yml) or build from source for that feature.
 
 Run `ssh-menu`, type to filter your hosts, and press Enter to connect. **F2** adds a remote with optional setup. **F1** opens the built-in documentation, including navigation help and configuration examples.
 
