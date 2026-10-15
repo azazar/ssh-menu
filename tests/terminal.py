@@ -450,7 +450,7 @@ keybindings:
 """)
     output = session([b"alpha", b"\r", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
-    assert b"F3" in output and b"Ctrl+R" in output
+    assert b"F3" in output and b"Ctrl" in output
     output = session([b"alpha", b"\x12", b"\x12", b"\x11"])
     assert output.count(b"SSH_MENU_HANDOFF") == 2
     # Former help-close keys must no longer close help; plain X may close only there.
@@ -480,5 +480,23 @@ profiles:
     assert output.count(b"SSH_MENU_HANDOFF") == 1
     config_file.write_text("default: Fail\nprofiles: [{name: Fail, command: 'exit 7'}]\n")
     session([b"alpha", b"\x1b\r", b"\x03"])
+    config_file.write_text(original_config)
+    # Enhanced keyboard repeat events still edit the filter.
+    session([b"alphx", b"\x1b[127;1:2u", b"a", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    # Modifier press/release reveals the correct group without changing the filter.
+    config_file.write_text("""default: SSH
+profiles:
+  - {name: SSH, key: Alt+S, command: 'ssh -- %h'}
+  - {name: Special, key: Ctrl+Alt+X, command: 'custom-connect %h'}
+""")
+    output = session([b"alpha", b"\x1b[57443;3u", b"\x1b[57442;7u", b"\x1b[57442;7:3u", b"\x1b[57443;3:3u", b"\r"])
+    assert b"Special" in output
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    output = session([b"alpha", b"\x1b?", b"\x1b?", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    # Revealing and releasing keys also works inside help and connection dialogs.
+    session([b"alpha", b"\x1bOP", b"\x1b[57443;3u", b"\x1b[57443;3:3u", b"\x1bOP", b"\x1b[13;5u", b"\x1b[57442;5u", b"\x1b[57442;5:3u", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     config_file.write_text(original_config)
     print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, new remotes and setup recipes, embedded help, terminal restoration")

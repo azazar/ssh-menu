@@ -25,7 +25,7 @@ Changing a profile affects only the selected host. Moving away or changing the f
 | Ctrl-Backspace / Ctrl-Delete | Remove the last word |
 | Esc / Ctrl-C | Quit |
 
-All keys listed here are defaults and can be changed in `keybindings`; see the Keys help topic for active bindings. These are the shipped profile shortcuts; your configured, available bindings appear above the menu controls. A shortcut connects immediately using the selected host. Ctrl+Q has no built-in action and may be assigned to a profile.
+All keys listed here are defaults and can be changed in `keybindings`; see the Keys help topic for active bindings. Hold Alt to reveal the shipped profile shortcuts in the bottom bar, or see Keys in help. A shortcut connects immediately using the selected host. Ctrl+Q has no built-in action and may be assigned to a profile.
 
 Editing happens at the end of the text. Ctrl-Backspace also accepts the legacy Ctrl-H encoding.
 
@@ -68,3 +68,13 @@ Use **Alt+Enter** (`connect_and_return`) to reopen the menu after the launched c
 **Ctrl+Enter** opens a connection dialog; profiles with inputs also open it on Enter or their shortcut. Changes are temporary and are not written to history. The terminal must support distinct modified Enter events. Press F1 in the dialog for input examples.
 
 **F4** opens configuration editing: Enter launches `$VISUAL`, then `$EDITOR`, or `vi` as fallback. Editor arguments are supported. F1 shows the format reference. After a successful editor exit, YAML, templates, inputs and shortcut conflicts are validated and profile availability is refreshed. Valid changes take effect immediately; invalid changes remain on disk for correction while the current configuration stays active. Configuration files are created only when `~/.ssh` already exists.
+
+## One-row action bar
+
+![Alt shortcuts revealed in the action bar](../screenshot-shortcuts.png)
+
+The menu, dialogs, help and configuration editor use the same single-row bar. Keys are highlighted against a quiet shared background. The profile selector shows both neighbors, for example `Bash ← → SSH`; the current profile remains in the selected host row. Directional hints show both directions (`←→`, `↑↓`). On narrow terminals, lower-priority hints are omitted; Keys in help lists all bindings, including profile shortcuts.
+
+Hold **Alt** to reveal Alt shortcuts, **Ctrl+Alt** for that exact group, or **Ctrl** for Ctrl shortcuts. Releasing the modifiers restores the normal bar. Idle prompts show `Alt ?`, `Ctrl+Alt ?` and `Ctrl ?`. Holding modifiers requires a terminal supporting Kitty keyboard modifier press/release events. In other terminals, **Alt+?**, **Ctrl+Alt+?** or **Ctrl+?** toggles the corresponding hints; the next ordinary key also closes the reveal. These toggles only reveal bindings: still press the full shortcut to invoke an action. They are configurable as `reveal_alt`, `reveal_ctrl_alt` and `reveal_ctrl` in each screen's binding map.
+
+Within a revealed group the modifier prefix is shown once; `S SSH` under Alt means Alt+S. Elsewhere compact key labels use `C-` for Ctrl, `A-` for Alt, `S-` for Shift and `↵` for Enter. Terminal keyboard and focus-reporting modes are restored before launching a connection or external editor.

@@ -82,7 +82,7 @@ The repository pins its Rust toolchain. To build the RC source specifically, run
 
 ## Requirements
 
-Use a UTF-8 terminal with a Powerline-compatible font, such as a Nerd Font. Install the tools for the profiles you use: `ssh` for normal connections, `mosh` locally and `mosh-server` remotely for Mosh, or local `mc` for file browsing. Setup recipes use `ssh-copy-id`; the dotfiles sample also uses `scp`.
+Use a UTF-8 terminal with a monospace font. The action bar needs no Powerline or Nerd Font glyphs. Install the tools for the profiles you use: `ssh` for normal connections, `mosh` locally and `mosh-server` remotely for Mosh, or local `mc` for file browsing. Setup recipes use `ssh-copy-id`; the dotfiles sample also uses `scp`.
 
 ## Command-line options
 

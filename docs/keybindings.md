@@ -5,6 +5,9 @@ All app shortcuts can be changed under `keybindings` in `~/.ssh/ssh-menu-config.
 ```yaml
 keybindings:
   menu:
+    reveal_alt: [Alt+?]
+    reveal_ctrl_alt: [Ctrl+Alt+?]
+    reveal_ctrl: [Ctrl+?]
     connect: [Enter]
     connect_and_return: [Alt+Enter]
     connection_settings: [Ctrl+Enter]
@@ -58,3 +61,7 @@ Supported keys: letters with `Ctrl+`, `Alt+`, or `Ctrl+Alt+`; `F1`–`F24`; `Ent
 Duplicate keys in a screen, unknown actions, and conflicts with profile shortcuts are rejected. Move or disable the existing action before reusing its key. Profile shortcuts remain modified letters in each profile's `key` field; Ctrl+C can be assigned there after removing it from `menu.quit`. Terminal aliases are checked too: Ctrl+I is Tab, Ctrl+J/Ctrl+M is Enter, and Ctrl+H is Ctrl+Backspace. Some terminals cannot distinguish modified Enter or other combinations; bind a function key or modified letter instead.
 
 Footer hints show the current bindings. The **Keys** topic in built-in help lists every active binding for the current screen and help viewer, including disabled actions. Changes saved through the configuration editor take effect immediately after validation.
+
+## Modifier hints
+
+Every screen also supports `reveal_alt: [Alt+?]`, `reveal_ctrl_alt: [Ctrl+Alt+?]` and `reveal_ctrl: [Ctrl+?]` by default. These actions toggle modifier-specific hints for terminals without modifier-only events; put overrides in `menu`, `dialog`, `help` or `editor` as appropriate. In terminals with Kitty keyboard support, simply hold the modifiers to reveal their exact group and release them to restore the normal bar. Idle prompts occupy the same single row as other controls. The bar uses compact labels (`C-`, `A-`, `S-`, `↵`); the Keys topic lists full bindings and all available profile shortcuts.

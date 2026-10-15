@@ -12,26 +12,42 @@ pub(super) fn edit(
         "{}\n\nEdit with $VISUAL, $EDITOR, or vi. Help explains the configuration format.\n\nSaving a valid configuration reloads it immediately. Invalid edits stay on disk for correction; the current configuration remains active.",
         path.display()
     );
+    let mut bar_state = bar::State::default();
     loop {
         terminal.draw(|frame| {
             frame.render_widget(
                 Block::default().style(Style::default().fg(theme::TEXT).bg(theme::BASE)),
                 frame.area(),
             );
+            let areas =
+                Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(frame.area());
             frame.render_widget(
-                Paragraph::new(format!(
-                    " CONFIGURATION\n {} EDIT · {} HELP · {} CANCEL\n\n{message}",
-                    config.keybindings.hint("editor", "edit"),
-                    config.keybindings.hint("editor", "help"),
-                    config.keybindings.hint("editor", "cancel")
-                ))
-                .wrap(Wrap { trim: false }),
-                frame.area(),
+                Paragraph::new(format!(" CONFIGURATION\n\n{message}")).wrap(Wrap { trim: false }),
+                areas[0],
+            );
+            let keys = &config.keybindings;
+            bar_state.draw(
+                frame,
+                areas[1],
+                config,
+                "editor",
+                vec![
+                    bar::Item::action(keys, "editor", "edit", "Edit", 2),
+                    bar::Item::action(keys, "editor", "help", "Help", 0),
+                    bar::Item::action(keys, "editor", "cancel", "Cancel", 1),
+                ],
             );
         })?;
-        let Event::Key(key) = event::read()? else {
+        let event = event::read()?;
+        if matches!(event, Event::FocusLost) {
+            bar_state.reset();
+        }
+        let Event::Key(key) = event else {
             continue;
         };
+        if bar_state.event(key, &config.keybindings, "editor") {
+            continue;
+        }
         if key.kind != KeyEventKind::Press {
             continue;
         }
@@ -41,10 +57,9 @@ pub(super) fn edit(
         match key.code {
             KeyCode::Esc => return Ok(()),
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return Ok(()),
-            KeyCode::F(1) => {
-                help::show(terminal, help::Context::Configuration, &config.keybindings)?
-            }
+            KeyCode::F(1) => help::show(terminal, help::Context::Configuration, config)?,
             KeyCode::Enter | KeyCode::F(4) => {
+                bar_state.reset();
                 if !home.join(".ssh").is_dir() {
                     message =
                         "~/.ssh does not exist. Create it before editing configuration.".into();

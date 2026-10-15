@@ -72,7 +72,7 @@ impl Key {
             modifiers |= KeyModifiers::SHIFT;
         }
         if let KeyCode::Char(c) = code {
-            if c.is_ascii_uppercase() {
+            if c.is_ascii_uppercase() || c.is_ascii_punctuation() {
                 modifiers.remove(KeyModifiers::SHIFT);
                 code = KeyCode::Char(c.to_ascii_lowercase());
             }
@@ -142,7 +142,12 @@ pub struct Bindings(BTreeMap<String, Actions>);
 
 // Canonical events are internal action identifiers, independent of user bindings.
 fn defaults(scope: &str) -> Vec<(&'static str, &'static str, Vec<&'static str>)> {
-    let mut result = vec![("help", "F1", vec!["F1"])];
+    let mut result = vec![
+        ("help", "F1", vec!["F1"]),
+        ("reveal_alt", "F21", vec!["Alt+?"]),
+        ("reveal_ctrl_alt", "F22", vec!["Ctrl+Alt+?"]),
+        ("reveal_ctrl", "F23", vec!["Ctrl+?"]),
+    ];
     match scope {
         "menu" => result.extend([
             ("quit", "Esc", vec!["Esc", "Ctrl+C"]),
@@ -229,6 +234,24 @@ impl Bindings {
             })
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "—".into())
+    }
+    pub fn key_labels(&self, scope: &str, action: &str) -> Vec<String> {
+        defaults(scope)
+            .into_iter()
+            .find(|(a, _, _)| *a == action)
+            .map(|(_, _, keys)| {
+                self.keys(scope, action, &keys)
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+    pub fn actions(&self, scope: &str) -> Vec<(String, Vec<String>)> {
+        defaults(scope)
+            .into_iter()
+            .map(|(action, _, _)| (action.to_owned(), self.key_labels(scope, action)))
+            .collect()
     }
     pub fn hint(&self, scope: &str, action: &str) -> String {
         self.label(scope, action)

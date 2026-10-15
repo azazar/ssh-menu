@@ -52,7 +52,8 @@ impl tui_markdown::StyleSheet for HelpStyle {
 }
 
 struct Help {
-    keys: String,
+    bar_state: bar::State,
+    controls: Vec<(String, &'static str, u8)>,
     topics: Vec<(&'static str, &'static str)>,
     reference: String,
     topic: usize,
@@ -71,13 +72,26 @@ impl Help {
         };
         let count = topics.len();
         Self {
-            keys: format!(
-                " {} TOPIC · {} SCROLL · {} / {} CLOSE",
-                bindings.hint("help", "next_topic"),
-                bindings.hint("help", "down"),
-                bindings.hint("help", "help"),
-                bindings.hint("help", "close")
-            ),
+            bar_state: bar::State::default(),
+            controls: vec![
+                (
+                    bar::pair(bindings, "help", "previous_topic", "next_topic"),
+                    "Topic",
+                    3,
+                ),
+                (
+                    format!(
+                        "{}{}",
+                        bindings.hint("help", "up"),
+                        bindings.hint("help", "down")
+                    ),
+                    "Scroll",
+                    2,
+                ),
+                (bindings.hint("help", "page_down"), "Page", 4),
+                (bindings.hint("help", "help"), "Back", 1),
+                (bindings.hint("help", "close"), "Close", 0),
+            ],
             topics,
             reference: bindings.reference(scope),
             topic: 0,
@@ -86,7 +100,7 @@ impl Help {
             max_offset: 0,
         }
     }
-    fn draw(&mut self, frame: &mut Frame) {
+    fn draw(&mut self, frame: &mut Frame, config: Option<&launch::Config>) {
         frame.render_widget(
             Block::default().style(Style::default().fg(theme::TEXT).bg(theme::BASE)),
             frame.area(),
@@ -94,7 +108,7 @@ impl Help {
         let areas = Layout::vertical([
             Constraint::Length(1),
             Constraint::Min(0),
-            Constraint::Length(2),
+            Constraint::Length(1),
         ])
         .split(frame.area());
         let version = concat!("v", env!("CARGO_PKG_VERSION"));
@@ -164,33 +178,76 @@ impl Help {
             (*offset + self.page_height).min(total),
             total
         );
-        frame.render_widget(
-            Paragraph::new(vec![
-                Line::styled(position, Style::default().fg(theme::SUBTEXT)),
-                Line::styled(self.keys.clone(), Style::default().fg(theme::LAVENDER)),
-            ]),
-            areas[2],
-        );
+        let mut items: Vec<_> = self
+            .controls
+            .iter()
+            .map(|(key, label, priority)| bar::Item::new(key, *label, *priority))
+            .collect();
+        items.push(bar::Item::new("", position.trim(), 5));
+        if let Some(config) = config {
+            self.bar_state.draw(frame, areas[2], config, "help", items);
+        } else {
+            bar::draw(frame, areas[2], items);
+        }
     }
 }
 
 pub(super) fn show(
     terminal: &mut DefaultTerminal,
     context: Context,
-    bindings: &bindings::Bindings,
+    config: &launch::Config,
 ) -> io::Result<()> {
+    let bindings = &config.keybindings;
     let mut help = Help::new(context, bindings);
+    if matches!(context, Context::Hosts) {
+        help.reference
+            .push_str("\n## Profile shortcuts\n\n| Profile | Key |\n| --- | --- |\n");
+        for profile in &config.profiles {
+            if let Some(key) = &profile.key {
+                help.reference.push_str(&format!(
+                    "| {} | {key} |\n",
+                    profile.name.replace('|', "\\|")
+                ));
+            }
+        }
+    }
     loop {
-        terminal.draw(|frame| help.draw(frame))?;
-        let Event::Key(key) = event::read()? else {
+        terminal.draw(|frame| help.draw(frame, Some(config)))?;
+        let event = event::read()?;
+        if matches!(event, Event::FocusLost) {
+            help.bar_state.reset();
+        }
+        let Event::Key(key) = event else {
             continue;
         };
-        if key.kind != KeyEventKind::Press {
+        if help.bar_state.event(key, bindings, "help") {
             continue;
         }
+        if key.kind == KeyEventKind::Release {
+            continue;
+        }
+        let repeated = key.kind == KeyEventKind::Repeat;
         let Some(key) = bindings.translate("help", key) else {
             continue;
         };
+        if repeated
+            && !matches!(
+                key.code,
+                KeyCode::Char(_)
+                    | KeyCode::Up
+                    | KeyCode::Down
+                    | KeyCode::Left
+                    | KeyCode::Right
+                    | KeyCode::PageUp
+                    | KeyCode::PageDown
+                    | KeyCode::Backspace
+                    | KeyCode::Delete
+                    | KeyCode::Home
+                    | KeyCode::End
+            )
+        {
+            continue;
+        }
         match key.code {
             KeyCode::Esc | KeyCode::F(1) => return Ok(()),
             KeyCode::Char('q') if key.modifiers.is_empty() => return Ok(()),
@@ -232,7 +289,7 @@ mod tests {
                 for topic in 0..help.topics.len() {
                     help.topic = topic;
                     help.offsets[topic] = usize::MAX;
-                    terminal.draw(|frame| help.draw(frame)).unwrap();
+                    terminal.draw(|frame| help.draw(frame, None)).unwrap();
                     assert!(help.offsets[topic] <= help.max_offset);
                 }
             }

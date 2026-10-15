@@ -81,6 +81,7 @@ fn form(
     let mut loaded = vec![false; scripts.len()];
     let mut generation_error = String::new();
     let mut error = String::new();
+    let mut bar_state = bar::State::default();
     loop {
         if let Some(i) = setup.checked_sub(1)
             && !loaded[i]
@@ -209,37 +210,84 @@ fn form(
                 )),
                 areas[2],
             );
-            frame.render_widget(
-                Paragraph::new(format!(
-                    " {} HELP · {} FIELD · {} CONNECT · {} RETURN · {} CANCEL",
-                    config.keybindings.hint("dialog", "help"),
-                    config.keybindings.hint("dialog", "next_field"),
-                    config.keybindings.hint("dialog", "connect"),
-                    config.keybindings.hint("dialog", "connect_and_return"),
-                    config.keybindings.hint("dialog", "cancel")
-                )),
+            let keys = &config.keybindings;
+            bar_state.draw(
+                frame,
                 areas[3],
+                config,
+                "dialog",
+                vec![
+                    bar::Item::pair(keys, "dialog", "previous_field", "next_field", "Field", 3),
+                    bar::Item::new(
+                        format!(
+                            "{}{}",
+                            keys.hint("dialog", "left"),
+                            keys.hint("dialog", "right")
+                        ),
+                        "Choice",
+                        4,
+                    ),
+                    bar::Item::action(
+                        keys,
+                        "dialog",
+                        "connect",
+                        if connecting { "Open" } else { "Add" },
+                        2,
+                    ),
+                    bar::Item::action(keys, "dialog", "connect_and_return", "Return", 5),
+                    bar::Item::action(keys, "dialog", "help", "Help", 0),
+                    bar::Item::action(keys, "dialog", "cancel", "Cancel", 1),
+                ],
             );
         })?;
-        let Event::Key(key) = event::read()? else {
+        let event = event::read()?;
+        if matches!(event, Event::FocusLost) {
+            bar_state.reset();
+        }
+        let Event::Key(key) = event else {
             continue;
         };
-        if key.kind != KeyEventKind::Press {
+        if bar_state.event(key, &config.keybindings, "dialog") {
             continue;
         }
+        if key.kind == KeyEventKind::Release {
+            continue;
+        }
+        let repeated = key.kind == KeyEventKind::Repeat;
         let Some(key) = config.keybindings.translate("dialog", key) else {
             continue;
         };
+        if repeated
+            && !matches!(
+                key.code,
+                KeyCode::Char(_)
+                    | KeyCode::Up
+                    | KeyCode::Down
+                    | KeyCode::Left
+                    | KeyCode::Right
+                    | KeyCode::PageUp
+                    | KeyCode::PageDown
+                    | KeyCode::Backspace
+                    | KeyCode::Delete
+                    | KeyCode::Tab
+                    | KeyCode::BackTab
+            )
+        {
+            continue;
+        }
         match key.code {
-            KeyCode::F(1) => crate::help::show(
-                terminal,
-                if connecting {
-                    crate::help::Context::Connection
-                } else {
-                    crate::help::Context::NewRemote
-                },
-                &config.keybindings,
-            )?,
+            KeyCode::F(1) => {
+                bar_state.reset();
+                crate::help::show(
+                    terminal,
+                    if connecting {
+                        crate::help::Context::Connection
+                    } else {
+                        crate::help::Context::NewRemote
+                    },
+                    config,
+                )?;
+            }
             KeyCode::Esc => return Ok(None),
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return Ok(None);

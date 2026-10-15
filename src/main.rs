@@ -1,3 +1,4 @@
+mod bar;
 mod bindings;
 mod editor;
 mod help;
@@ -275,37 +276,15 @@ fn menu(
         selection,
         profiles,
     } = state;
+    let mut bar_state = bar::State::default();
     let comments = search::comments(home, &env::var("USER").unwrap_or_default());
     loop {
-        let profile_keys = config
-            .profiles
-            .iter()
-            .filter_map(|profile| {
-                profile
-                    .key
-                    .as_ref()
-                    .map(|key| format!("{key} {}", profile.name))
-            })
-            .collect::<Vec<_>>()
-            .join(" · ");
-        let action_keys = format!(
-            "{} SETTINGS · {} RETURN",
-            config.keybindings.hint("menu", "connection_settings"),
-            config.keybindings.hint("menu", "connect_and_return")
-        );
-        let split_hints = Line::from(format!(" {action_keys} · {profile_keys}")).width()
-            > usize::from(terminal.size()?.width);
-        let footer_height = if split_hints && !profile_keys.is_empty() {
-            3
-        } else {
-            2
-        };
+        let footer_height = 1;
         let visible = matching(targets, query);
         *selection = (*selection).min(visible.len().saturating_sub(1));
         let profile_index = visible
             .get(*selection)
             .map_or(config.default_index(), |i| profiles[*i]);
-        let profile = &config.profiles[profile_index];
         terminal.draw(|frame| {
             frame.render_widget(
                 Block::default().style(Style::default().fg(theme::TEXT).bg(theme::BASE)),
@@ -401,110 +380,49 @@ fn menu(
                 let mut state = TableState::default().with_selected(Some(*selection));
                 frame.render_stateful_widget(table, areas[1], &mut state);
             }
-            let mosh = profile.program() == "mosh";
-            let mut shortcuts = Vec::new();
-            let mut badge = |key: &str, label: &str, accent| {
-                shortcuts.push(Span::styled(
-                    format!(" {key} "),
-                    Style::default()
-                        .fg(theme::LAVENDER)
-                        .add_modifier(Modifier::BOLD),
-                ));
-                shortcuts.push(Span::styled(
-                    "",
-                    Style::default().fg(theme::BASE).bg(accent),
-                ));
-                shortcuts.push(Span::styled(
-                    format!(" {label} "),
-                    Style::default()
-                        .fg(theme::BASE)
-                        .bg(accent)
-                        .add_modifier(Modifier::BOLD),
-                ));
-                shortcuts.push(Span::styled(
-                    "",
-                    Style::default().fg(accent).bg(theme::BASE),
-                ));
-            };
-            badge(
-                &format!(
-                    "{} {}",
-                    config.keybindings.hint("menu", "left"),
-                    config.keybindings.hint("menu", "right")
-                ),
-                &profile.name,
-                if mosh { theme::PEACH } else { theme::LAVENDER },
+            let keys = &config.keybindings;
+            bar_state.draw(
+                frame,
+                areas[2],
+                config,
+                "menu",
+                vec![
+                    bar::Item::profiles(config, profile_index),
+                    bar::Item::action(keys, "menu", "connect", "Open", 2),
+                    bar::Item::action(keys, "menu", "connect_and_return", "Return", 4),
+                    bar::Item::action(keys, "menu", "connection_settings", "Edit", 5),
+                    bar::Item::action(keys, "menu", "new_remote", "New", 6),
+                    bar::Item::action(keys, "menu", "edit_config", "Config", 7),
+                    bar::Item::action(keys, "menu", "help", "Help", 0),
+                    bar::Item::action(keys, "menu", "quit", "Quit", 1),
+                ],
             );
-            badge(
-                &config.keybindings.hint("menu", "connect"),
-                "CONNECT",
-                theme::SUBTEXT,
-            );
-            badge(
-                &config.keybindings.hint("menu", "new_remote"),
-                "NEW",
-                theme::PEACH,
-            );
-            badge(
-                &config.keybindings.hint("menu", "edit_config"),
-                "CONFIG",
-                theme::SUBTEXT,
-            );
-            badge(
-                &config.keybindings.hint("menu", "help"),
-                "HELP",
-                theme::LAVENDER,
-            );
-            badge(
-                &config.keybindings.hint("menu", "quit"),
-                "QUIT",
-                theme::SUBTEXT,
-            );
-            let footer = if frame.area().width < 70 {
-                Line::from(format!(
-                    " {} HELP · {} CONNECT · {} QUIT",
-                    config.keybindings.hint("menu", "help"),
-                    config.keybindings.hint("menu", "connect"),
-                    config.keybindings.hint("menu", "quit")
-                ))
-            } else {
-                Line::from(shortcuts)
-            };
-            let mut lines = Vec::new();
-            if split_hints && !profile_keys.is_empty() {
-                lines.push(Line::styled(
-                    format!(" {profile_keys}"),
-                    Style::default().fg(theme::PEACH),
-                ));
-                lines.push(Line::styled(
-                    format!(" {action_keys}"),
-                    Style::default().fg(theme::PEACH),
-                ));
-            } else {
-                lines.push(Line::styled(
-                    format!(" {action_keys} · {profile_keys}"),
-                    Style::default().fg(theme::PEACH),
-                ));
-            }
-            lines.push(footer);
-            frame.render_widget(Paragraph::new(lines), areas[2]);
             if let Some(i) = visible.get(*selection)
                 && let Some(comment) = comments.get(&targets[*i].host)
             {
                 search::hint(frame, areas[1], comment);
             }
         })?;
-        if let Event::Key(key) = event::read()? {
-            if key.kind != KeyEventKind::Press {
+        let event = event::read()?;
+        if matches!(event, Event::FocusLost) {
+            bar_state.reset();
+        }
+        if let Event::Key(key) = event {
+            if bar_state.event(key, &config.keybindings, "menu") {
                 continue;
             }
-            if let Some(profile) = config
-                .profiles
-                .iter()
-                .position(|p| p.key.as_ref().is_some_and(|shortcut| shortcut.matches(key)))
+            if key.kind == KeyEventKind::Release {
+                continue;
+            }
+            if key.kind == KeyEventKind::Press
+                && let Some(profile) = config
+                    .profiles
+                    .iter()
+                    .position(|p| p.key.as_ref().is_some_and(|shortcut| shortcut.matches(key)))
             {
                 if let Some(i) = visible.get(*selection) {
                     if !config.profiles[profile].inputs.is_empty() {
+                        bar_state.reset();
                         if let Some(result) =
                             new_remote::connect(terminal, config, &targets[*i], profile, false)?
                         {
@@ -525,13 +443,37 @@ fn menu(
                 }
                 continue;
             }
+            let repeated = key.kind == KeyEventKind::Repeat;
             let Some(key) = config.keybindings.translate("menu", key) else {
                 continue;
             };
+            if repeated
+                && !matches!(
+                    key.code,
+                    KeyCode::Char(_)
+                        | KeyCode::Up
+                        | KeyCode::Down
+                        | KeyCode::Left
+                        | KeyCode::Right
+                        | KeyCode::PageUp
+                        | KeyCode::PageDown
+                        | KeyCode::Backspace
+                        | KeyCode::Delete
+                )
+            {
+                continue;
+            }
             match key.code {
-                KeyCode::F(1) => help::show(terminal, help::Context::Hosts, &config.keybindings)?,
-                KeyCode::F(4) => editor::edit(terminal, home, config, profiles)?,
+                KeyCode::F(1) => {
+                    bar_state.reset();
+                    help::show(terminal, help::Context::Hosts, config)?;
+                }
+                KeyCode::F(4) => {
+                    bar_state.reset();
+                    editor::edit(terminal, home, config, profiles)?;
+                }
                 KeyCode::F(2) => {
+                    bar_state.reset();
                     if let Some(mut selection) = new_remote::dialog(terminal, config)? {
                         if !config.profiles[selection.profile].inputs.is_empty() {
                             let Some(connection) = new_remote::connect(
@@ -612,6 +554,7 @@ fn menu(
                     }
                 }
                 KeyCode::Enter if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    bar_state.reset();
                     if let Some(i) = visible.get(*selection)
                         && let Some(result) = new_remote::connect(
                             terminal,
@@ -627,6 +570,7 @@ fn menu(
                 KeyCode::Enter => {
                     if let Some(i) = visible.get(*selection) {
                         if !config.profiles[profile_index].inputs.is_empty() {
+                            bar_state.reset();
                             if let Some(mut result) = new_remote::connect(
                                 terminal,
                                 config,
@@ -660,13 +604,22 @@ fn init_terminal() -> io::Result<DefaultTerminal> {
     let terminal = ratatui::try_init()?;
     execute!(
         io::stdout(),
-        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+        PushKeyboardEnhancementFlags(
+            KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+                | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+        ),
+        event::EnableFocusChange
     )?;
     Ok(terminal)
 }
 
 fn suspend_terminal() -> io::Result<()> {
-    execute!(io::stdout(), PopKeyboardEnhancementFlags)?;
+    execute!(
+        io::stdout(),
+        PopKeyboardEnhancementFlags,
+        event::DisableFocusChange
+    )?;
     let restore = ratatui::try_restore();
     let appearance = execute!(
         io::stdout(),

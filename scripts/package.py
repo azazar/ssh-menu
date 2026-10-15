@@ -19,6 +19,7 @@ def package(target):
         "LICENSE": root / "LICENSE",
         "ssh-menu-config.example.yml": root / "ssh-menu-config.example.yml",
         "screenshot-connection.png": root / "screenshot-connection.png",
+        "screenshot-shortcuts.png": root / "screenshot-shortcuts.png",
         "screenshot-help.png": root / "screenshot-help.png",
         "screenshot.png": root / "screenshot.png",
         "screenshot-new-remote.png": root / "screenshot-new-remote.png",

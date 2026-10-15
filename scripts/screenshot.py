@@ -16,11 +16,15 @@ import pyte
 
 parser = argparse.ArgumentParser(description=__doc__)
 modes = parser.add_mutually_exclusive_group()
+modes.add_argument('--shortcuts', action='store_true', help='capture the Alt shortcut bar')
 modes.add_argument('--connection', action='store_true', help='capture the connection dialog')
 modes.add_argument('--dialog', action='store_true', help='capture the new-remote dialog')
 modes.add_argument('--help-viewer', action='store_true', help='capture built-in help')
 args = parser.parse_args()
-if args.connection:
+if args.shortcuts:
+    keys = b'\x1b[57443;3u'
+    title, output_name, quit_keys = 'SSH MENU', 'screenshot-shortcuts.png', b'\x1b[57443;3:3u\x03'
+elif args.connection:
     keys = b'\x1b[13;5u'
     title, output_name, quit_keys = 'CONNECT', 'screenshot-connection.png', b'\x03\x03'
 elif args.dialog:
