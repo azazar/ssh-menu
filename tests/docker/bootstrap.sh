@@ -48,7 +48,7 @@ case "$1" in
     ;;
   opensuse)
     zypper --non-interactive refresh
-    zypper --non-interactive install python3 openssh sudo ca-certificates curl tar gzip diffutils gawk ncurses-utils ncurses procps shadow
+    zypper --non-interactive install python3 openssh sudo ca-certificates curl tar gzip diffutils gawk ncurses-utils ncurses-devel ncurses procps shadow
     ;;
   *) echo "Unknown distro: $1" >&2; exit 1 ;;
 esac

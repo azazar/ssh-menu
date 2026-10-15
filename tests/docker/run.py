@@ -4,6 +4,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 from pathlib import Path
+import re
 import shutil
 import socket
 from urllib.parse import urlsplit
@@ -77,9 +78,12 @@ def main():
                                     '--build-arg', f'DISTRO={distro}', *[arg for name in PROXIES for arg in ('--build-arg', name)], '-t', image, str(context)],
                                    stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.timeout)
                 print(f'[{distro}] testing profiles and recipes', flush=True)
+                # Arch's btop package carries file capabilities. Linux refuses
+                # exec when they are absent from Docker's capability bounding set.
+                capabilities = ['--cap-add=PERFMON', '--cap-add=DAC_READ_SEARCH'] if distro == 'arch' else []
                 with (logs / 'container.log').open('w') as log:
                     try:
-                        subprocess.run(['docker', 'run', *extra_hosts, '--name', name, '--hostname', 'ssh-menu-docker', *[arg for name in PROXIES for arg in ('--env', name)], image],
+                        subprocess.run(['docker', 'run', *extra_hosts, *capabilities, '--name', name, '--hostname', 'ssh-menu-docker', *[arg for name in PROXIES for arg in ('--env', name)], image],
                                        stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.timeout)
                     finally:
                         subprocess.run(['docker', 'cp', f'{name}:/results/.', str(logs)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -88,10 +92,14 @@ def main():
             except (subprocess.SubprocessError, OSError) as error:
                 print(f'[{distro}] FAIL: {error}; see {logs}', flush=True)
                 diagnostics = [f'{distro}: {error}']
-                for file in ['build.log', 'container.log', 'sshd.log']:
+                files = ['container.log', 'sshd.log'] if (logs / 'container.log').exists() else ['build.log']
+                for file in files:
                     path = logs / file
                     if path.exists():
-                        tail = f'[{distro}] {file} (last lines):\n' + '\n'.join(path.read_text(errors='replace').splitlines()[-15:])
+                        lines = path.read_text(errors='replace').splitlines()
+                        errors = [line for line in lines if re.match(r'^\w*(?:Error|Exception):', line)]
+                        summary = '\n'.join(errors[-1:])
+                        tail = f'[{distro}] {file}:\n{summary}\n' + '\n'.join(lines[-15:])[-2000:]
                         print(tail, flush=True)
                         diagnostics.append(tail)
                 if os.environ.get('GITHUB_ACTIONS') == 'true':
