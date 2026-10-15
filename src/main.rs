@@ -39,7 +39,6 @@ mod theme {
 struct Target {
     host: String,
     port: Option<String>,
-    mosh: bool,
 }
 impl Target {
     fn label(&self) -> String {
@@ -57,7 +56,7 @@ fn valid_host(host: &str) -> bool {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || "_.-@[]:".contains(c))
 }
-fn target(raw: &str, user: &str, mosh: bool) -> Option<Target> {
+fn target(raw: &str, user: &str) -> Option<Target> {
     let raw = raw.strip_prefix(&format!("{user}@")).unwrap_or(raw);
     let (host, port) = match raw.rsplit_once(':') {
         Some((h, p))
@@ -75,45 +74,37 @@ fn target(raw: &str, user: &str, mosh: bool) -> Option<Target> {
     Some(Target {
         host: host.into(),
         port,
-        mosh,
     })
 }
 fn history_target(line: &str, user: &str) -> Option<Target> {
     if let Some(hint) = launch::history_target_hint(line) {
-        return target(hint, user, false);
+        return target(hint, user);
     }
     let words = launch::history_words(line)?;
-    let words = if words.first().is_some_and(|w| w == "exec") {
-        &words[1..]
-    } else {
-        &words[..]
-    };
-    if let [program, path] = words
+    if let [program, path] = words.as_slice()
         && program == "mc"
         && let Some(host) = path
             .strip_prefix("/sh://")
             .and_then(|p| p.strip_suffix('/'))
     {
-        return target(host, user, false);
+        return target(host, user);
     }
     history_connection(line, user).map(|(target, _, _)| target)
 }
 
 fn history_connection(line: &str, user: &str) -> Option<(Target, Vec<String>, String)> {
     let words = launch::history_words(line)?;
-    let mut it = words.iter().map(String::as_str).peekable();
-    if it.peek() == Some(&"exec") {
-        it.next();
-    }
+    let mut it = words.iter().map(String::as_str);
     let cmd = it.next()?;
     if !matches!(cmd, "ssh" | "ssh-copy-id" | "mosh") {
         return None;
     }
     let mut port = None;
     let mut login = None;
-    while let Some(word) = it.next() {
+    let host = loop {
+        let word = it.next()?;
         if word == "--" {
-            break;
+            break it.next()?;
         }
         if word == "-p" {
             port = Some(it.next()?.to_owned());
@@ -156,23 +147,15 @@ fn history_connection(line: &str, user: &str) -> Option<(Target, Vec<String>, St
         if word.starts_with('-') {
             continue;
         }
-        let mut t = target(word, user, cmd == "mosh")?;
-        if let Some(p) = port {
-            p.parse::<u16>().ok().filter(|p| *p > 0)?;
-            t.port = Some(p);
-        }
-        if let Some(login) = login {
-            t = target(&format!("{login}@{}", t.label()), user, t.mosh)?;
-        }
-        return Some((t, it.map(str::to_owned).collect(), cmd.to_owned()));
-    }
-    let mut t = target(it.next()?, user, cmd == "mosh")?;
+        break word;
+    };
+    let mut t = target(host, user)?;
     if let Some(p) = port {
         p.parse::<u16>().ok().filter(|p| *p > 0)?;
         t.port = Some(p);
     }
     if let Some(login) = login {
-        t = target(&format!("{login}@{}", t.label()), user, t.mosh)?;
+        t = target(&format!("{login}@{}", t.label()), user)?;
     }
     Some((t, it.map(str::to_owned).collect(), cmd.to_owned()))
 }
@@ -191,11 +174,11 @@ fn discover(home: &Path, user: &str) -> Vec<Target> {
             if host.contains(['*', '?', '!']) {
                 continue;
             }
-            if let Some(t) = target(&format!("{login}@{host}"), user, false) {
+            if let Some(t) = target(&format!("{login}@{host}"), user) {
                 add(t);
             }
             if login != "root"
-                && let Some(t) = target(&format!("root@{host}"), user, false)
+                && let Some(t) = target(&format!("root@{host}"), user)
             {
                 add(t);
             }
@@ -227,7 +210,7 @@ fn discover(home: &Path, user: &str) -> Vec<Target> {
             && words.first().map(String::as_str) == Some("ENTRY")
             && let Some(url) = words.windows(2).find(|w| w[0] == "URL").map(|w| &w[1])
             && let Some(rest) = url.strip_prefix("/sh://")
-            && let Some(t) = target(rest.split('/').next().unwrap_or(""), user, false)
+            && let Some(t) = target(rest.split('/').next().unwrap_or(""), user)
         {
             add(t);
         }
@@ -595,18 +578,26 @@ mod tests {
     fn history_options() {
         let t = history_target("exec ssh -i '/a key' -p 2222 alice@example.org", "alice").unwrap();
         assert_eq!(t.label(), "example.org:2222");
+        for delimiter in ["", "-- "] {
+            let line = format!("exec ssh -l bob -p2222 {delimiter}host exec bash -l");
+            let (target, remote, program) = history_connection(&line, "alice").unwrap();
+            assert_eq!(target.label(), "bob@host:2222");
+            assert_eq!(remote, ["exec", "bash", "-l"]);
+            assert_eq!(program, "ssh");
+        }
         assert!(history_target("echo ssh example.org", "alice").is_none());
         assert!(history_target("ssh 'host;touch /tmp/no'", "alice").is_none());
     }
     #[test]
     fn mosh_and_override() {
-        let t = history_target("mosh --ssh='ssh -p 2200' bob@host", "alice").unwrap();
-        assert!(t.mosh);
+        let (t, _, program) =
+            history_connection("mosh --ssh='ssh -p 2200' bob@host", "alice").unwrap();
+        assert_eq!(program, "mosh");
         assert_eq!(t.label(), "bob@host:2200");
     }
     #[test]
     fn filtering() {
-        let ts = vec![target("Alice@Host:22", "alice", false).unwrap()];
+        let ts = vec![target("Alice@Host:22", "alice").unwrap()];
         assert_eq!(matching(&ts, "HOST"), vec![0]);
         assert!(matching(&ts, "absent").is_empty());
     }
@@ -633,7 +624,6 @@ mod tests {
         let ts = discover(&dir, "alice");
         assert_eq!(ts[0].label(), "alpha");
         assert_eq!(ts[1].label(), "beta");
-        assert!(ts[1].mosh);
         assert!(ts.iter().any(|t| t.label() == "bob@mc"));
         assert!(!ts.iter().any(|t| t.host.contains('*')));
         fs::remove_dir_all(dir).unwrap();

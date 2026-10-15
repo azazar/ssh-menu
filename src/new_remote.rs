@@ -6,7 +6,7 @@ fn parse_remote(text: &str) -> Option<Target> {
     if text.starts_with('@') {
         return None;
     }
-    let parsed = target(text, "", false)?;
+    let parsed = target(text, "")?;
     if parsed
         .port
         .as_ref()

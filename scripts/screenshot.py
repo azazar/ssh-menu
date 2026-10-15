@@ -1,11 +1,11 @@
 """Capture the actual TUI with demo hosts; requires Pillow and pyte."""
+import argparse
 import fcntl
 import os
 from pathlib import Path
 import pty
 import select
 import struct
-import sys
 import subprocess
 import tempfile
 import termios
@@ -13,6 +13,21 @@ import time
 
 from PIL import Image, ImageDraw, ImageFont
 import pyte
+
+parser = argparse.ArgumentParser(description=__doc__)
+modes = parser.add_mutually_exclusive_group()
+modes.add_argument('--dialog', action='store_true', help='capture the new-remote dialog')
+modes.add_argument('--help-viewer', action='store_true', help='capture built-in help')
+args = parser.parse_args()
+if args.dialog:
+    keys = b'\x1bOQdeploy@new.example.org:2222\t\x1b[C\x1b[C\t'
+    title, output_name, quit_keys = 'NEW REMOTE', 'screenshot-new-remote.png', b'\x11\x11'
+elif args.help_viewer:
+    keys = b'\x1bOP'
+    title, output_name, quit_keys = 'HELP', 'screenshot-help.png', b'\x11\x11'
+else:
+    keys = b'\x1b[C' * 4
+    title, output_name, quit_keys = 'SSH MENU', 'screenshot.png', b'\x11'
 
 repo = Path(__file__).resolve().parents[1]
 binary = repo / 'target/x86_64-unknown-linux-musl/release/ssh-menu'
@@ -39,17 +54,16 @@ with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
     child = subprocess.Popen([str(binary)], stdin=slave, stdout=slave, stderr=slave,
                              env=child_env)
     try:
-        selected_zellij = False
+        keys_sent = False
         deadline = time.monotonic() + 1
         while time.monotonic() < deadline:
             if select.select([master], [], [], 0.05)[0]:
                 stream.feed(os.read(master, 65536))
-                if not selected_zellij and any('SSH MENU' in line for line in screen.display):
-                    os.write(master, b'\x1bOQdeploy@new.example.org:2222\t\x1b[C\x1b[C\t' if '--dialog' in sys.argv else (b'\x1bOP' if '--help-viewer' in sys.argv else b'\x1b[C' * 4))
-                    selected_zellij = True
-        assert any(('NEW REMOTE' if '--dialog' in sys.argv else ('HELP' if '--help-viewer' in sys.argv else 'SSH MENU')) in line for line in screen.display), screen.display
-        assert not any('Ctrl-U' in line for line in screen.display)
-        os.write(master, b'\x11\x11' if any(arg in sys.argv for arg in ('--dialog', '--help-viewer')) else b'\x11')
+                if not keys_sent and any('SSH MENU' in line for line in screen.display):
+                    os.write(master, keys)
+                    keys_sent = True
+        assert any(title in line for line in screen.display), screen.display
+        os.write(master, quit_keys)
         child.wait(timeout=3)
         assert child.returncode == 0
     finally:
@@ -87,5 +101,5 @@ for row in range(rows):
         x, y = pad + col * cell_w, pad + row * cell_h
         draw.rectangle((x, y, x + cell_w - 1, y + cell_h - 1), fill=bg)
         draw.text((x, y), char.data, font=font, fill=fg, stroke_width=0)
-image.save(repo / ('screenshot-new-remote.png' if '--dialog' in sys.argv else ('screenshot-help.png' if '--help-viewer' in sys.argv else 'screenshot.png')))
-print('Updated terminal screenshot' + (' (new remote)' if '--dialog' in sys.argv else ''))
+image.save(repo / output_name)
+print(f'Updated {output_name}')

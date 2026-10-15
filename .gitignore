@@ -1,6 +1,4 @@
-.vscode/launch.json
-.vscode/perl-lang
-
+/.vscode/launch.json
 /target/
-
 /dist/
+__pycache__/

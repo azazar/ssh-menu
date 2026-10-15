@@ -462,7 +462,6 @@ impl Config {
                         .expanded(&Target {
                             host: "user@host".into(),
                             port,
-                            mosh: false,
                         })
                         .map_err(|e| invalid(format!("profile {}: {e}", profile.name)))?;
                 }
@@ -603,7 +602,6 @@ mod tests {
         Target {
             host: "alice@host".into(),
             port: port.map(str::to_owned),
-            mosh: false,
         }
     }
     fn run(profile: &Profile, target: &Target) -> std::process::Output {

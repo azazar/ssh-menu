@@ -7,17 +7,12 @@ on:
         description: Existing release tag to publish
         required: true
         type: string
-  push:
-    branches: [master]
 
 permissions:
   contents: read
 
 jobs:
   publish:
-    # The commit marker allows an explicit promotion through Git when API access
-    # is unavailable. Normal pushes never publish an existing draft.
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[publish-release]')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -26,14 +21,10 @@ jobs:
       GH_REPO: ${{ github.repository }}
       REQUESTED_TAG: ${{ inputs.tag }}
     steps:
-      - uses: actions/checkout@v7.0.1
       - name: Select release tag
         shell: bash
         run: |
           tag="$REQUESTED_TAG"
-          if [[ -z "$tag" ]]; then
-            tag="v$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
-          fi
           if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
             echo 'Expected a version tag such as v0.1.0-rc.1' >&2
             exit 1
