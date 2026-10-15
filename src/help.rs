@@ -14,10 +14,12 @@ impl Context {
             Self::Hosts => &[
                 ("Guide", include_str!("../docs/usage.md")),
                 ("Profiles", include_str!("../docs/configuration.md")),
+                ("Bindings", include_str!("../docs/keybindings.md")),
             ],
             Self::Connection => &[("Connection", include_str!("../docs/connection.md"))],
             Self::Configuration => &[
                 ("Profiles", include_str!("../docs/configuration.md")),
+                ("Bindings", include_str!("../docs/keybindings.md")),
                 ("Setup", include_str!("../docs/setup.md")),
             ],
             Self::NewRemote => &[("Setup", include_str!("../docs/setup.md"))],
@@ -50,19 +52,36 @@ impl tui_markdown::StyleSheet for HelpStyle {
 }
 
 struct Help {
-    topics: &'static [(&'static str, &'static str)],
+    keys: String,
+    topics: Vec<(&'static str, &'static str)>,
+    reference: String,
     topic: usize,
     offsets: Vec<usize>,
     page_height: usize,
     max_offset: usize,
 }
 impl Help {
-    fn new(context: Context) -> Self {
-        let topics = context.topics();
+    fn new(context: Context, bindings: &bindings::Bindings) -> Self {
+        let mut topics = context.topics().to_vec();
+        topics.push(("Keys", ""));
+        let scope = match context {
+            Context::Hosts => "menu",
+            Context::NewRemote | Context::Connection => "dialog",
+            Context::Configuration => "editor",
+        };
+        let count = topics.len();
         Self {
+            keys: format!(
+                " {} TOPIC · {} SCROLL · {} / {} CLOSE",
+                bindings.hint("help", "next_topic"),
+                bindings.hint("help", "down"),
+                bindings.hint("help", "help"),
+                bindings.hint("help", "close")
+            ),
             topics,
+            reference: bindings.reference(scope),
             topic: 0,
-            offsets: vec![0; topics.len()],
+            offsets: vec![0; count],
             page_height: 1,
             max_offset: 0,
         }
@@ -121,7 +140,14 @@ impl Help {
             header[1],
         );
         let options = tui_markdown::Options::new(HelpStyle).table_width(areas[1].width.max(1));
-        let text = tui_markdown::from_str_with_options(self.topics[self.topic].1, &options);
+        let text = tui_markdown::from_str_with_options(
+            if self.topics[self.topic].0 == "Keys" {
+                &self.reference
+            } else {
+                self.topics[self.topic].1
+            },
+            &options,
+        );
         let paragraph = Paragraph::new(text).wrap(Wrap { trim: false });
         let total = paragraph.line_count(areas[1].width);
         self.page_height = usize::from(areas[1].height).max(1);
@@ -138,25 +164,22 @@ impl Help {
             (*offset + self.page_height).min(total),
             total
         );
-        let keys = if self.topics.len() == 1 {
-            " ↑↓/Pg SCROLL · Home/End · F1/Esc CLOSE"
-        } else if frame.area().width < 65 {
-            " ←→ Topic · ↑↓ Scroll · F1 Close"
-        } else {
-            " ←→/Tab TOPIC · ↑↓/Pg SCROLL · Home/End · F1/Esc CLOSE"
-        };
         frame.render_widget(
             Paragraph::new(vec![
                 Line::styled(position, Style::default().fg(theme::SUBTEXT)),
-                Line::styled(keys, Style::default().fg(theme::LAVENDER)),
+                Line::styled(self.keys.clone(), Style::default().fg(theme::LAVENDER)),
             ]),
             areas[2],
         );
     }
 }
 
-pub(super) fn show(terminal: &mut DefaultTerminal, context: Context) -> io::Result<()> {
-    let mut help = Help::new(context);
+pub(super) fn show(
+    terminal: &mut DefaultTerminal,
+    context: Context,
+    bindings: &bindings::Bindings,
+) -> io::Result<()> {
+    let mut help = Help::new(context, bindings);
     loop {
         terminal.draw(|frame| help.draw(frame))?;
         let Event::Key(key) = event::read()? else {
@@ -165,6 +188,9 @@ pub(super) fn show(terminal: &mut DefaultTerminal, context: Context) -> io::Resu
         if key.kind != KeyEventKind::Press {
             continue;
         }
+        let Some(key) = bindings.translate("help", key) else {
+            continue;
+        };
         match key.code {
             KeyCode::Esc | KeyCode::F(1) => return Ok(()),
             KeyCode::Char('q') if key.modifiers.is_empty() => return Ok(()),
@@ -202,7 +228,7 @@ mod tests {
                 Context::Connection,
                 Context::Configuration,
             ] {
-                let mut help = Help::new(context);
+                let mut help = Help::new(context, &bindings::Bindings::default());
                 for topic in 0..help.topics.len() {
                     help.topic = topic;
                     help.offsets[topic] = usize::MAX;

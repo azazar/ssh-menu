@@ -1,6 +1,6 @@
 # Launch profiles
 
-Edit **`~/.ssh/ssh-menu-config.yml`** and restart SSH Menu to reload it. The file is created from the [commented example](../ssh-menu-config.example.yml) on the first interactive launch if `~/.ssh` already exists. Existing configs are preserved. With no `~/.ssh` directory, built-in defaults are used.
+Edit **`~/.ssh/ssh-menu-config.yml`** using the config editor (F4 by default) for validated live reload, or restart after editing externally. The file is created from the [commented example](../ssh-menu-config.example.yml) on the first interactive launch if `~/.ssh` already exists. Existing configs are preserved. With no `~/.ssh` directory, built-in defaults are used.
 
 Launch profiles are shell command templates. A minimal config is:
 
@@ -29,9 +29,9 @@ Set `key: Alt+M` on a launch profile to connect the selected host with it (or op
 
 Use **Ctrl+letter**, **Alt+letter**, or **Ctrl+Alt+letter**, with an ASCII letter A–Z. Names are case-insensitive; `Alt+M` does not require Shift. Plain letters, Shift-only bindings, special keys, and duplicate bindings are rejected. Duplicate checks include unavailable profiles so installing a tool cannot introduce a conflict.
 
-Ctrl+C, Ctrl+H, Ctrl+I, Ctrl+J, Ctrl+M, Ctrl+S, and Ctrl+Z are reserved, including combinations with Alt. These cover existing quit/edit keys, terminal aliases for Backspace/Tab/Enter, flow control, and suspend. Profile shortcuts cannot replace the app's function keys, arrows, Enter, Esc, or editing keys. A terminal or desktop may intercept other combinations; choose another binding if needed.
+Ctrl+H, Ctrl+I, Ctrl+J, Ctrl+M, Ctrl+S, and Ctrl+Z remain reserved for profile shortcuts because of terminal aliases and flow/suspend behavior. Other profile keys must not overlap configured menu actions. Ctrl+C can be reused after removing it from `keybindings.menu.quit`. App actions themselves are configurable; see [keybindings](keybindings.md).
 
-The shipped bindings are **Alt+S** SSH, **Alt+M** Mosh, **Alt+C** MC, **Alt+B** Bash, and **Alt+Z** Zellij. Existing configs are preserved; add `key` to enable shortcuts there. Ctrl+Q and Ctrl+Alt+Q are available for custom bindings; neither quits the app. Setup recipes do not accept `key`.
+The shipped bindings are **Alt+S** SSH, **Alt+M** Mosh, **Alt+C** MC, **Alt+B** Bash, and **Alt+Z** Zellij. Existing configs are preserved; add `key` to enable shortcuts there. Ctrl+Q and Ctrl+Alt+Q are unbound by default and available for custom bindings. Setup recipes do not accept `key`.
 
 ## Profile availability
 
@@ -82,7 +82,7 @@ Each named-field substitution adds a shell-quoting layer. Fields without `%{...}
 
 ## Menu behavior and editing
 
-`return_to_menu: false` is the default. Set it to `true` to reopen the same menu after a connection exits. **F4**, then Enter, edits this file using `$VISUAL` / `$EDITOR` / `vi`; F1 opens the format reference. Saving reloads only valid configurations. Checks include YAML structure, required fields, templates, input definitions, unique names and shortcut conflicts. This validates the configuration format, not arbitrary shell script behavior.
+`connect` hands off to a connection; `connect_and_return` reopens the menu afterward (Enter and Alt+Enter by default). Configure either action under `keybindings.menu` and `keybindings.dialog`. **F4**, then Enter, edits this file using `$VISUAL` / `$EDITOR` / `vi`; F1 opens the format reference. Saving reloads only valid configurations. Checks include YAML structure, required fields, templates, input definitions, unique names and shortcut conflicts. This validates the configuration format, not arbitrary shell script behavior.
 
 ## Connection inputs
 

@@ -103,3 +103,5 @@ An existing `~/.ssh/ssh-menu-config.yml` is never overwritten. To enable the new
 | Zellij | `Alt+Z` | `command -v ssh` |
 
 Restart SSH Menu after editing. Profiles whose checks fail are hidden; if the default is unavailable, the first available profile is used. Ctrl+Q no longer quits and can be assigned to a profile. Use Esc or Ctrl+C to quit.
+
+For configurations from the earlier return-to-menu build, remove the top-level `return_to_menu` line. Use the configurable `connect_and_return` action (Alt+Enter by default) instead; see [keybindings](keybindings.md).

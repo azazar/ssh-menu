@@ -406,7 +406,7 @@ pub fn history_words(line: &str) -> Option<Vec<String>> {
 pub struct Config {
     pub default: String,
     #[serde(default)]
-    pub return_to_menu: bool,
+    pub keybindings: crate::bindings::Bindings,
     pub profiles: Vec<Profile>,
     #[serde(default)]
     pub configuration_scripts: Vec<Profile>,
@@ -414,6 +414,10 @@ pub struct Config {
 impl Config {
     pub fn parse(text: &str) -> io::Result<Self> {
         let config: Self = serde_yaml_ng::from_str(text).map_err(|e| invalid(e.to_string()))?;
+        config
+            .keybindings
+            .validate(&config.profiles)
+            .map_err(invalid)?;
         if config.profiles.is_empty() {
             return Err(invalid("profiles must not be empty"));
         }

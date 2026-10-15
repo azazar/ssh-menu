@@ -9,7 +9,7 @@ pub(super) fn edit(
 ) -> io::Result<()> {
     let path = home.join(".ssh").join(launch::CONFIG_NAME);
     let mut message = format!(
-        "{}\n\nEnter / F4: edit with $VISUAL, $EDITOR, or vi\nF1: configuration format help\nEsc: return\n\nSaving a valid configuration reloads it immediately. Invalid edits stay on disk for correction; the current configuration remains active.",
+        "{}\n\nEdit with $VISUAL, $EDITOR, or vi. Help explains the configuration format.\n\nSaving a valid configuration reloads it immediately. Invalid edits stay on disk for correction; the current configuration remains active.",
         path.display()
     );
     loop {
@@ -19,7 +19,13 @@ pub(super) fn edit(
                 frame.area(),
             );
             frame.render_widget(
-                Paragraph::new(format!(" CONFIGURATION\n\n{message}")).wrap(Wrap { trim: false }),
+                Paragraph::new(format!(
+                    " CONFIGURATION\n {} EDIT · {} HELP · {} CANCEL\n\n{message}",
+                    config.keybindings.hint("editor", "edit"),
+                    config.keybindings.hint("editor", "help"),
+                    config.keybindings.hint("editor", "cancel")
+                ))
+                .wrap(Wrap { trim: false }),
                 frame.area(),
             );
         })?;
@@ -29,13 +35,19 @@ pub(super) fn edit(
         if key.kind != KeyEventKind::Press {
             continue;
         }
+        let Some(key) = config.keybindings.translate("editor", key) else {
+            continue;
+        };
         match key.code {
             KeyCode::Esc => return Ok(()),
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return Ok(()),
-            KeyCode::F(1) => help::show(terminal, help::Context::Configuration)?,
+            KeyCode::F(1) => {
+                help::show(terminal, help::Context::Configuration, &config.keybindings)?
+            }
             KeyCode::Enter | KeyCode::F(4) => {
                 if !home.join(".ssh").is_dir() {
-                    message = "~/.ssh does not exist. Create it before editing configuration.\nEsc: return · F1: help".into();
+                    message =
+                        "~/.ssh does not exist. Create it before editing configuration.".into();
                     continue;
                 }
                 let editor = env::var("VISUAL")
@@ -46,7 +58,7 @@ pub(super) fn edit(
                 let words = match shell_words::split(&editor) {
                     Ok(words) if !words.is_empty() => words,
                     _ => {
-                        message = "Invalid VISUAL / EDITOR command. Esc: return".into();
+                        message = "Invalid VISUAL / EDITOR command.".into();
                         continue;
                     }
                 };
@@ -76,7 +88,7 @@ pub(super) fn edit(
                     }
                     Err(err) => {
                         message = format!(
-                            "{err}\n\nConfiguration not reloaded.\nEnter / F4: fix · F1: format help · Esc: keep current configuration"
+                            "{err}\n\nConfiguration not reloaded.\nEdit to fix, open help, or cancel to keep the current configuration."
                         )
                     }
                 }

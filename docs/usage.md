@@ -13,6 +13,7 @@ Changing a profile affects only the selected host. Moving away or changing the f
 | ↑ / ↓ · PgUp / PgDn | Move through hosts |
 | ← / → | Change the selected host's profile |
 | Enter | Connect |
+| Alt+Enter | Connect and return to the menu afterward |
 | Ctrl+Enter | Adjust the remote, profile and inputs for one connection |
 | Alt+S / Alt+M / Alt+C | Connect with SSH / Mosh / MC |
 | Alt+B / Alt+Z | Connect with remote Bash / Zellij |
@@ -24,7 +25,7 @@ Changing a profile affects only the selected host. Moving away or changing the f
 | Ctrl-Backspace / Ctrl-Delete | Remove the last word |
 | Esc / Ctrl-C | Quit |
 
-These are the shipped profile shortcuts; your configured, available bindings appear above the menu controls. A shortcut connects immediately using the selected host. Ctrl+Q has no built-in action and may be assigned to a profile.
+All keys listed here are defaults and can be changed in `keybindings`; see the Keys help topic for active bindings. These are the shipped profile shortcuts; your configured, available bindings appear above the menu controls. A shortcut connects immediately using the selected host. Ctrl+Q has no built-in action and may be assigned to a profile.
 
 Editing happens at the end of the text. Ctrl-Backspace also accepts the legacy Ctrl-H encoding.
 
@@ -44,7 +45,7 @@ Automatic installation supports Linux x86-64 and ARM64 and requires `tar`, `curl
 
 ## Built-in help
 
-Press **F1** from the host list or new-remote dialog to read these docs without leaving SSH Menu. The host list shows Guide and Profiles; the new-remote dialog shows only Setup.
+Press **F1** from the host list or new-remote dialog to read these docs without leaving SSH Menu. The host list shows Guide, Profiles and Bindings; dialogs show relevant connection/setup documentation. Every screen includes a Keys topic with its active shortcuts.
 
 - **Left/Right or Tab/Shift-Tab:** switch topics.
 - **Up/Down:** scroll one line.
@@ -60,7 +61,7 @@ When a selected SSH config entry has an explicit `User`, its comments appear in 
 
 ## After disconnecting
 
-Set top-level `return_to_menu: true` in the YAML configuration to reopen the menu after the launched command exits, including nonzero exit status. Your filter, row and per-host profile choices remain. The default is `false`, which hands the terminal directly to the connection as before.
+Use **Alt+Enter** (`connect_and_return`) to reopen the menu after the launched command exits, including nonzero exit status. Your filter, row and per-host profile choices remain. **Enter** (`connect`) hands the terminal directly to the connection. Both actions are available in dialogs as well as the host list and can be rebound independently.
 
 ## Adjusting and editing
 

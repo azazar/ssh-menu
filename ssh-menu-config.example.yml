@@ -5,8 +5,16 @@
 # key uses Ctrl+, Alt+, or Ctrl+Alt+ with a letter; plain typing and reserved keys are rejected.
 # available_command runs locally at startup; nonzero status hides the profile.
 default: SSH
-# Reopen the menu after a connection ends, preserving filter and selection.
-return_to_menu: false
+# Overrides replace an action's default keys; [] disables an action.
+# Separate maps: menu, dialog, help, editor. See F1 for all actions.
+keybindings:
+  menu:
+    connect: [Enter]
+    connect_and_return: [Alt+Enter]
+    connection_settings: [Ctrl+Enter]
+  dialog:
+    connect: [Enter]
+    connect_and_return: [Alt+Enter]
 profiles:
   - name: SSH
     key: Alt+S

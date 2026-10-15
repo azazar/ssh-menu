@@ -210,11 +210,14 @@ fn form(
                 areas[2],
             );
             frame.render_widget(
-                Paragraph::new(if connecting {
-                    " F1 HELP · Tab/↑↓ FIELD · ←→ CHOICE · Enter CONNECT · Esc CANCEL"
-                } else {
-                    " F1 HELP · Tab/↑↓ FIELD · ←→ CHOICE · Enter ADD + CONNECT · Esc CANCEL"
-                }),
+                Paragraph::new(format!(
+                    " {} HELP · {} FIELD · {} CONNECT · {} RETURN · {} CANCEL",
+                    config.keybindings.hint("dialog", "help"),
+                    config.keybindings.hint("dialog", "next_field"),
+                    config.keybindings.hint("dialog", "connect"),
+                    config.keybindings.hint("dialog", "connect_and_return"),
+                    config.keybindings.hint("dialog", "cancel")
+                )),
                 areas[3],
             );
         })?;
@@ -224,6 +227,9 @@ fn form(
         if key.kind != KeyEventKind::Press {
             continue;
         }
+        let Some(key) = config.keybindings.translate("dialog", key) else {
+            continue;
+        };
         match key.code {
             KeyCode::F(1) => crate::help::show(
                 terminal,
@@ -232,6 +238,7 @@ fn form(
                 } else {
                     crate::help::Context::NewRemote
                 },
+                &config.keybindings,
             )?,
             KeyCode::Esc => return Ok(None),
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -313,6 +320,7 @@ fn form(
                     },
                     setup_command: if connecting { None } else { setup_command },
                     new: !connecting,
+                    return_to_menu: key.modifiers.contains(KeyModifiers::ALT),
                 }));
             }
             _ => {

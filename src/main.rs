@@ -1,3 +1,4 @@
+mod bindings;
 mod editor;
 mod help;
 mod launch;
@@ -251,6 +252,7 @@ struct Selection {
     setup: Option<usize>,
     setup_command: Option<(String, Vec<String>)>,
     new: bool,
+    return_to_menu: bool,
     connection_command: Option<(String, Vec<String>)>,
 }
 
@@ -286,7 +288,18 @@ fn menu(
             })
             .collect::<Vec<_>>()
             .join(" · ");
-        let footer_height = 2;
+        let action_keys = format!(
+            "{} SETTINGS · {} RETURN",
+            config.keybindings.hint("menu", "connection_settings"),
+            config.keybindings.hint("menu", "connect_and_return")
+        );
+        let split_hints = Line::from(format!(" {action_keys} · {profile_keys}")).width()
+            > usize::from(terminal.size()?.width);
+        let footer_height = if split_hints && !profile_keys.is_empty() {
+            3
+        } else {
+            2
+        };
         let visible = matching(targets, query);
         *selection = (*selection).min(visible.len().saturating_sub(1));
         let profile_index = visible
@@ -390,7 +403,7 @@ fn menu(
             }
             let mosh = profile.program() == "mosh";
             let mut shortcuts = Vec::new();
-            let mut badge = |key: &'static str, label: &str, accent| {
+            let mut badge = |key: &str, label: &str, accent| {
                 shortcuts.push(Span::styled(
                     format!(" {key} "),
                     Style::default()
@@ -414,28 +427,65 @@ fn menu(
                 ));
             };
             badge(
-                "←→",
+                &format!(
+                    "{} {}",
+                    config.keybindings.hint("menu", "left"),
+                    config.keybindings.hint("menu", "right")
+                ),
                 &profile.name,
                 if mosh { theme::PEACH } else { theme::LAVENDER },
             );
-            badge("Enter", "CONNECT", theme::SUBTEXT);
-            badge("F2", "NEW", theme::PEACH);
-            badge("F4", "CONFIG", theme::SUBTEXT);
-            badge("F1", "HELP", theme::LAVENDER);
-            if frame.area().width >= 125 {
-                badge("↑↓/Pg", "MOVE", theme::SUBTEXT);
-            }
-            badge("Esc", "QUIT", theme::SUBTEXT);
+            badge(
+                &config.keybindings.hint("menu", "connect"),
+                "CONNECT",
+                theme::SUBTEXT,
+            );
+            badge(
+                &config.keybindings.hint("menu", "new_remote"),
+                "NEW",
+                theme::PEACH,
+            );
+            badge(
+                &config.keybindings.hint("menu", "edit_config"),
+                "CONFIG",
+                theme::SUBTEXT,
+            );
+            badge(
+                &config.keybindings.hint("menu", "help"),
+                "HELP",
+                theme::LAVENDER,
+            );
+            badge(
+                &config.keybindings.hint("menu", "quit"),
+                "QUIT",
+                theme::SUBTEXT,
+            );
             let footer = if frame.area().width < 70 {
-                Line::from(" F1 HELP · F2 NEW · F4 CONFIG · Enter CONNECT")
+                Line::from(format!(
+                    " {} HELP · {} CONNECT · {} QUIT",
+                    config.keybindings.hint("menu", "help"),
+                    config.keybindings.hint("menu", "connect"),
+                    config.keybindings.hint("menu", "quit")
+                ))
             } else {
                 Line::from(shortcuts)
             };
             let mut lines = Vec::new();
-            lines.push(Line::styled(
-                format!(" Ctrl+Enter SETTINGS · {profile_keys}"),
-                Style::default().fg(theme::PEACH),
-            ));
+            if split_hints && !profile_keys.is_empty() {
+                lines.push(Line::styled(
+                    format!(" {profile_keys}"),
+                    Style::default().fg(theme::PEACH),
+                ));
+                lines.push(Line::styled(
+                    format!(" {action_keys}"),
+                    Style::default().fg(theme::PEACH),
+                ));
+            } else {
+                lines.push(Line::styled(
+                    format!(" {action_keys} · {profile_keys}"),
+                    Style::default().fg(theme::PEACH),
+                ));
+            }
             lines.push(footer);
             frame.render_widget(Paragraph::new(lines), areas[2]);
             if let Some(i) = visible.get(*selection)
@@ -468,13 +518,18 @@ fn menu(
                         setup: None,
                         setup_command: None,
                         new: false,
+                        return_to_menu: key.modifiers.contains(KeyModifiers::ALT)
+                            && key.code == KeyCode::Enter,
                         connection_command: None,
                     }));
                 }
                 continue;
             }
+            let Some(key) = config.keybindings.translate("menu", key) else {
+                continue;
+            };
             match key.code {
-                KeyCode::F(1) => help::show(terminal, help::Context::Hosts)?,
+                KeyCode::F(1) => help::show(terminal, help::Context::Hosts, &config.keybindings)?,
                 KeyCode::F(4) => editor::edit(terminal, home, config, profiles)?,
                 KeyCode::F(2) => {
                     if let Some(mut selection) = new_remote::dialog(terminal, config)? {
@@ -492,6 +547,7 @@ fn menu(
                             selection.target = connection.target;
                             selection.profile = connection.profile;
                             selection.connection_command = connection.connection_command;
+                            selection.return_to_menu |= connection.return_to_menu;
                         }
                         return Ok(Some(selection));
                     }
@@ -571,13 +627,14 @@ fn menu(
                 KeyCode::Enter => {
                     if let Some(i) = visible.get(*selection) {
                         if !config.profiles[profile_index].inputs.is_empty() {
-                            if let Some(result) = new_remote::connect(
+                            if let Some(mut result) = new_remote::connect(
                                 terminal,
                                 config,
                                 &targets[*i],
                                 profile_index,
                                 false,
                             )? {
+                                result.return_to_menu |= key.modifiers.contains(KeyModifiers::ALT);
                                 return Ok(Some(result));
                             }
                             continue;
@@ -588,6 +645,8 @@ fn menu(
                             setup: None,
                             setup_command: None,
                             new: false,
+                            return_to_menu: key.modifiers.contains(KeyModifiers::ALT)
+                                && key.code == KeyCode::Enter,
                             connection_command: None,
                         }));
                     }
@@ -668,6 +727,7 @@ fn run() -> io::Result<()> {
             setup_command,
             new,
             connection_command,
+            return_to_menu,
         }) = result?
         {
             if let Some(index) = setup {
@@ -705,7 +765,7 @@ fn run() -> io::Result<()> {
                 let mut file = options.open(&history)?;
                 writeln!(file, "{line}")?;
             }
-            if config.return_to_menu {
+            if return_to_menu {
                 Command::new(program).args(args).status()?;
                 continue;
             }

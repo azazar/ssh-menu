@@ -312,7 +312,7 @@ configuration_scripts:
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     output = session([b"\x1bOQ", b"help-host:2222", b"\x1bOP", b"\t", b"\x1b[D", b"\x1bOP", b"\r"])
     assert b"Setting up a remote" in output
-    assert b"Profiles" not in output and b"TOPIC" not in output, "dialog help offered irrelevant topics"
+    assert b"Profiles" not in output and b"Keys" in output, "dialog help should offer only setup and active keys"
     assert (root / "command").read_text().splitlines()[1:] == ["-p", "2222", "--", "help-host"]
     # Unbound Ctrl+Q must not quit the menu or close help/dialogs.
     session([b"\x11", b"alpha", b"\r"])
@@ -406,8 +406,8 @@ profiles:
     assert (root / "command").read_text().splitlines()[1:] == ["alpha", "shortcut"]
 
     # Return mode restores the child tty and then preserves the filter.
-    config_file.write_text("default: SSH\nreturn_to_menu: true\nprofiles: [{name: SSH, command: 'ssh -- %h'}]\n")
-    output = session([b"alpha", b"\r", b"\r", b"\x03"])
+    config_file.write_text("default: SSH\nprofiles: [{name: SSH, command: 'ssh -- %h'}]\n")
+    output = session([b"alpha", b"\x1b\r", b"\x1b\r", b"\x03"])
     assert output.count(b"SSH_MENU_HANDOFF") == 2
 
     # Editor handoff, valid reload, and invalid edits retaining the active config.
@@ -422,5 +422,63 @@ profiles:
     output = session([b"alpha", b"\x1bOS", b"\r", b"\x1b", b"\r"])
     assert b"Configuration not reloaded" in output
     assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
+    config_file.write_text(original_config)
+    # App bindings replace defaults, remain scoped, and drive both dispatch and hints.
+    config_file.write_text("""default: SSH
+profiles: [{name: SSH, command: 'ssh -- %h'}]
+keybindings:
+  menu:
+    connect: [F3]
+    connect_and_return: [Ctrl+R]
+    connection_settings: [F5]
+    help: [F6]
+    new_remote: [F9]
+    edit_config: [F10]
+    quit: [Ctrl+Q]
+  dialog:
+    connect: [F3]
+    connect_and_return: [F5]
+    help: [F6]
+    cancel: [F7]
+  help:
+    help: []
+    close: [X]
+  editor:
+    help: [F6]
+    edit: [F3]
+    cancel: [F7]
+""")
+    output = session([b"alpha", b"\r", b"\x1bOR"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    assert b"F3" in output and b"Ctrl+R" in output
+    output = session([b"alpha", b"\x12", b"\x12", b"\x11"])
+    assert output.count(b"SSH_MENU_HANDOFF") == 2
+    # Former help-close keys must no longer close help; plain X may close only there.
+    session([b"alpha", b"\x1b[17~", b"\x1bOP", b"q", b"x", b"\x1bOR"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    output = session([b"alpha", b"\x1b[15~", b"\r", b"\x1b[15~", b"\x11"])
+    assert output.count(b"SSH_MENU_HANDOFF") == 1
+    session([b"\x1b[20~", b"new-rebound", b"\x1bOR"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "new-rebound"]
+    # Editor actions use their own bindings and help closes back to the launcher.
+    session([b"alpha", b"\x1b[21~", b"\x1b[17~", b"x", b"\x1b[18~", b"\x1bOR"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    config_file.write_text("""default: SSH
+profiles: [{name: SSH, key: Ctrl+C, command: 'ssh -- %h'}]
+keybindings: {menu: {quit: [Esc]}}
+""")
+    session([b"alpha", b"\x03"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    # Return action survives an input dialog; a failed connection also returns.
+    config_file.write_text("""default: Custom
+profiles:
+  - name: Custom
+    command: custom-connect %h %{input:value}
+    inputs: [{id: value, type: promptString, default: test}]
+""")
+    output = session([b"alpha", b"\x1b\r", b"\r", b"\x03"])
+    assert output.count(b"SSH_MENU_HANDOFF") == 1
+    config_file.write_text("default: Fail\nprofiles: [{name: Fail, command: 'exit 7'}]\n")
+    session([b"alpha", b"\x1b\r", b"\x03"])
     config_file.write_text(original_config)
     print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, new remotes and setup recipes, embedded help, terminal restoration")
