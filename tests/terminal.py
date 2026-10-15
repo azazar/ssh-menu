@@ -403,6 +403,11 @@ profiles:
     assert b"Port 2222" in output
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
 
+    # Hint-only and mixed queries select the alias, including with the hint hidden.
+    for query in [b"prdctn", b"192.0.2.10", b"alpha 2222", b"tester production"]:
+        session([query, b"\r"], rows=10, cols=40)
+        assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+
     # One-off inputs remain literal and do not enter history.
     config_file.write_text("""default: SSH
 profiles:

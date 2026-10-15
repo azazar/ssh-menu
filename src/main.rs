@@ -238,9 +238,6 @@ fn discover(home: &Path, user: &str) -> Vec<Target> {
     values.sort_by_key(|(rank, _)| std::cmp::Reverse(*rank));
     values.into_iter().map(|(_, t)| t).collect()
 }
-fn matching(targets: &[Target], query: &str) -> Vec<usize> {
-    search::matching(targets, query)
-}
 fn erase_filter_word(query: &mut String) {
     let trimmed = query.trim_end();
     let end = trimmed
@@ -282,7 +279,7 @@ fn menu(
     let host_config = search::host_config(home, &env::var("USER").unwrap_or_default());
     loop {
         let footer_height = 1;
-        let visible = matching(targets, query);
+        let visible = search::matching(targets, query, &host_config);
         *selection = (*selection).min(visible.len().saturating_sub(1));
         let profile_index = visible
             .get(*selection)
@@ -789,8 +786,8 @@ mod tests {
     #[test]
     fn filtering() {
         let ts = vec![target("Alice@Host:22", "alice").unwrap()];
-        assert_eq!(matching(&ts, "HOST"), vec![0]);
-        assert!(matching(&ts, "absent").is_empty());
+        assert_eq!(search::matching(&ts, "HOST", &HashMap::new()), vec![0]);
+        assert!(search::matching(&ts, "absent", &HashMap::new()).is_empty());
     }
     #[test]
     fn discovery_recency() {

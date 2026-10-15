@@ -17,13 +17,17 @@ import pyte
 
 parser = argparse.ArgumentParser(description=__doc__)
 modes = parser.add_mutually_exclusive_group()
+modes.add_argument('--search', action='store_true', help='capture a search matching config comments')
 modes.add_argument('--monitor', action='store_true', help='capture the real btop dashboard (requires local btop)')
 modes.add_argument('--shortcuts', action='store_true', help='capture the Alt shortcut bar')
 modes.add_argument('--connection', action='store_true', help='capture the connection dialog')
 modes.add_argument('--dialog', action='store_true', help='capture the new-remote dialog')
 modes.add_argument('--help-viewer', action='store_true', help='capture built-in help')
 args = parser.parse_args()
-if args.monitor:
+if args.search:
+    keys = b'maintenance'
+    title, output_name, quit_keys = 'SSH MENU', 'screenshot-search.png', b'\x03'
+elif args.monitor:
     keys = b'\x1bh'
     title, output_name, quit_keys = 'cpu', 'screenshot-monitor.png', b'q'
 elif args.shortcuts:

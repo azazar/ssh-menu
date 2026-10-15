@@ -79,7 +79,7 @@ Add `~/.local/bin` to your `PATH` (in Bash or Zsh: `export PATH="$HOME/.local/bi
 
 Help is embedded in the executable. Only `ssh-menu` (or `ssh-menu.exe`) is needed; no documentation files are required for F1 help.
 
-Run `ssh-menu`, type to fuzzy-search your hosts, and press Enter to connect, or use a profile shortcut to connect immediately. The single-row action bar reveals shortcuts while holding Alt, Ctrl or Ctrl+Alt. **Alt+Enter** connects and returns to the menu afterward. **Ctrl+Enter** adjusts one connection. **F2** adds a remote with optional setup. **F4** edits and validates configuration. **F1** opens the built-in documentation, including navigation help and configuration examples.
+Run `ssh-menu`, type to fuzzy-search your hosts and their SSH config settings/comments, and press Enter to connect, or use a profile shortcut to connect immediately. The single-row action bar reveals shortcuts while holding Alt, Ctrl or Ctrl+Alt. **Alt+Enter** connects and returns to the menu afterward. **Ctrl+Enter** adjusts one connection. **F2** adds a remote with optional setup. **F4** edits and validates configuration. **F1** opens the built-in documentation, including navigation help and configuration examples.
 
 ## Documentation
 

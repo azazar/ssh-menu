@@ -2,14 +2,14 @@
 
 Your existing hosts appear automatically in three aligned, borderless columns: launch profile (left), username (right, highlighted), and host (left). The selection marker sits beside the row. An unspecified username leaves its column blank; explicit ports stay with the host.
 
-1. Type a hostname fragment or fuzzy abbreviation and select a matching row with **↑ / ↓**.
+1. Type a hostname fragment, SSH config detail, comment, or fuzzy abbreviation and select a matching row with **↑ / ↓**.
 2. Use **← / →** to choose how that host opens, then press **Enter**.
 
 Changing a profile affects only the selected host. Moving away or changing the filter preserves the choice while the menu is open.
 
 | Key | Action |
 | --- | --- |
-| Type | Fuzzy search username, host and port; space-separated terms all must match |
+| Type | Fuzzy search username, host, port and config hint text; space-separated terms all must match |
 | ↑ / ↓ · PgUp / PgDn | Move through hosts |
 | ← / → | Change the selected host's profile |
 | Enter | Connect |
@@ -56,6 +56,12 @@ Press **F1** from the host list or new-remote dialog to read these docs without 
 - **Esc, F1, or q:** close help and return to where you were.
 
 The app version appears in the top-right corner of help. The help viewer wraps text to the terminal width and shows your position in each topic. Resizing adjusts the layout. It preserves your host filter, selected profile, and unfinished dialog inputs. Links are displayed as text; use the topic keys to navigate. The documentation is embedded in the binary, so help works offline without installed documentation files.
+
+## Search config details and comments
+
+Search includes the complete text used by each host's configuration hint, even when the popup is hidden or clipped. For example, search an underlying `HostName` address, identity filename, port, or a note such as `maintenance`. Space-separated terms may match different fields (`deploy maintenance`); every term must match. Matching is case-insensitive and supports fuzzy abbreviations in both names and hints. Hostname/username/port matches rank ahead of matches that need hint text; within each group, substring matches rank ahead of fuzzy matches, with recency breaking ties. A fuzzy term matches within a single hint line, not across unrelated lines.
+
+![Searching a host by a maintenance comment](../screenshot-search.png)
 
 ## Host configuration hint
 
