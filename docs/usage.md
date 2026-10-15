@@ -1,8 +1,9 @@
 # Using SSH Menu
 
-1. Run `ssh-menu`. Your existing hosts appear automatically.
-2. Type part of a hostname and select a matching row with **↑ / ↓**.
-3. Use **← / →** to choose how that host opens, then press **Enter**.
+Your existing hosts appear automatically.
+
+1. Type part of a hostname and select a matching row with **↑ / ↓**.
+2. Use **← / →** to choose how that host opens, then press **Enter**.
 
 Changing a profile affects only the selected host. Moving away or changing the filter preserves the choice while the menu is open.
 
@@ -19,7 +20,7 @@ Changing a profile affects only the selected host. Moving away or changing the f
 | Ctrl-Backspace / Ctrl-Delete | Remove the last word |
 | Esc / Ctrl-Q / Ctrl-C | Quit |
 
-Editing happens at the end of the text. Ctrl-Backspace also accepts the legacy Ctrl-H encoding. Use `ssh-menu --dump` to list hosts without opening the UI; `--help` and `--version` are also available.
+Editing happens at the end of the text. Ctrl-Backspace also accepts the legacy Ctrl-H encoding.
 
 ## Where hosts and remembered profiles come from
 
