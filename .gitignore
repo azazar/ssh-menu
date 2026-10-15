@@ -1,2 +1,6 @@
 .vscode/launch.json
 .vscode/perl-lang
+
+/target/
+
+/dist/

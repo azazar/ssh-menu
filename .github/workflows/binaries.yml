@@ -1,0 +1,127 @@
+name: Binaries
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+            cross: true
+            smoke: true
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04
+            cross: true
+            smoke: false
+          - target: armv7-unknown-linux-musleabihf
+            runner: ubuntu-24.04
+            cross: true
+            smoke: false
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+            cross: false
+            smoke: true
+          - target: aarch64-apple-darwin
+            runner: macos-15
+            cross: false
+            smoke: true
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2025
+            cross: false
+            smoke: true
+          - target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
+            cross: false
+            smoke: true
+    env:
+      TARGET: ${{ matrix.target }}
+      RUSTFLAGS: ${{ contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '' }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Rust toolchain and target
+        run: |
+          rustup show
+          rustup target add "$TARGET"
+      - name: Install Linux cross compiler
+        if: matrix.cross
+        run: cargo install cross --version 0.2.5 --locked
+      - name: Build static Linux executable
+        if: matrix.cross
+        run: cross build --locked --release --target "$TARGET"
+      - name: Build native executable
+        if: ${{ !matrix.cross }}
+        run: cargo build --locked --release --target "$TARGET"
+      - name: Verify Linux static linkage
+        if: runner.os == 'Linux'
+        run: |
+          binary="target/$TARGET/release/ssh-menu"
+          file "$binary"
+          if readelf -l "$binary" | grep -q INTERP; then
+            echo 'Unexpected dynamic interpreter' >&2
+            exit 1
+          fi
+          if readelf -d "$binary" | grep -q NEEDED; then
+            echo 'Unexpected shared-library dependency' >&2
+            exit 1
+          fi
+      - name: Smoke test native executable
+        if: matrix.smoke
+        run: |
+          binary="target/$TARGET/release/ssh-menu"
+          if [[ "$RUNNER_OS" == Windows ]]; then binary="$binary.exe"; fi
+          "$binary" --version
+          "$binary" --help
+      - name: Package binary and documentation
+        run: python scripts/package.py "$TARGET"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ssh-menu-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Prepare draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [checks, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ssh-menu-*
+          path: dist
+          merge-multiple: true
+      - name: Combine archive checksums
+        run: cat dist/*.sha256 > dist/SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/SHA256SUMS

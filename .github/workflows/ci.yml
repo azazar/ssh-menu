@@ -1,0 +1,24 @@
+name: Rust
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: rustup show
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - run: python3 tests/zellij.py
+      - run: cargo build --locked --release --target x86_64-unknown-linux-musl
+      - run: python3 tests/terminal.py target/x86_64-unknown-linux-musl/release/ssh-menu
+      - name: Verify static executable
+        run: |
+          file target/x86_64-unknown-linux-musl/release/ssh-menu
+          if readelf -l target/x86_64-unknown-linux-musl/release/ssh-menu | grep -q INTERP; then exit 1; fi
+          if readelf -d target/x86_64-unknown-linux-musl/release/ssh-menu | grep -q NEEDED; then exit 1; fi
