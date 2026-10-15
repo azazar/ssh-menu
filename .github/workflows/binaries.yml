@@ -56,8 +56,8 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.12'
       - name: Install pinned Rust toolchain and target
@@ -95,7 +95,7 @@ jobs:
           "$binary" --help
       - name: Package binary and documentation
         run: python scripts/package.py "$TARGET"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: ssh-menu-${{ matrix.target }}
           path: dist/*
@@ -109,14 +109,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           pattern: ssh-menu-*
           path: dist
           merge-multiple: true
       - name: Combine archive checksums
         run: cat dist/*.sha256 > dist/SHA256SUMS
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3.0.3
         with:
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
