@@ -168,7 +168,9 @@ pub(super) fn dialog(
                 areas[2],
             );
             frame.render_widget(
-                Paragraph::new(" Tab/↑↓ FIELD · ←→ CHOICE · Enter ADD + CONNECT · Esc CANCEL"),
+                Paragraph::new(
+                    " F1 HELP · Tab/↑↓ FIELD · ←→ CHOICE · Enter ADD + CONNECT · Esc CANCEL",
+                ),
                 areas[3],
             );
         })?;
@@ -179,6 +181,7 @@ pub(super) fn dialog(
             continue;
         }
         match key.code {
+            KeyCode::F(1) => crate::help::show(terminal, 3)?,
             KeyCode::Esc => return Ok(None),
             KeyCode::Char('c' | 'q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return Ok(None);

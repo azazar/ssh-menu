@@ -18,9 +18,11 @@ def package(target):
         "README.md": root / "README.md",
         "LICENSE": root / "LICENSE",
         "ssh-menu-config.example.yml": root / "ssh-menu-config.example.yml",
+        "screenshot-help.png": root / "screenshot-help.png",
         "screenshot.png": root / "screenshot.png",
         "screenshot-new-remote.png": root / "screenshot-new-remote.png",
     }
+    files.update({path.relative_to(root).as_posix(): path for path in sorted((root / "docs").glob("*.md"))})
     for source in files.values():
         if not source.is_file():
             raise FileNotFoundError(source)

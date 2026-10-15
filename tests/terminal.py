@@ -221,7 +221,7 @@ configuration_scripts:
     command: setup-test %h
 """)
     literal = "a ' ; $(touch SHOULD_NOT_EXIST) %{input:mode}"
-    output = session([b"\x1bOQ", b"inputs-host", b"\t", b"\x1b[C", b"\r", literal.encode(), b"\t", b"\x1b[C",
+    output = session([b"\x1bOQ", b"inputs-host", b"\t", b"\x1b[C", b"\r", literal.encode(), b"\x1bOP", b"\x1b[6~", b"\x1bOP", b"\t", b"\x1b[C",
                        b"\x1b[Z", b"\x1b[Z", b"\x1b[C", b"\x1b[D", b"\r"], rows=9, cols=90)
     assert b"is required" in output
     assert (root / "command.setup").read_text().splitlines() == ["inputs-host", literal, "full"]
@@ -294,4 +294,16 @@ configuration_scripts:
     output = session([b"\x1bOQ", b"\x1b[C", b"\x1b", b"\x11"])
     assert b"ssh-copy-id" in output, "availability was not refreshed on reopening"
     config_file.write_text(original_config)
-    print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, new remotes and setup recipes, terminal restoration")
+    # Help is embedded and returns to the same filter/profile without launching anything.
+    before = (root / ".bash_history").read_text()
+    output = session([b"\x1bOP", b"\x1b[F", b"\x1b[H", b"\t", b"\x1b[6~", b"\x1b[5~", b"\x1b[Z", b"\x1bOP", b"\x11"], rows=10, cols=40)
+    assert b"HELP" in output and b"Profiles" in output
+    assert (root / ".bash_history").read_text() == before
+    (root / ".bash_history").write_text("ssh alpha\n")
+    session([b"alpha", b"\x1b[C", b"\x1bOP", b"\x1b[C", b"\x1bOP", b"\r"])
+    assert (root / "command").read_text().splitlines()[0].endswith("/mosh")
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    output = session([b"\x1bOQ", b"help-host:2222", b"\x1bOP", b"\x1bOP", b"\r"])
+    assert b"Setting up a remote" in output
+    assert (root / "command").read_text().splitlines()[1:] == ["-p", "2222", "--", "help-host"]
+    print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, new remotes and setup recipes, embedded help, terminal restoration")

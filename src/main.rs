@@ -1,3 +1,4 @@
+mod help;
 mod launch;
 mod new_remote;
 
@@ -376,17 +377,24 @@ fn menu(
             );
             badge("Enter", "CONNECT", theme::SUBTEXT);
             badge("F2", "NEW", theme::PEACH);
-            if frame.area().width >= 65 {
+            badge("F1", "HELP", theme::LAVENDER);
+            if frame.area().width >= 105 {
                 badge("↑↓/Pg", "MOVE", theme::SUBTEXT);
             }
             badge("Esc", "QUIT", theme::SUBTEXT);
-            frame.render_widget(Paragraph::new(Line::from(shortcuts)), areas[2]);
+            let footer = if frame.area().width < 70 {
+                Line::from(" F1 HELP · F2 NEW · Enter CONNECT")
+            } else {
+                Line::from(shortcuts)
+            };
+            frame.render_widget(Paragraph::new(footer), areas[2]);
         })?;
         if let Event::Key(key) = event::read()? {
             if key.kind != KeyEventKind::Press {
                 continue;
             }
             match key.code {
+                KeyCode::F(1) => help::show(terminal, 0)?,
                 KeyCode::F(2) => {
                     if let Some(selection) = new_remote::dialog(terminal, config)? {
                         return Ok(Some(selection));
