@@ -25,7 +25,7 @@ The example above lets SSH config manage ports. The shipped defaults also handle
 
 ## Profile shortcuts
 
-Set `key: Alt+M` on a launch profile to connect the selected host with it immediately. Available shortcuts appear above the menu controls. They apply only to the host list, preserve the filter while selecting the target, and do nothing when no host matches. The launched profile is remembered in history as usual. Hidden profiles have no active shortcut.
+Set `key: Alt+M` on a launch profile to connect the selected host with it (or open its input dialog). Available shortcuts appear above the menu controls. They apply only to the host list, preserve the filter while selecting the target, and do nothing when no host matches. Ordinary launches are remembered in history; dialog launches are temporary. Hidden profiles have no active shortcut.
 
 Use **Ctrl+letter**, **Alt+letter**, or **Ctrl+Alt+letter**, with an ASCII letter A–Z. Names are case-insensitive; `Alt+M` does not require Shift. Plain letters, Shift-only bindings, special keys, and duplicate bindings are rejected. Duplicate checks include unavailable profiles so installing a tool cannot introduce a conflict.
 
@@ -79,3 +79,11 @@ Use a reusable `remote` field to preserve quoting through both the local and rem
 ```
 
 Each named-field substitution adds a shell-quoting layer. Fields without `%{...}` references remain literal, including shell expressions in a script. Missing references, reference cycles, and quoted placeholders are rejected when configuration is loaded.
+
+## Menu behavior and editing
+
+`return_to_menu: false` is the default. Set it to `true` to reopen the same menu after a connection exits. **F4**, then Enter, edits this file using `$VISUAL` / `$EDITOR` / `vi`; F1 opens the format reference. Saving reloads only valid configurations. Checks include YAML structure, required fields, templates, input definitions, unique names and shortcut conflicts. This validates the configuration format, not arbitrary shell script behavior.
+
+## Connection inputs
+
+Launch profiles may declare `inputs` using the same `promptString`, `pickString` and generator format as configuration scripts. Use `%{input:id}` to substitute a shell-escaped value. **Ctrl+Enter** opens a one-off connection dialog; Enter and profile shortcuts also open it when a profile declares inputs. Required values are validated before launch. Values are visible and are never saved to YAML or history. See [connection dialog examples](connection.md).

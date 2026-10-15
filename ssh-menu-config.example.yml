@@ -5,6 +5,8 @@
 # key uses Ctrl+, Alt+, or Ctrl+Alt+ with a letter; plain typing and reserved keys are rejected.
 # available_command runs locally at startup; nonzero status hides the profile.
 default: SSH
+# Reopen the menu after a connection ends, preserving filter and selection.
+return_to_menu: false
 profiles:
   - name: SSH
     key: Alt+S

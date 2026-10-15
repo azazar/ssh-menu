@@ -1,11 +1,16 @@
+mod editor;
 mod help;
 mod launch;
 mod new_remote;
+mod search;
 mod shortcut;
 
 use crossterm::{
     cursor::Show,
-    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{
+        self, Event, KeyCode, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags,
+        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
     execute,
     style::{Attribute, ResetColor, SetAttribute},
 };
@@ -230,13 +235,7 @@ fn discover(home: &Path, user: &str) -> Vec<Target> {
     values.into_iter().map(|(_, t)| t).collect()
 }
 fn matching(targets: &[Target], query: &str) -> Vec<usize> {
-    let query = query.to_lowercase();
-    targets
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| t.label().to_lowercase().contains(&query))
-        .map(|(i, _)| i)
-        .collect()
+    search::matching(targets, query)
 }
 fn erase_filter_word(query: &mut String) {
     let trimmed = query.trim_end();
@@ -252,33 +251,46 @@ struct Selection {
     setup: Option<usize>,
     setup_command: Option<(String, Vec<String>)>,
     new: bool,
+    connection_command: Option<(String, Vec<String>)>,
+}
+
+#[derive(Default)]
+struct MenuState {
+    query: String,
+    selection: usize,
+    profiles: Vec<usize>,
 }
 
 fn menu(
     terminal: &mut DefaultTerminal,
     targets: &[Target],
-    config: &launch::Config,
-    mut profiles: Vec<usize>,
+    config: &mut launch::Config,
+    state: &mut MenuState,
+    home: &Path,
 ) -> io::Result<Option<Selection>> {
-    let mut query = String::new();
-    let mut selection = 0usize;
-    let profile_keys = config
-        .profiles
-        .iter()
-        .filter_map(|profile| {
-            profile
-                .key
-                .as_ref()
-                .map(|key| format!("{key} {}", profile.name))
-        })
-        .collect::<Vec<_>>()
-        .join(" · ");
-    let footer_height = if profile_keys.is_empty() { 1 } else { 2 };
+    let MenuState {
+        query,
+        selection,
+        profiles,
+    } = state;
+    let comments = search::comments(home, &env::var("USER").unwrap_or_default());
     loop {
-        let visible = matching(targets, &query);
-        selection = selection.min(visible.len().saturating_sub(1));
+        let profile_keys = config
+            .profiles
+            .iter()
+            .filter_map(|profile| {
+                profile
+                    .key
+                    .as_ref()
+                    .map(|key| format!("{key} {}", profile.name))
+            })
+            .collect::<Vec<_>>()
+            .join(" · ");
+        let footer_height = 2;
+        let visible = matching(targets, query);
+        *selection = (*selection).min(visible.len().saturating_sub(1));
         let profile_index = visible
-            .get(selection)
+            .get(*selection)
             .map_or(config.default_index(), |i| profiles[*i]);
         let profile = &config.profiles[profile_index];
         terminal.draw(|frame| {
@@ -373,7 +385,7 @@ fn menu(
                         .bg(theme::SELECTION)
                         .add_modifier(Modifier::BOLD),
                 );
-                let mut state = TableState::default().with_selected(Some(selection));
+                let mut state = TableState::default().with_selected(Some(*selection));
                 frame.render_stateful_widget(table, areas[1], &mut state);
             }
             let mosh = profile.program() == "mosh";
@@ -408,25 +420,29 @@ fn menu(
             );
             badge("Enter", "CONNECT", theme::SUBTEXT);
             badge("F2", "NEW", theme::PEACH);
+            badge("F4", "CONFIG", theme::SUBTEXT);
             badge("F1", "HELP", theme::LAVENDER);
-            if frame.area().width >= 105 {
+            if frame.area().width >= 125 {
                 badge("↑↓/Pg", "MOVE", theme::SUBTEXT);
             }
             badge("Esc", "QUIT", theme::SUBTEXT);
             let footer = if frame.area().width < 70 {
-                Line::from(" F1 HELP · F2 NEW · Enter CONNECT")
+                Line::from(" F1 HELP · F2 NEW · F4 CONFIG · Enter CONNECT")
             } else {
                 Line::from(shortcuts)
             };
             let mut lines = Vec::new();
-            if !profile_keys.is_empty() {
-                lines.push(Line::styled(
-                    format!(" {profile_keys}"),
-                    Style::default().fg(theme::PEACH),
-                ));
-            }
+            lines.push(Line::styled(
+                format!(" Ctrl+Enter SETTINGS · {profile_keys}"),
+                Style::default().fg(theme::PEACH),
+            ));
             lines.push(footer);
             frame.render_widget(Paragraph::new(lines), areas[2]);
+            if let Some(i) = visible.get(*selection)
+                && let Some(comment) = comments.get(&targets[*i].host)
+            {
+                search::hint(frame, areas[1], comment);
+            }
         })?;
         if let Event::Key(key) = event::read()? {
             if key.kind != KeyEventKind::Press {
@@ -437,21 +453,46 @@ fn menu(
                 .iter()
                 .position(|p| p.key.as_ref().is_some_and(|shortcut| shortcut.matches(key)))
             {
-                if let Some(i) = visible.get(selection) {
+                if let Some(i) = visible.get(*selection) {
+                    if !config.profiles[profile].inputs.is_empty() {
+                        if let Some(result) =
+                            new_remote::connect(terminal, config, &targets[*i], profile, false)?
+                        {
+                            return Ok(Some(result));
+                        }
+                        continue;
+                    }
                     return Ok(Some(Selection {
                         target: targets[*i].clone(),
                         profile,
                         setup: None,
                         setup_command: None,
                         new: false,
+                        connection_command: None,
                     }));
                 }
                 continue;
             }
             match key.code {
                 KeyCode::F(1) => help::show(terminal, help::Context::Hosts)?,
+                KeyCode::F(4) => editor::edit(terminal, home, config, profiles)?,
                 KeyCode::F(2) => {
-                    if let Some(selection) = new_remote::dialog(terminal, config)? {
+                    if let Some(mut selection) = new_remote::dialog(terminal, config)? {
+                        if !config.profiles[selection.profile].inputs.is_empty() {
+                            let Some(connection) = new_remote::connect(
+                                terminal,
+                                config,
+                                &selection.target,
+                                selection.profile,
+                                selection.setup.is_some(),
+                            )?
+                            else {
+                                continue;
+                            };
+                            selection.target = connection.target;
+                            selection.profile = connection.profile;
+                            selection.connection_command = connection.connection_command;
+                        }
                         return Ok(Some(selection));
                     }
                 }
@@ -463,8 +504,8 @@ fn menu(
                 KeyCode::Backspace | KeyCode::Delete | KeyCode::Char('h')
                     if key.modifiers.contains(KeyModifiers::CONTROL) =>
                 {
-                    erase_filter_word(&mut query);
-                    selection = 0;
+                    erase_filter_word(query);
+                    *selection = 0;
                 }
                 KeyCode::Char(c)
                     if !key
@@ -472,16 +513,16 @@ fn menu(
                         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
                 {
                     query.push(c);
-                    selection = 0;
+                    *selection = 0;
                 }
                 KeyCode::Backspace | KeyCode::Delete => {
                     query.pop();
-                    selection = 0;
+                    *selection = 0;
                 }
-                KeyCode::Up => selection = selection.saturating_sub(1),
-                KeyCode::Down => selection = selection.saturating_add(1),
+                KeyCode::Up => *selection = selection.saturating_sub(1),
+                KeyCode::Down => *selection = selection.saturating_add(1),
                 KeyCode::PageUp => {
-                    selection = selection.saturating_sub(
+                    *selection = selection.saturating_sub(
                         terminal
                             .size()?
                             .height
@@ -490,7 +531,7 @@ fn menu(
                     )
                 }
                 KeyCode::PageDown => {
-                    selection = selection.saturating_add(
+                    *selection = selection.saturating_add(
                         terminal
                             .size()?
                             .height
@@ -499,29 +540,55 @@ fn menu(
                     )
                 }
                 KeyCode::Left => {
-                    if let Some(i) = visible.get(selection) {
+                    if let Some(i) = visible.get(*selection) {
                         profiles[*i] =
                             (profiles[*i] + config.profiles.len() - 1) % config.profiles.len();
                     }
                 }
                 KeyCode::Right => {
-                    if let Some(i) = visible.get(selection) {
+                    if let Some(i) = visible.get(*selection) {
                         profiles[*i] = (profiles[*i] + 1) % config.profiles.len();
                     }
                 }
                 KeyCode::F(8) => {
-                    if let Some(i) = visible.get(selection) {
+                    if let Some(i) = visible.get(*selection) {
                         profiles[*i] = config.toggle_transport(profiles[*i]);
                     }
                 }
+                KeyCode::Enter if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    if let Some(i) = visible.get(*selection)
+                        && let Some(result) = new_remote::connect(
+                            terminal,
+                            config,
+                            &targets[*i],
+                            profile_index,
+                            false,
+                        )?
+                    {
+                        return Ok(Some(result));
+                    }
+                }
                 KeyCode::Enter => {
-                    if let Some(i) = visible.get(selection) {
+                    if let Some(i) = visible.get(*selection) {
+                        if !config.profiles[profile_index].inputs.is_empty() {
+                            if let Some(result) = new_remote::connect(
+                                terminal,
+                                config,
+                                &targets[*i],
+                                profile_index,
+                                false,
+                            )? {
+                                return Ok(Some(result));
+                            }
+                            continue;
+                        }
                         return Ok(Some(Selection {
                             target: targets[*i].clone(),
                             profile: profile_index,
                             setup: None,
                             setup_command: None,
                             new: false,
+                            connection_command: None,
                         }));
                     }
                 }
@@ -530,19 +597,32 @@ fn menu(
         }
     }
 }
-// exec() skips destructors, so finish all TUI cleanup before handing off the tty.
-fn restore_terminal(terminal: DefaultTerminal) -> io::Result<()> {
+fn init_terminal() -> io::Result<DefaultTerminal> {
+    let terminal = ratatui::try_init()?;
+    execute!(
+        io::stdout(),
+        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+    )?;
+    Ok(terminal)
+}
+
+fn suspend_terminal() -> io::Result<()> {
+    execute!(io::stdout(), PopKeyboardEnhancementFlags)?;
     let restore = ratatui::try_restore();
-    // Attempt cursor/style recovery even if raw-mode or screen restoration failed.
     let appearance = execute!(
         io::stdout(),
         SetAttribute(Attribute::Reset),
         ResetColor,
         Show
     );
+    restore.and(appearance).and(io::stdout().flush())
+}
+
+// exec() skips destructors, so finish all TUI cleanup before handing off the tty.
+fn restore_terminal(terminal: DefaultTerminal) -> io::Result<()> {
+    let result = suspend_terminal();
     drop(terminal);
-    let flush = io::stdout().flush();
-    restore.and(appearance).and(flush)
+    result
 }
 
 fn run() -> io::Result<()> {
@@ -570,66 +650,80 @@ fn run() -> io::Result<()> {
         }
         return Ok(());
     }
-    let config = launch::Config::load(home)?;
+    let mut config = launch::Config::load(home)?;
     let history = fs::read_to_string(home.join(".bash_history")).unwrap_or_default();
     let profiles = config.history_profiles(&targets, &history, &user);
-    let mut terminal = ratatui::try_init()?;
-    let result = menu(&mut terminal, &targets, &config, profiles);
-    restore_terminal(terminal)?;
-    if let Some(Selection {
-        target,
-        profile: profile_index,
-        setup,
-        setup_command,
-        new,
-    }) = result?
-    {
-        if let Some(index) = setup {
-            let script = &config.configuration_scripts[index];
-            println!("Running {} for {}", script.name, target.label());
-            let (program, args) = setup_command.expect("validated setup command");
-            let status = Command::new(program).args(args).status()?;
-            if !status.success() {
-                return Err(io::Error::other(format!(
-                    "configuration script {} failed ({status}); connection cancelled",
-                    script.name
-                )));
-            }
-        }
-        let (program, args) = config.profiles[profile_index].command(&target);
-        let history = home.join(".bash_history");
-        let line = config.profiles[profile_index].history_line(&target);
-        if (new || history.exists())
-            && fs::read_to_string(&history)
-                .unwrap_or_default()
-                .lines()
-                .last()
-                != Some(line.as_str())
+    let mut state = MenuState {
+        profiles,
+        ..MenuState::default()
+    };
+    loop {
+        let mut terminal = init_terminal()?;
+        let result = menu(&mut terminal, &targets, &mut config, &mut state, home);
+        restore_terminal(terminal)?;
+        if let Some(Selection {
+            target,
+            profile: profile_index,
+            setup,
+            setup_command,
+            new,
+            connection_command,
+        }) = result?
         {
-            let mut options = fs::OpenOptions::new();
-            options.append(true).create(new);
+            if let Some(index) = setup {
+                let script = &config.configuration_scripts[index];
+                println!("Running {} for {}", script.name, target.label());
+                let (program, args) = setup_command.expect("validated setup command");
+                let status = Command::new(program).args(args).status()?;
+                if !status.success() {
+                    return Err(io::Error::other(format!(
+                        "configuration script {} failed ({status}); connection cancelled",
+                        script.name
+                    )));
+                }
+            }
+            let custom = connection_command.is_some();
+            let (program, args) = connection_command
+                .unwrap_or_else(|| config.profiles[profile_index].command(&target));
+            let history = home.join(".bash_history");
+            let line = config.profiles[profile_index].history_line(&target);
+            if !custom
+                && (new || history.exists())
+                && fs::read_to_string(&history)
+                    .unwrap_or_default()
+                    .lines()
+                    .last()
+                    != Some(line.as_str())
+            {
+                let mut options = fs::OpenOptions::new();
+                options.append(true).create(new);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt;
+                    options.mode(0o600);
+                }
+                let mut file = options.open(&history)?;
+                writeln!(file, "{line}")?;
+            }
+            if config.return_to_menu {
+                Command::new(program).args(args).status()?;
+                continue;
+            }
             #[cfg(unix)]
             {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
+                use std::os::unix::process::CommandExt;
+                return Err(Command::new(program).args(args).exec());
             }
-            let mut file = options.open(&history)?;
-            writeln!(file, "{line}")?;
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            return Err(Command::new(program).args(args).exec());
-        }
-        #[cfg(not(unix))]
-        {
-            let status = Command::new(program).args(args).status()?;
-            if !status.success() {
-                return Err(io::Error::other("connection failed"));
+            #[cfg(not(unix))]
+            {
+                let status = Command::new(program).args(args).status()?;
+                if !status.success() {
+                    return Err(io::Error::other("connection failed"));
+                }
             }
         }
+        return Ok(());
     }
-    Ok(())
 }
 fn main() {
     if let Err(err) = run() {

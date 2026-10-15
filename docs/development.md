@@ -9,7 +9,7 @@ cargo build --locked --release --target x86_64-unknown-linux-musl
 python3 tests/terminal.py target/x86_64-unknown-linux-musl/release/ssh-menu
 ```
 
-The Python tests use temporary fixtures and fake connection tools; they do not connect to remote hosts. To refresh screenshots, install Pillow and pyte, build the static binary, then run `python3 scripts/screenshot.py`, `python3 scripts/screenshot.py --dialog`, and `python3 scripts/screenshot.py --help-viewer`. These use fontconfig and DejaVu Sans Mono for Powerline; `SSH_MENU_SCREENSHOT_FONT` can point to another compatible TTF.
+The Python tests use temporary fixtures and fake connection tools; they do not connect to remote hosts. To refresh screenshots, install Pillow and pyte, build the static binary, then run `python3 scripts/screenshot.py`, `python3 scripts/screenshot.py --dialog`, `python3 scripts/screenshot.py --connection`, and `python3 scripts/screenshot.py --help-viewer`. These use fontconfig and DejaVu Sans Mono for Powerline; `SSH_MENU_SCREENSHOT_FONT` can point to another compatible TTF.
 
 The [Binaries workflow](https://github.com/azazar/ssh-menu/blob/master/.github/workflows/binaries.yml) runs on pull requests, branch pushes, version tags, and manual dispatch. It runs the [Linux checks](https://github.com/azazar/ssh-menu/blob/master/.github/workflows/ci.yml), builds the platform matrix, smoke-tests native executables, verifies static Linux linkage, and uploads packaged artifacts. Linux ARM builds are cross-compiled; the workflow does not run their executables.
 
@@ -17,4 +17,4 @@ Before publishing, update the version in `Cargo.toml` and `Cargo.lock`, update t
 
 ## Documentation and help
 
-The user guide, launch profiles, and setup recipes in `docs/` are also the built-in help source, selected by the active screen: Guide and Profiles for the host list, Setup for the new-remote dialog. `src/help.rs` embeds them with `include_str!`; rebuilding updates F1 help. Installation, development, and the documentation index remain repository-only pages. Add new pages to the documentation index, and include them in help only when useful while running the app. Release archives include the Markdown files as well as the compiled help.
+The user guide, launch profiles, and setup recipes in `docs/` are also the built-in help source, selected by the active screen: Guide and Profiles for the host list, Setup for the new-remote dialog, Connection for one-off settings, and Profiles/Setup for the configuration editor. `src/help.rs` embeds them with `include_str!`; rebuilding updates F1 help. Installation, development, and the documentation index remain repository-only pages. Add new pages to the documentation index, and include them in help only when useful while running the app. Release archives include the Markdown files as well as the compiled help.

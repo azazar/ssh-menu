@@ -405,6 +405,8 @@ pub fn history_words(line: &str) -> Option<Vec<String>> {
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub default: String,
+    #[serde(default)]
+    pub return_to_menu: bool,
     pub profiles: Vec<Profile>,
     #[serde(default)]
     pub configuration_scripts: Vec<Profile>,
@@ -414,11 +416,6 @@ impl Config {
         let config: Self = serde_yaml_ng::from_str(text).map_err(|e| invalid(e.to_string()))?;
         if config.profiles.is_empty() {
             return Err(invalid("profiles must not be empty"));
-        }
-        if config.profiles.iter().any(|p| !p.inputs.is_empty()) {
-            return Err(invalid(
-                "inputs are supported only in configuration_scripts",
-            ));
         }
         if config.configuration_scripts.iter().any(|p| p.key.is_some()) {
             return Err(invalid("key is supported only in launch profiles"));

@@ -33,20 +33,49 @@ pub(super) fn dialog(
     terminal: &mut DefaultTerminal,
     config: &launch::Config,
 ) -> io::Result<Option<Selection>> {
-    let mut remote = String::new();
-    let mut setup = 0usize;
+    form(terminal, config, None, false)
+}
+
+pub(super) fn connect(
+    terminal: &mut DefaultTerminal,
+    config: &launch::Config,
+    target: &Target,
+    profile: usize,
+    fixed_remote: bool,
+) -> io::Result<Option<Selection>> {
+    form(terminal, config, Some((target, profile)), fixed_remote)
+}
+
+fn form(
+    terminal: &mut DefaultTerminal,
+    config: &launch::Config,
+    connection: Option<(&Target, usize)>,
+    fixed_remote: bool,
+) -> io::Result<Option<Selection>> {
+    let connecting = connection.is_some();
+    let mut remote = connection.map_or_else(String::new, |(t, _)| t.label());
+    let mut setup = connection.map_or(0, |(_, p)| p + 1);
     let mut focus = 0usize;
-    // Keep original indices for the final handoff while filtering the dialog choices.
-    let available: Vec<_> = config
-        .configuration_scripts
-        .iter()
-        .enumerate()
-        .filter(|(_, script)| script.is_available())
-        .map(|(i, _)| i)
-        .collect();
+    let available: Vec<_> = if connecting {
+        (0..config.profiles.len()).collect()
+    } else {
+        config
+            .configuration_scripts
+            .iter()
+            .enumerate()
+            .filter(|(_, script)| script.is_available())
+            .map(|(i, _)| i)
+            .collect()
+    };
     let mut scripts: Vec<_> = available
         .iter()
-        .map(|i| config.configuration_scripts[*i].clone())
+        .map(|i| {
+            if connecting {
+                config.profiles[*i].clone()
+            } else {
+                config.configuration_scripts[*i].clone()
+            }
+        })
         .collect();
     let mut values: Vec<_> = scripts.iter().map(|p| p.input_defaults()).collect();
     let mut loaded = vec![false; scripts.len()];
@@ -97,7 +126,12 @@ pub(super) fn dialog(
             ])
             .split(rect);
             frame.render_widget(
-                Paragraph::new(" NEW REMOTE ").style(
+                Paragraph::new(if connecting {
+                    " CONNECT "
+                } else {
+                    " NEW REMOTE "
+                })
+                .style(
                     Style::default()
                         .fg(theme::BASE)
                         .bg(theme::LAVENDER)
@@ -107,7 +141,11 @@ pub(super) fn dialog(
             );
             let mut fields = vec![
                 format!("Remote  {remote}"),
-                format!("Setup   ← {} →", script.map_or("None", |s| s.name.as_str())),
+                format!(
+                    "{}   ← {} →",
+                    if connecting { "Profile" } else { "Setup" },
+                    script.map_or("None", |s| s.name.as_str())
+                ),
             ];
             for input in inputs {
                 let value = &values[setup - 1][&input.id];
@@ -154,7 +192,11 @@ pub(super) fn dialog(
                 Paragraph::new(if !generation_error.is_empty() {
                     &generation_error
                 } else if error.is_empty() {
-                    " user@host[:port] · * required"
+                    if fixed_remote {
+                        " Remote fixed for setup · * required"
+                    } else {
+                        " user@host[:port] · * required"
+                    }
                 } else {
                     &error
                 })
@@ -168,9 +210,11 @@ pub(super) fn dialog(
                 areas[2],
             );
             frame.render_widget(
-                Paragraph::new(
-                    " F1 HELP · Tab/↑↓ FIELD · ←→ CHOICE · Enter ADD + CONNECT · Esc CANCEL",
-                ),
+                Paragraph::new(if connecting {
+                    " F1 HELP · Tab/↑↓ FIELD · ←→ CHOICE · Enter CONNECT · Esc CANCEL"
+                } else {
+                    " F1 HELP · Tab/↑↓ FIELD · ←→ CHOICE · Enter ADD + CONNECT · Esc CANCEL"
+                }),
                 areas[3],
             );
         })?;
@@ -181,7 +225,14 @@ pub(super) fn dialog(
             continue;
         }
         match key.code {
-            KeyCode::F(1) => crate::help::show(terminal, crate::help::Context::NewRemote)?,
+            KeyCode::F(1) => crate::help::show(
+                terminal,
+                if connecting {
+                    crate::help::Context::Connection
+                } else {
+                    crate::help::Context::NewRemote
+                },
+            )?,
             KeyCode::Esc => return Ok(None),
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return Ok(None);
@@ -197,7 +248,11 @@ pub(super) fn dialog(
                     }
                 };
                 if focus < 2 {
-                    setup = next(setup, scripts.len() + 1);
+                    setup = if connecting {
+                        next(setup - 1, scripts.len()) + 1
+                    } else {
+                        next(setup, scripts.len() + 1)
+                    };
                     generation_error.clear();
                 } else {
                     let input = &inputs[focus - 2];
@@ -241,14 +296,27 @@ pub(super) fn dialog(
                 }
                 return Ok(Some(Selection {
                     target,
-                    profile: config.default_index(),
-                    setup: setup.checked_sub(1).map(|i| available[i]),
-                    setup_command,
-                    new: true,
+                    profile: if connecting {
+                        setup - 1
+                    } else {
+                        config.default_index()
+                    },
+                    setup: if connecting {
+                        None
+                    } else {
+                        setup.checked_sub(1).map(|i| available[i])
+                    },
+                    connection_command: if connecting {
+                        setup_command.clone()
+                    } else {
+                        None
+                    },
+                    setup_command: if connecting { None } else { setup_command },
+                    new: !connecting,
                 }));
             }
             _ => {
-                let editable = if focus == 0 {
+                let editable = if focus == 0 && !fixed_remote {
                     Some(&mut remote)
                 } else if focus >= 2 && inputs[focus - 2].kind == launch::InputType::PromptString {
                     values[setup - 1].get_mut(&inputs[focus - 2].id)

@@ -2,21 +2,23 @@
 
 Your existing hosts appear automatically in three aligned, borderless columns: launch profile (left), username (right, highlighted), and host (left). The selection marker sits beside the row. An unspecified username leaves its column blank; explicit ports stay with the host.
 
-1. Type part of a hostname and select a matching row with **↑ / ↓**.
+1. Type a hostname fragment or fuzzy abbreviation and select a matching row with **↑ / ↓**.
 2. Use **← / →** to choose how that host opens, then press **Enter**.
 
 Changing a profile affects only the selected host. Moving away or changing the filter preserves the choice while the menu is open.
 
 | Key | Action |
 | --- | --- |
-| Type | Filter hosts, case-insensitively |
+| Type | Fuzzy search username, host and port; space-separated terms all must match |
 | ↑ / ↓ · PgUp / PgDn | Move through hosts |
 | ← / → | Change the selected host's profile |
 | Enter | Connect |
+| Ctrl+Enter | Adjust the remote, profile and inputs for one connection |
 | Alt+S / Alt+M / Alt+C | Connect with SSH / Mosh / MC |
 | Alt+B / Alt+Z | Connect with remote Bash / Zellij |
 | F1 | Open built-in help |
 | F2 | Add a remote with optional setup |
+| F4 | Edit configuration with format help and validation |
 | F8 | Toggle plain SSH / Mosh for the selected host |
 | Backspace / Delete | Remove the last character |
 | Ctrl-Backspace / Ctrl-Delete | Remove the last word |
@@ -51,3 +53,17 @@ Press **F1** from the host list or new-remote dialog to read these docs without 
 - **Esc, F1, or q:** close help and return to where you were.
 
 The app version appears in the top-right corner of help. The help viewer wraps text to the terminal width and shows your position in each topic. Resizing adjusts the layout. It preserves your host filter, selected profile, and unfinished dialog inputs. Links are displayed as text; use the topic keys to navigate. The documentation is embedded in the binary, so help works offline without installed documentation files.
+
+## Host comments
+
+When a selected SSH config entry has an explicit `User`, its comments appear in a borderless hint at the bottom right. Comments immediately before `Host`, indented comments inside the section, and inline comments are included. Notes match the configured username and alias, including entries rediscovered from history; they are not copied to synthetic root entries. Wildcards, `Include`, and `Match` expansion are not supported. Small terminals hide the hint to leave room for hosts.
+
+## After disconnecting
+
+Set top-level `return_to_menu: true` in the YAML configuration to reopen the menu after the launched command exits, including nonzero exit status. Your filter, row and per-host profile choices remain. The default is `false`, which hands the terminal directly to the connection as before.
+
+## Adjusting and editing
+
+**Ctrl+Enter** opens a connection dialog; profiles with inputs also open it on Enter or their shortcut. Changes are temporary and are not written to history. The terminal must support distinct modified Enter events. Press F1 in the dialog for input examples.
+
+**F4** opens configuration editing: Enter launches `$VISUAL`, then `$EDITOR`, or `vi` as fallback. Editor arguments are supported. F1 shows the format reference. After a successful editor exit, YAML, templates, inputs and shortcut conflicts are validated and profile availability is refreshed. Valid changes take effect immediately; invalid changes remain on disk for correction while the current configuration stays active. Configuration files are created only when `~/.ssh` already exists.

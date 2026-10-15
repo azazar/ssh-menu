@@ -63,6 +63,8 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
             assert cleanup.rfind(b"\x1b[?25h") > cleanup.rfind(b"\x1b[?25l"), "cursor hidden at handoff/exit"
             assert cleanup.rfind(b"\x1b[?1049l") > cleanup.rfind(b"\x1b[?1049h"), "alternate screen active"
             assert b"\x1b[0m" in cleanup[cleanup.rfind(b"\x1b[?1049l"):], "styles not reset"
+            if b"SSH_MENU_EDITOR" in output:
+                assert (root / "command.editor-tty").read_bytes().strip() == tty_before, "editor inherited modified tty"
             if handoff >= 0:
                 assert (root / "command.tty").read_bytes().strip() == tty_before, "child inherited modified tty settings"
             return output
@@ -377,5 +379,48 @@ profiles:
     session([b"\x1bOQ", b"\x1bm", b"\x1b", b"\x03"])  # Neither does the dialog.
     assert not (root / "command").exists()
     assert (root / ".bash_history").read_text() == before
+    config_file.write_text(original_config)
+    # Fuzzy abbreviations and user-specific SSH comments.
+    (root / ".bash_history").write_text("ssh alpha\n")
+    (root / ".ssh/config").write_text("# Production note\nHost alpha\n User tester\n")
+    output = session([b"aph", b"\r"])
+    assert b"Production note" in output
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+
+    # One-off inputs remain literal and do not enter history.
+    config_file.write_text("""default: SSH
+profiles:
+  - {name: SSH, command: 'ssh -- %h'}
+  - name: Custom
+    key: Alt+X
+    command: custom-connect %h %{input:argument}
+    inputs:
+      - {id: argument, type: promptString, required: true}
+""")
+    before = (root / ".bash_history").read_text()
+    output = session([b"alpha", b"\x1b[13;5u", b"\x08", b"other:2222", b"\t", b"\x1b[C", b"\r", b"literal; $(false)", b"\r"])
+    assert b"CONNECT" in output and b"required" in output
+    assert (root / "command").read_text().splitlines()[1:] == ["other", "literal; $(false)"]
+    assert (root / ".bash_history").read_text() == before
+    session([b"alpha", b"\x1bx", b"\t", b"\t", b"shortcut", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["alpha", "shortcut"]
+
+    # Return mode restores the child tty and then preserves the filter.
+    config_file.write_text("default: SSH\nreturn_to_menu: true\nprofiles: [{name: SSH, command: 'ssh -- %h'}]\n")
+    output = session([b"alpha", b"\r", b"\r", b"\x03"])
+    assert output.count(b"SSH_MENU_HANDOFF") == 2
+
+    # Editor handoff, valid reload, and invalid edits retaining the active config.
+    editor = root / "bin/test-editor"
+    editor.write_text('#!/bin/sh\nstty -g > "$SSH_MENU_TEST_LOG.editor-tty"\ncp "$HOME/edited.yml" "$1"\nprintf "SSH_MENU_EDITOR\\n"\n')
+    editor.chmod(0o755)
+    child_env["VISUAL"] = str(editor)
+    (root / "edited.yml").write_text("default: Custom\nprofiles: [{name: Custom, command: 'custom-connect %h'}]\n")
+    session([b"alpha", b"\x1bOS", b"\x1bOP", b"\x1bOP", b"\r", b"\r"])
+    assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
+    (root / "edited.yml").write_text("profiles: [broken\n")
+    output = session([b"alpha", b"\x1bOS", b"\r", b"\x1b", b"\r"])
+    assert b"Configuration not reloaded" in output
+    assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
     config_file.write_text(original_config)
     print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, new remotes and setup recipes, embedded help, terminal restoration")

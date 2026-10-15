@@ -5,6 +5,8 @@ use ratatui::{Frame, layout::Alignment, widgets::Wrap};
 pub(super) enum Context {
     Hosts,
     NewRemote,
+    Connection,
+    Configuration,
 }
 impl Context {
     fn topics(self) -> &'static [(&'static str, &'static str)] {
@@ -12,6 +14,11 @@ impl Context {
             Self::Hosts => &[
                 ("Guide", include_str!("../docs/usage.md")),
                 ("Profiles", include_str!("../docs/configuration.md")),
+            ],
+            Self::Connection => &[("Connection", include_str!("../docs/connection.md"))],
+            Self::Configuration => &[
+                ("Profiles", include_str!("../docs/configuration.md")),
+                ("Setup", include_str!("../docs/setup.md")),
             ],
             Self::NewRemote => &[("Setup", include_str!("../docs/setup.md"))],
         }
@@ -189,7 +196,12 @@ mod tests {
     fn documents_render_at_small_sizes_and_scroll_is_clamped() {
         for (width, height) in [(1, 1), (20, 6), (80, 24)] {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-            for context in [Context::Hosts, Context::NewRemote] {
+            for context in [
+                Context::Hosts,
+                Context::NewRemote,
+                Context::Connection,
+                Context::Configuration,
+            ] {
                 let mut help = Help::new(context);
                 for topic in 0..help.topics.len() {
                     help.topic = topic;

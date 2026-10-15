@@ -6,7 +6,7 @@ Find a machine, choose how to connect, and press Enter. SSH Menu brings your SSH
 
 ![SSH Menu showing a different launch profile for each remote](screenshot.png)
 
-**Type to filter · ↑↓ to select · ←→ to choose a profile · Enter to connect**
+**Type to fuzzy-search · ↑↓ to select · ←→ to choose a profile · Enter to connect**
 
 [Install](docs/installation.md) · [User guide](docs/usage.md) · [Configuration](docs/configuration.md) · [Setup recipes](docs/setup.md)
 
@@ -75,7 +75,7 @@ Add `~/.local/bin` to your `PATH` (in Bash or Zsh: `export PATH="$HOME/.local/bi
 
 Help is embedded in the executable. Only `ssh-menu` (or `ssh-menu.exe`) is needed; no documentation files are required for F1 help.
 
-Run `ssh-menu`, type to filter your hosts, and press Enter to connect, or use a profile shortcut to connect immediately. **F2** adds a remote with optional setup. **F1** opens the built-in documentation, including navigation help and configuration examples.
+Run `ssh-menu`, type to fuzzy-search your hosts, and press Enter to connect, or use a profile shortcut to connect immediately. **Ctrl+Enter** adjusts one connection. **F2** adds a remote with optional setup. **F4** edits and validates configuration. **F1** opens the built-in documentation, including navigation help and configuration examples.
 
 ## Documentation
 

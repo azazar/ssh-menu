@@ -16,10 +16,14 @@ import pyte
 
 parser = argparse.ArgumentParser(description=__doc__)
 modes = parser.add_mutually_exclusive_group()
+modes.add_argument('--connection', action='store_true', help='capture the connection dialog')
 modes.add_argument('--dialog', action='store_true', help='capture the new-remote dialog')
 modes.add_argument('--help-viewer', action='store_true', help='capture built-in help')
 args = parser.parse_args()
-if args.dialog:
+if args.connection:
+    keys = b'\x1b[13;5u'
+    title, output_name, quit_keys = 'CONNECT', 'screenshot-connection.png', b'\x03\x03'
+elif args.dialog:
     keys = b'\x1bOQdeploy@new.example.org:2222\t\x1b[C\x1b[C\t'
     title, output_name, quit_keys = 'NEW REMOTE', 'screenshot-new-remote.png', b'\x03\x03'
 elif args.help_viewer:
@@ -42,6 +46,7 @@ with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
         stub.write_text('#!/bin/sh\nexit 0\n')
         stub.chmod(0o755)
     (home / ".ssh").mkdir()
+    (home / ".ssh/config").write_text("# Production · deploy window 02:00 UTC\nHost production.example.org\n User deploy\n # Check backups before maintenance\n")
     (home / ".ssh/id_ed25519").write_text("demo fixture")
     (home / ".ssh/id_ed25519.pub").write_text("demo fixture")
     (home / '.bash_history').write_text(
@@ -52,6 +57,18 @@ with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
         'mosh dev@build.example.org\n'
         'ssh deploy@production.example.org\n'
     )
+    if args.connection:
+        (home / '.ssh/ssh-menu-config.yml').write_text("""default: Remote command
+profiles:
+  - name: Remote command
+    command: ssh %h %{input:remote}
+    inputs:
+      - id: remote
+        type: promptString
+        description: Remote command
+        default: journalctl -f -u app
+        required: true
+""")
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
     child_env = dict(os.environ, HOME=str(home), USER='demo', TERM='xterm-256color',
