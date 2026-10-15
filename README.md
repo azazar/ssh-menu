@@ -79,7 +79,7 @@ Run `ssh-menu`, type to filter your hosts, and press Enter to connect. **F2** ad
 
 ## Documentation
 
-The [documentation index](docs/README.md) covers daily use, installation, configuration, setup scripts, and development. These same Markdown files are embedded in the executable and available offline through **F1**.
+The [documentation index](docs/README.md) covers daily use, installation, configuration, setup scripts, and development. The user guide, profiles, and setup recipes are embedded in the executable and available offline through **F1**, in that order.
 
 ![Built-in documentation viewer](screenshot-help.png)
 

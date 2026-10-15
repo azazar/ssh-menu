@@ -181,7 +181,7 @@ pub(super) fn dialog(
             continue;
         }
         match key.code {
-            KeyCode::F(1) => crate::help::show(terminal, 3)?,
+            KeyCode::F(1) => crate::help::show(terminal, 2)?,
             KeyCode::Esc => return Ok(None),
             KeyCode::Char('c' | 'q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return Ok(None);

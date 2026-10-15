@@ -4,10 +4,7 @@ use ratatui::{Frame, widgets::Wrap};
 const TOPICS: &[(&str, &str)] = &[
     ("Guide", include_str!("../docs/usage.md")),
     ("Profiles", include_str!("../docs/configuration.md")),
-    ("Install", include_str!("../docs/installation.md")),
     ("Setup", include_str!("../docs/setup.md")),
-    ("Develop", include_str!("../docs/development.md")),
-    ("Index", include_str!("../docs/README.md")),
 ];
 
 #[derive(Clone)]

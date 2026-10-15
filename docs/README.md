@@ -1,6 +1,6 @@
 # SSH Menu documentation
 
-Press **F1** in SSH Menu to read these same documents in the built-in help viewer. No network connection or separate documentation install is needed.
+Press **F1** in SSH Menu to read the Guide, Profiles, and Setup pages, in that order in the built-in help viewer. No network connection or separate documentation install is needed.
 
 - [Using SSH Menu](usage.md): navigation, shortcuts, host discovery, history, and Zellij.
 - [Launch profiles](configuration.md): YAML configuration, placeholders, ports, and remote scripts.
