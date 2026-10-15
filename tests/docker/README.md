@@ -45,6 +45,8 @@ Logs and `report.json` are saved under `target/docker-tests/<run-id>/<distro>/`,
 
 The suite requires network access to the distributions' package repositories and the pinned upstream Zellij release. Network restrictions are failures, not silently skipped tests. Proxy environment variables are passed to builds, containers, SSH and test sudo sessions. Use repeatable `--ca-cert /path/to/trusted-ca.crt` for trusted HTTPS proxy CAs; TLS verification is never disabled.
 
+On GitHub Actions, failure diagnostics also appear as an error annotation on the public run/job page, so the terminal-output tail can be read without downloading the log artifact.
+
 CI exports fixtures once in the Rust job, then runs the seven distributions in parallel and uploads logs on success or failure. These jobs are part of the reusable checks workflow and therefore gate release publication.
 
 To export once and rerun containers without rebuilding Rust tests:

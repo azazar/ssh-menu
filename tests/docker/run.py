@@ -78,19 +78,29 @@ def main():
                                    stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.timeout)
                 print(f'[{distro}] testing profiles and recipes', flush=True)
                 with (logs / 'container.log').open('w') as log:
-                    subprocess.run(['docker', 'run', *extra_hosts, '--name', name, '--hostname', 'ssh-menu-docker', *[arg for name in PROXIES for arg in ('--env', name)], image],
-                                   stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.timeout)
+                    try:
+                        subprocess.run(['docker', 'run', *extra_hosts, '--name', name, '--hostname', 'ssh-menu-docker', *[arg for name in PROXIES for arg in ('--env', name)], image],
+                                       stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.timeout)
+                    finally:
+                        subprocess.run(['docker', 'cp', f'{name}:/results/.', str(logs)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 print(f'[{distro}] PASS ({time.monotonic() - started:.0f}s)', flush=True)
                 return True
             except (subprocess.SubprocessError, OSError) as error:
                 print(f'[{distro}] FAIL: {error}; see {logs}', flush=True)
-                for file in ['build.log', 'container.log']:
+                diagnostics = [f'{distro}: {error}']
+                for file in ['build.log', 'container.log', 'sshd.log']:
                     path = logs / file
                     if path.exists():
-                        print(f'[{distro}] {file} (last lines):\n' + '\n'.join(path.read_text(errors='replace').splitlines()[-15:]), flush=True)
+                        tail = f'[{distro}] {file} (last lines):\n' + '\n'.join(path.read_text(errors='replace').splitlines()[-15:])
+                        print(tail, flush=True)
+                        diagnostics.append(tail)
+                if os.environ.get('GITHUB_ACTIONS') == 'true':
+                    # Visible on the public run page even when full logs require sign-in.
+                    message = '\n'.join(diagnostics)[-6000:]
+                    message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                    print(f'::error title=Docker integration ({distro})::{message}', flush=True)
                 return False
             finally:
-                subprocess.run(['docker', 'cp', f'{name}:/results/.', str(logs)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 if args.keep:
                     print(f'[{distro}] retained {name} / {image}', flush=True)
                 else:
