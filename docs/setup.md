@@ -10,10 +10,14 @@ The samples included in the config are:
 
 | Recipe | What it does |
 | --- | --- |
-| **ssh-copy-id** | Lets you pick a local SSH keypair and copies its public key to the remote |
-| **ssh-copy-id + dotfiles** | Copies the key, uploads a dotfiles directory, and runs its installer |
+| **Configure key-based auth** | Selects an existing keypair or offers generation when none is available, then copies its public key with ssh-copy-id |
+| **Configure key-based auth + install dotfiles** | Copies the key, uploads a dotfiles directory, and runs its installer |
 
-The dotfiles sample defaults to local `~/src/dotfiles`, installer `install.sh`, and shell `sh`. Change the dialog values or edit the recipe for your own repository. Both samples are hidden when no matching `~/.ssh/id_*` private/public keypairs exist. The key selector reads filenames, not key contents.
+The dotfiles sample defaults to local `~/src/dotfiles`, installer `install.sh`, and shell `sh`. Change the dialog values or edit the recipe for your own repository. Both samples remain available when no matching `~/.ssh/id_*` private/public keypairs exist. The key selector reads filenames, not key contents. If no usable pair is found, it offers **Generate new Ed25519 key** instead.
+
+Generation runs only after confirming setup, never while opening or canceling the dialog. It uses `ssh-keygen` to create the standard `~/.ssh/id_ed25519` pair, with the terminal restored for its passphrase prompts. No empty passphrase is forced. Existing private or public files (including symlinks) are not overwritten; restore an incomplete pair or choose another existing pair before retrying. Failure stops setup before `ssh-copy-id` or the connection runs. The generated key remains on disk if later setup fails.
+
+Existing configuration files are preserved. To adopt these samples in an existing installation, replace the two sample entries under `configuration_scripts` using the [updated example](../ssh-menu-config.example.yml); keep your custom recipes.
 
 Setup defaults to **None**. **Enter** runs the selected setup, saves the connection to history, and connects using the default launch profile. **Esc** cancels. Authentication prompts run with the terminal restored. Failed setup stops the connection and does not save the entry. Setup is not repeated on later connections, and SSH config is not modified.
 
@@ -69,13 +73,9 @@ A recipe's `available_command` controls whether it appears in the selector. For 
 
 ```yaml
 configuration_scripts:
-  - name: Copy SSH key
-    available_command: |
-      for public in "$HOME"/.ssh/id_*.pub; do
-        [ -f "$public" ] && [ -f "${public%.pub}" ] && exit 0
-      done
-      exit 1
-    command: port=%p; exec ssh-copy-id ${port:+-p "$port"} %h
+  - name: Install custom tools
+    available_command: command -v my-setup-tool
+    command: my-setup-tool %h
 ```
 
 Exit **0** shows the recipe; another status or failure to start hides it. Without a check, the recipe is always available. Checks run once each time the dialog opens, and **None** is always an option. Hidden recipes' input generators do not run.

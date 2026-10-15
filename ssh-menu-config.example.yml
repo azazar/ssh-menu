@@ -126,13 +126,7 @@ profiles:
 # Optional one-time setup when adding a remote (F2). None is selected by default.
 # Same command templates and named fields as launch profiles; runs locally.
 configuration_scripts:
-  - name: ssh-copy-id
-    # Exit 0 to offer this setup script; otherwise hide it.
-    available_command: &has_ssh_keypair |
-      for public in "$HOME"/.ssh/id_*.pub; do
-        [ -f "$public" ] && [ -f "${public%.pub}" ] && exit 0
-      done
-      exit 1
+  - name: Configure key-based auth
     inputs:
       - &ssh_key
         id: key
@@ -150,10 +144,38 @@ configuration_scripts:
             printf "  - '%s'\n" "$escaped"
             found=1
           done
-          [ "$found" = 1 ] || { echo 'No id_* keypairs found in ~/.ssh' >&2; exit 1; }
-    command: port=%p; exec ssh-copy-id ${port:+-p "$port"} -i "$HOME/.ssh"/%{input:key} %h
-  - name: ssh-copy-id + dotfiles
-    available_command: *has_ssh_keypair
+          [ "$found" = 1 ] || printf "  - 'Generate new Ed25519 key'\n"
+    command: |
+      set -eu
+      port=%p
+      key=$(sh -c %{prepare_key} -- %{input:key})
+      exec ssh-copy-id ${port:+-p "$port"} -i "$key" %h
+    # Only runs after confirming setup, with the terminal restored for prompts.
+    prepare_key: &prepare_ssh_key |
+      set -eu
+      if [ "$1" = 'Generate new Ed25519 key' ]; then
+        private="$HOME/.ssh/id_ed25519"
+        for file in "$private" "$private.pub"; do
+          if [ -e "$file" ] || [ -L "$file" ]; then
+            echo "Cannot generate a new key: $file already exists. Restore the matching key file or select another keypair." >&2
+            exit 1
+          fi
+        done
+        umask 077
+        mkdir -p "$HOME/.ssh"
+        echo "Generating $private (ssh-keygen will ask for a passphrase)." >&2
+        ssh-keygen -q -t ed25519 -f "$private" >&2
+        public="$private.pub"
+      else
+        public="$HOME/.ssh/$1"
+      fi
+      [ -f "$public" ] && [ -f "${public%.pub}" ] || {
+        echo "Missing SSH keypair: $public" >&2
+        exit 1
+      }
+      printf '%s\n' "$public"
+  - name: Configure key-based auth + install dotfiles
+    prepare_key: *prepare_ssh_key
     # Relative source paths are resolved under local $HOME.
     inputs:
       - *ssh_key
@@ -179,7 +201,8 @@ configuration_scripts:
       installer=%{input:installer}
       case "$source" in /*) ;; *) source="$HOME/$source" ;; esac
       test -f "$source/$installer" || { echo "Missing $source/$installer" >&2; exit 1; }
-      ssh-copy-id ${port:+-p "$port"} -i "$HOME/.ssh"/%{input:key} %h
+      key=$(sh -c %{prepare_key} -- %{input:key})
+      ssh-copy-id ${port:+-p "$port"} -i "$key" %h
       ssh ${port:+-p "$port"} -- %h 'mkdir -p "$HOME/src/dotfiles"'
       scp ${port:+-P "$port"} -r "$source/." %h:src/dotfiles/
       ssh ${port:+-p "$port"} -tt -- %h %{remote}

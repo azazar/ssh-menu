@@ -294,11 +294,11 @@ configuration_scripts:
     config_file.write_text(original_config)
     (root / ".ssh/id_ed25519").unlink()  # Public files alone do not make a keypair.
     output = session([b"\x1bOQ", b"no-keys", b"\x1b[C", b"\x1b[D", b"\r"])
-    assert b"ssh-copy-id" not in output, "unavailable setup offered without keypairs"
+    assert not (root / ".ssh/id_ed25519").exists(), "opening setup must not generate keys"
     assert (root / "command").read_text().splitlines()[1:] == ["--", "no-keys"]
     (root / ".ssh/id_ed25519").write_text("fake private key")
     output = session([b"\x1bOQ", b"\x1b[C", b"\x1b", b"\x03"])
-    assert b"ssh-copy-id" in output, "availability was not refreshed on reopening"
+    assert (root / ".ssh/id_ed25519").read_text() == "fake private key"
     config_file.write_text(original_config)
     # Help is embedded and returns to the same filter/profile without launching anything.
     before = (root / ".bash_history").read_text()
@@ -499,4 +499,48 @@ profiles:
     session([b"alpha", b"\x1bOP", b"\x1b[57443;3u", b"\x1b[57443;3:3u", b"\x1bOP", b"\x1b[13;5u", b"\x1b[57442;5u", b"\x1b[57442;5:3u", b"\r"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     config_file.write_text(original_config)
+    # Missing pairs offer generation but merely opening/cancelling never generates a key.
+    keygen = root / "bin/ssh-keygen"
+    keygen.write_text('''#!/bin/sh
+set -eu
+printf '%s\\n' "$@" > "$SSH_MENU_TEST_LOG.keygen"
+stty -g > "$SSH_MENU_TEST_LOG.keygen-tty"
+[ ! -f "$HOME/keygen-fail" ] || exit 1
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = -f ]; then shift; private=$1; fi
+  shift
+done
+printf 'generated private key' > "$private"
+printf 'generated public key' > "$private.pub"
+''')
+    keygen.chmod(0o755)
+    for keyfile in (root / ".ssh").glob("id_*"):
+        keyfile.unlink()
+    for suffix in ("keygen", "ssh-copy-id"):
+        (root / ("command." + suffix)).unlink(missing_ok=True)
+    before = (root / ".bash_history").read_text()
+    output = session([b"\x1bOQ", b"\x1b[C", b"\x1b", b"\x03"])
+    assert not (root / "command.keygen").exists()
+    assert not (root / ".ssh/id_ed25519").exists()
+    # Never overwrite a partial default pair, and don't copy anything after failure.
+    (root / ".ssh/id_ed25519.pub").write_text("existing public key")
+    session([b"\x1bOQ", b"blocked", b"\x1b[C", b"\r"], expected_status=1)
+    assert (root / ".ssh/id_ed25519.pub").read_text() == "existing public key"
+    assert not (root / "command.keygen").exists()
+    assert not (root / "command.ssh-copy-id").exists()
+    assert (root / ".bash_history").read_text() == before
+    (root / ".ssh/id_ed25519.pub").unlink()
+    (root / "keygen-fail").touch()
+    session([b"\x1bOQ", b"failed", b"\x1b[C", b"\r"], expected_status=1)
+    assert not (root / "command.ssh-copy-id").exists()
+    assert (root / ".bash_history").read_text() == before
+    (root / "keygen-fail").unlink()
+    # Both recipes generate before copying, and all prompts receive a restored tty.
+    for steps, host in [(1, "generated"), (2, "generated-dotfiles")]:
+        for name in ("id_ed25519", "id_ed25519.pub"):
+            (root / ".ssh" / name).unlink(missing_ok=True)
+        session([b"\x1bOQ", (host + ":2202").encode()] + [b"\x1b[C"] * steps + [b"\r"])
+        assert (root / "command.keygen").read_text().splitlines() == ["-q", "-t", "ed25519", "-f", str(root / ".ssh/id_ed25519")]
+        assert (root / "command.ssh-copy-id").read_text().splitlines() == ["-p", "2202", "-i", str(root / ".ssh/id_ed25519.pub"), host]
+        assert (root / "command.keygen-tty").read_bytes() == (root / "command.tty").read_bytes()
     print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, new remotes and setup recipes, embedded help, terminal restoration")

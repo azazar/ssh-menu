@@ -835,6 +835,20 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
             fs::write(home.join(".ssh").join(name), "fixture").unwrap();
         }
         let config = Config::parse(DEFAULT_CONFIG).unwrap();
+        assert_eq!(
+            config.configuration_scripts[0].name,
+            "Configure key-based auth"
+        );
+        assert_eq!(
+            config.configuration_scripts[1].name,
+            "Configure key-based auth + install dotfiles"
+        );
+        assert!(
+            config
+                .configuration_scripts
+                .iter()
+                .all(|p| p.available_command.is_none())
+        );
         let mut input = config.configuration_scripts[0].inputs[0].clone();
         input.command = Some(format!(
             "HOME={}; export HOME; {}",
@@ -847,7 +861,11 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
         );
         fs::remove_file(home.join(".ssh/id_ed25519")).unwrap();
         fs::remove_file(home.join(".ssh/id_work's key")).unwrap();
-        assert!(input.resolve().is_err());
+        assert_eq!(
+            input.resolve().unwrap().options,
+            ["Generate new Ed25519 key"]
+        );
+        assert!(!home.join(".ssh/id_ed25519").exists());
         fs::remove_dir_all(home).unwrap();
     }
 

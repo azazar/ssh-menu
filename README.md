@@ -21,7 +21,7 @@ Find a machine, choose how to connect, and press Enter. SSH Menu brings your SSH
 | **Zellij** | Alt+Z | An existing remote session, or a new session if none exists |
 | **Your own profile** | Configurable | Any command or remote script defined in YAML |
 
-Hosts come from SSH config, Bash history, and Midnight Commander bookmarks. Launch choices are remembered through history, so you can return to the same machine with the same tool. Press **F2** to add a remote, choose an SSH keypair, and optionally install dotfiles.
+Hosts come from SSH config, Bash history, and Midnight Commander bookmarks. Launch choices are remembered through history, so you can return to the same machine with the same tool. Press **F2** to add a remote, choose an SSH keypair (or generate one when none exists), and optionally install dotfiles.
 
 Written in Rust with [Ratatui](https://ratatui.rs/), SSH Menu uses a compact, borderless [Catppuccin Mocha](https://catppuccin.com/palette/) interface. Linux builds are static executables. SSH, Mosh, and other connection tools run as separate programs, with your terminal restored before handoff.
 
