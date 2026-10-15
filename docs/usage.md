@@ -16,7 +16,9 @@ Changing a profile affects only the selected host. Moving away or changing the f
 | Alt+Enter | Connect and return to the menu afterward |
 | Ctrl+Enter | Adjust the remote, profile and inputs for one connection |
 | Alt+S / Alt+M / Alt+C | Connect with SSH / Mosh / MC |
-| Alt+B / Alt+Z | Connect with remote Bash / Zellij |
+| Alt+B / Alt+Z / Alt+T | Connect with remote Bash / Zellij / Tmux |
+| Alt+F / Alt+H | Open SFTP / remote monitor |
+| Ctrl+Alt+L / Ctrl+Alt+D | Configure a local tunnel / SOCKS proxy |
 | F1 | Open built-in help |
 | F2 | Add a remote with optional setup |
 | F4 | Edit configuration with format help and validation |

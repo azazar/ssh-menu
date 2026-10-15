@@ -19,9 +19,13 @@ Find a machine, choose how to connect, and press Enter. SSH Menu brings your SSH
 | **MC** | Alt+C | Midnight Commander browsing the remote filesystem |
 | **Bash** | Alt+B | An interactive remote Bash login shell |
 | **Zellij** | Alt+Z | An existing remote session, or a new session if none exists |
+| **Tmux** | Alt+T | Attach to the remote `main` session, creating it if needed |
+| **SFTP** | Alt+F | An interactive file-transfer session |
+| **Monitor** | Alt+H | Remote btop, htop, or top |
+| **Tunnel / SOCKS** | Ctrl+Alt+L / Ctrl+Alt+D | A localhost port forward or SOCKS proxy, with editable settings |
 | **Your own profile** | Configurable | Any command or remote script defined in YAML |
 
-Hosts come from SSH config, Bash history, and Midnight Commander bookmarks. Launch choices are remembered through history, so you can return to the same machine with the same tool. Press **F2** to add a remote, choose an SSH keypair (or generate one when none exists), and optionally install dotfiles.
+Hosts come from SSH config, Bash history, and Midnight Commander bookmarks. Launch choices are remembered through history, so you can return to the same machine with the same tool. Press **F2** to add a remote, choose an SSH keypair (or generate one when none exists), and optionally install dotfiles. Other setup recipes install terminal tools or copy your terminal definition to the remote.
 
 Written in Rust with [Ratatui](https://ratatui.rs/), SSH Menu uses a compact, borderless [Catppuccin Mocha](https://catppuccin.com/palette/) interface. Linux builds are static executables. SSH, Mosh, and other connection tools run as separate programs, with your terminal restored before handoff.
 

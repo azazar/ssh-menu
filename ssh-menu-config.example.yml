@@ -111,6 +111,59 @@ profiles:
       fi
       exec "$zellij_bin" attach --create
 
+  # Persistent sessions, file transfers, monitoring and SSH forwarding.
+  - name: Tmux
+    key: Alt+T
+    available_command: command -v ssh
+    command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
+    remote: exec tmux new-session -A -s main
+  - name: SFTP
+    key: Alt+F
+    available_command: command -v sftp
+    command: port=%p; exec sftp ${port:+-P "$port"} -- %h
+  - name: Monitor
+    key: Alt+H
+    available_command: command -v ssh
+    command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
+    remote: sh -c %{script}
+    script: |
+      for tool in btop htop top; do
+        if command -v "$tool" >/dev/null 2>&1; then
+          exec "$tool"
+        fi
+      done
+      echo 'Install btop, htop or top on the remote first.' >&2
+      exit 1
+  - name: Tunnel
+    key: Ctrl+Alt+L
+    available_command: command -v ssh
+    inputs:
+      - id: forward
+        type: promptString
+        description: Local port:destination host:port
+        default: '8080:localhost:80'
+        required: true
+    # The destination is reached from the SSH server; listen only on loopback.
+    command: |
+      port=%p
+      forward=%{input:forward}
+      printf 'Forwarding 127.0.0.1:%s through SSH. Ctrl+C stops the tunnel.\n' "$forward"
+      exec ssh ${port:+-p "$port"} -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -L "127.0.0.1:$forward" -- %h
+  - name: SOCKS
+    key: Ctrl+Alt+D
+    available_command: command -v ssh
+    inputs:
+      - id: port
+        type: promptString
+        description: Local SOCKS port
+        default: '1080'
+        required: true
+    command: |
+      port=%p
+      listen=%{input:port}
+      printf 'SOCKS proxy on 127.0.0.1:%s. Ctrl+C stops the proxy.\n' "$listen"
+      exec ssh ${port:+-p "$port"} -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -D "127.0.0.1:$listen" -- %h
+
   # Minimal profiles, when ports are managed entirely in ~/.ssh/config:
   # - name: Simple SSH
   #   command: ssh %h
@@ -211,3 +264,69 @@ configuration_scripts:
       set -eu
       cd "$HOME/src/dotfiles"
       exec "$2" "./$1"
+  - name: Install terminal tools
+    available_command: command -v ssh
+    inputs:
+      - id: tools
+        type: pickString
+        description: Remote packages
+        options: ['tmux + htop', tmux, htop, btop, mosh, mc]
+        default: 'tmux + htop'
+    command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
+    remote: sh -c %{script} -- %{input:tools}
+    script: |
+      set -eu
+      case "$1" in
+        'tmux + htop') set -- tmux htop ;;
+        tmux|htop|btop|mosh|mc) set -- "$1" ;;
+        *) echo 'Unknown terminal tools selection.' >&2; exit 1 ;;
+      esac
+      # Use the remote's repositories and normal package-manager prompts.
+      if command -v brew >/dev/null 2>&1; then
+        exec brew install "$@"
+      elif command -v apt-get >/dev/null 2>&1; then
+        set -- apt-get install "$@"
+      elif command -v dnf >/dev/null 2>&1; then
+        set -- dnf install "$@"
+      elif command -v yum >/dev/null 2>&1; then
+        set -- yum install "$@"
+      elif command -v pacman >/dev/null 2>&1; then
+        set -- pacman -S --needed "$@"
+      elif command -v zypper >/dev/null 2>&1; then
+        set -- zypper install "$@"
+      elif command -v apk >/dev/null 2>&1; then
+        set -- apk add "$@"
+      else
+        echo 'No supported package manager found; install the tools manually.' >&2
+        exit 1
+      fi
+      if [ "$(id -u)" = 0 ]; then
+        exec "$@"
+      fi
+      command -v sudo >/dev/null 2>&1 || {
+        echo 'Installing system packages requires root or sudo.' >&2
+        exit 1
+      }
+      exec sudo -- "$@"
+  - name: Copy terminal definition
+    available_command: command -v ssh && command -v infocmp && test -n "${TERM:-}"
+    # Export before connecting so a failed infocmp cannot send a partial definition.
+    command: |
+      set -eu
+      port=%p
+      definition=$(infocmp -x -- "$TERM")
+      printf '%s\n' "$definition" | ssh ${port:+-p "$port"} -- %h %{remote}
+    remote: sh -c %{script}
+    script: |
+      set -eu
+      command -v tic >/dev/null 2>&1 || {
+        echo 'Install ncurses tic on the remote first.' >&2
+        exit 1
+      }
+      umask 077
+      source=$(mktemp "${TMPDIR:-/tmp}/ssh-menu-terminfo.XXXXXX")
+      trap 'rm -f "$source"' 0
+      trap 'exit 1' HUP INT TERM
+      cat > "$source"
+      mkdir -p "$HOME/.terminfo"
+      tic -x -o "$HOME/.terminfo" "$source"

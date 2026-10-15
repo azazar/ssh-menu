@@ -23,6 +23,24 @@ Each profile needs a unique `name` and a `command`; `default` names one of them.
 
 The example above lets SSH config manage ports. The shipped defaults also handle explicitly entered ports. See the reference below for that template and remote-script quoting.
 
+## Included profiles
+
+Alongside SSH, Mosh, MC, Bash and Zellij, the defaults include:
+
+| Profile | Behavior and requirements |
+| --- | --- |
+| Tmux | `tmux new-session -A -s main` attaches to the remote `main` session or creates it. Requires remote tmux; edit `remote` to use another session name. Detach with tmux's Ctrl+B, then D. |
+| SFTP | Interactive OpenSSH file transfers; type `help` for commands and `bye` to exit. Requires local sftp and a remote SFTP subsystem. |
+| Monitor | Runs the first available remote `btop`, `htop`, or `top`, in that order. No software is installed on launch. |
+| Tunnel | Opens a dialog for `local port:destination host:port`, default `8080:localhost:80`. The destination is resolved/reached from the SSH server. |
+| SOCKS | Opens a dialog for the local proxy port, default `1080`. Configure your client to use SOCKS5 at `127.0.0.1:1080`, with proxy-side DNS when desired. |
+
+Both forwarding profiles bind only to `127.0.0.1`, remain in the foreground, and stop with Ctrl+C. They request no remote shell, fail if the listening socket cannot be created, and use SSH keepalives to detect a lost connection. A successful listener does not guarantee the destination service is reachable; the SSH server must allow forwarding. Use Alt+Enter in the dialog to return to the menu when the tunnel stops. Explicit SSH ports and alias settings work as in the other profiles.
+
+Existing configs are not migrated. Copy the desired entries from the [example config](../ssh-menu-config.example.yml), choosing unused shortcuts if yours differ.
+
+These presets follow the upstream [tmux manual](https://github.com/tmux/tmux/blob/master/tmux.1), [OpenSSH ssh manual](https://github.com/openssh/openssh-portable/blob/master/ssh.1), [SFTP manual](https://github.com/openssh/openssh-portable/blob/master/sftp.1), and the [btop](https://github.com/aristocratos/btop) and [htop](https://github.com/htop-dev/htop) projects.
+
 ## Profile shortcuts
 
 Set `key: Alt+M` on a launch profile to connect the selected host with it (or open its input dialog). Hold its modifier group to reveal available shortcuts in the action bar, or open the Keys help topic. They apply only to the host list, preserve the filter while selecting the target, and do nothing when no host matches. Ordinary launches are remembered in history; dialog launches are temporary. Hidden profiles have no active shortcut.
@@ -31,7 +49,7 @@ Use **Ctrl+letter**, **Alt+letter**, or **Ctrl+Alt+letter**, with an ASCII lette
 
 Ctrl+H, Ctrl+I, Ctrl+J, Ctrl+M, Ctrl+S, and Ctrl+Z remain reserved for profile shortcuts because of terminal aliases and flow/suspend behavior. Other profile keys must not overlap configured menu actions. Ctrl+C can be reused after removing it from `keybindings.menu.quit`. App actions themselves are configurable; see [keybindings](keybindings.md).
 
-The shipped bindings are **Alt+S** SSH, **Alt+M** Mosh, **Alt+C** MC, **Alt+B** Bash, and **Alt+Z** Zellij. Existing configs are preserved; add `key` to enable shortcuts there. Ctrl+Q and Ctrl+Alt+Q are unbound by default and available for custom bindings. Setup recipes do not accept `key`.
+The shipped bindings are **Alt+S** SSH, **Alt+M** Mosh, **Alt+C** MC, **Alt+B** Bash, **Alt+Z** Zellij, **Alt+T** Tmux, **Alt+F** SFTP, **Alt+H** Monitor, **Ctrl+Alt+L** Tunnel, and **Ctrl+Alt+D** SOCKS. Existing configs are preserved; add `key` to enable shortcuts there. Ctrl+Q and Ctrl+Alt+Q are unbound by default and available for custom bindings. Setup recipes do not accept `key`.
 
 ## Profile availability
 
@@ -41,7 +59,7 @@ Checks are literal local `sh -c` commands with stdin closed and output discarded
 
 If the configured default is unavailable, the first available profile becomes the session default. History restoration and F8 only select available profiles. If none remain, SSH Menu reports an error before opening the TUI. Filtering does not rewrite your config; restart after installing a missing tool.
 
-The shipped config checks for local `ssh`, `mosh`, and `mc`. Bash and Zellij check for `ssh`, since they run remotely; this does not verify remote tools or connectivity. Existing config files are preserved—add `available_command` to their profiles to enable checks.
+The shipped config checks for local `ssh`, `mosh`, `mc`, and `sftp`. Remote-shell, multiplexer, monitoring and forwarding profiles check for `ssh`; this does not verify remote tools or connectivity. Existing config files are preserved—add `available_command` to their profiles to enable checks.
 
 ## Placeholders and ports
 

@@ -12,14 +12,24 @@ The samples included in the config are:
 | --- | --- |
 | **Configure key-based auth** | Selects an existing keypair or offers generation when none is available, then copies its public key with ssh-copy-id |
 | **Configure key-based auth + install dotfiles** | Copies the key, uploads a dotfiles directory, and runs its installer |
+| **Install terminal tools** | Installs tmux + htop, or an individual tmux, htop, btop, mosh or mc package |
+| **Copy terminal definition** | Exports local `$TERM` and compiles it into remote `~/.terminfo` for terminals unknown to the server |
 
-The dotfiles sample defaults to local `~/src/dotfiles`, installer `install.sh`, and shell `sh`. Change the dialog values or edit the recipe for your own repository. Both samples remain available when no matching `~/.ssh/id_*` private/public keypairs exist. The key selector reads filenames, not key contents. If no usable pair is found, it offers **Generate new Ed25519 key** instead.
+The dotfiles sample defaults to local `~/src/dotfiles`, installer `install.sh`, and shell `sh`. Change the dialog values or edit the recipe for your own repository. Both key-based auth samples remain available when no matching `~/.ssh/id_*` private/public keypairs exist. The key selector reads filenames, not key contents. If no usable pair is found, it offers **Generate new Ed25519 key** instead.
 
 Generation runs only after confirming setup, never while opening or canceling the dialog. It uses `ssh-keygen` to create the standard `~/.ssh/id_ed25519` pair, with the terminal restored for its passphrase prompts. No empty passphrase is forced. Existing private or public files (including symlinks) are not overwritten; restore an incomplete pair or choose another existing pair before retrying. Failure stops setup before `ssh-copy-id` or the connection runs. The generated key remains on disk if later setup fails.
 
-Existing configuration files are preserved. To adopt these samples in an existing installation, replace the two sample entries under `configuration_scripts` using the [updated example](../ssh-menu-config.example.yml); keep your custom recipes.
+Existing configuration files are preserved. To adopt these samples in an existing installation, copy the desired entries under `configuration_scripts` from the [updated example](../ssh-menu-config.example.yml); keep your custom recipes.
 
 Setup defaults to **None**. **Enter** runs the selected setup, saves the connection to history, and connects using the default launch profile. **Esc** cancels. Authentication prompts run with the terminal restored. Failed setup stops the connection and does not save the entry. Setup is not repeated on later connections, and SSH config is not modified.
+
+## Terminal tools and compatibility
+
+**Install terminal tools** follows the [tmux installation guide](https://github.com/tmux/tmux/wiki/Installing) approach of using the remote's package repositories. It supports Homebrew, apt-get, dnf, yum, pacman, zypper and apk, in that order. Homebrew runs as the remote user; system package managers run as root or through sudo. Normal package-manager prompts are preserved, with no automatic yes flag. Packages must exist in the configured repositories, and stale indexes may need a manual refresh. A failed install stops setup. The recipe does not change repositories, the login shell, SSH configuration or firewall rules; installing Mosh alone does not configure UDP access.
+
+**Copy terminal definition** addresses errors such as `unknown terminal: xterm-kitty`. It uses the method documented by [Kitty](https://github.com/kovidgoyal/kitty/blob/master/docs/kittens/ssh.rst), generalized to the current `$TERM`. Local `infocmp` and remote `tic` (ncurses tools) are required. The remote compiles a temporary source file, which also works on systems whose tic cannot read `/dev/stdin`, and removes it afterward. Matching definitions in `~/.terminfo` are updated; system definitions are untouched. The recipe is hidden if local ssh, infocmp or TERM is missing. It copies terminal capabilities, not fonts or shell integration.
+
+Each setup run selects one recipe. The terminal-tool and terminal-definition recipes use existing authentication; configure key-based auth first or authenticate normally when prompted.
 
 ## Custom inputs
 

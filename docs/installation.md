@@ -82,7 +82,7 @@ The repository pins its Rust toolchain. To build the RC source specifically, run
 
 ## Requirements
 
-Use a UTF-8 terminal with a monospace font. The action bar needs no Powerline or Nerd Font glyphs. Install the tools for the profiles you use: `ssh` for normal connections, `mosh` locally and `mosh-server` remotely for Mosh, or local `mc` for file browsing. Key-auth setup uses `ssh-copy-id` and offers `ssh-keygen` when no keypair exists; the dotfiles sample also uses `scp`.
+Use a UTF-8 terminal with a monospace font. The action bar needs no Powerline or Nerd Font glyphs. Install the tools for the profiles you use: `ssh` for normal connections, `mosh` locally and `mosh-server` remotely for Mosh, or local `mc` for file browsing. SFTP uses local `sftp`; Tmux and Monitor need their respective tools on the remote. The terminal-definition recipe needs local `infocmp` and remote `tic`. Key-auth setup uses `ssh-copy-id` and offers `ssh-keygen` when no keypair exists; the dotfiles sample also uses `scp`.
 
 ## Command-line options
 
@@ -101,7 +101,12 @@ An existing `~/.ssh/ssh-menu-config.yml` is never overwritten. To enable the new
 | MC | `Alt+C` | `command -v mc` |
 | Bash | `Alt+B` | `command -v ssh` |
 | Zellij | `Alt+Z` | `command -v ssh` |
+| Tmux | `Alt+T` | `command -v ssh` |
+| SFTP | `Alt+F` | `command -v sftp` |
+| Monitor | `Alt+H` | `command -v ssh` |
+| Tunnel | `Ctrl+Alt+L` | `command -v ssh` |
+| SOCKS | `Ctrl+Alt+D` | `command -v ssh` |
 
-Restart SSH Menu after editing. Profiles whose checks fail are hidden; if the default is unavailable, the first available profile is used. Ctrl+Q no longer quits and can be assigned to a profile. Use Esc or Ctrl+C to quit.
+For profiles or setup recipes missing from your config, copy the complete entries from the [example config](../ssh-menu-config.example.yml), including their inputs and script fields. Restart SSH Menu after editing. Profiles whose checks fail are hidden; if the default is unavailable, the first available profile is used. Ctrl+Q no longer quits and can be assigned to a profile. Use Esc or Ctrl+C to quit.
 
 For configurations from the earlier return-to-menu build, remove the top-level `return_to_menu` line. Use the configurable `connect_and_return` action (Alt+Enter by default) instead; see [keybindings](keybindings.md).

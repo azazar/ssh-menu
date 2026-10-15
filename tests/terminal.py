@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
     (root / ".ssh/config").write_text("Host alpha beta\n User tester\n")
     (root / ".bash_history").write_text("ssh alpha\nssh -p 2222 beta\n")
     (root / "bin").mkdir()
-    for name in ("ssh", "mosh", "mc", "custom-connect"):
+    for name in ("ssh", "mosh", "mc", "sftp", "custom-connect"):
         stub = root / "bin" / name
         stub.write_text('#!/bin/sh\nprintf "%s\\n" "$0" "$@" > "$SSH_MENU_TEST_LOG"\n')
         stub.write_text(stub.read_text() + 'stty -g > "$SSH_MENU_TEST_LOG.tty"\nprintf "SSH_MENU_HANDOFF\\n"\n')
@@ -118,6 +118,19 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
     assert (root / "command.zellij").read_text().splitlines() == ["attach", "--create", "existing session"]
     session([b"beta:2222", b"\r"])  # Zellij is restored from the single-line history entry.
     assert "\n".join((root / "command").read_text().splitlines()[6:]) == remote_command
+    # New direct shortcuts and input-bearing forwarding profiles use normal handoff.
+    for key, suffix in [(b"\x1bt", ["-tt", "--", "beta", "exec tmux new-session -A -s main"]),
+                        (b"\x1bf", ["-P", "2222", "--", "beta"])]:
+        session([b"beta:2222", key])
+        assert (root / "command").read_text().splitlines()[-len(suffix):] == suffix
+    session([b"beta:2222", b"\x1bh"])
+    assert "btop htop top" in (root / "command").read_text()
+    for key, flag, value in [(b"\x1b[108;7u", "-L", "127.0.0.1:8080:localhost:80"),
+                             (b"\x1b[100;7u", "-D", "127.0.0.1:1080")]:
+        session([b"beta:2222", key, b"\r"])
+        args = (root / "command").read_text().splitlines()[1:]
+        assert args[:4] == ["-p", "2222", "-N", "-T"], args
+        assert args[-4:] == [flag, value, "--", "beta"], args
     config_file.write_text("""default: Script
 profiles:
   - name: Script

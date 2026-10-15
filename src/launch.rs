@@ -847,6 +847,7 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
             config
                 .configuration_scripts
                 .iter()
+                .take(2)
                 .all(|p| p.available_command.is_none())
         );
         let mut input = config.configuration_scripts[0].inputs[0].clone();

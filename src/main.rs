@@ -4,6 +4,8 @@ mod editor;
 mod help;
 mod launch;
 mod new_remote;
+#[cfg(all(test, unix))]
+mod preset_tests;
 mod search;
 mod shortcut;
 

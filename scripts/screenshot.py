@@ -45,7 +45,7 @@ stream = pyte.ByteStream(screen)
 with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
     home = Path(directory)
     (home / "bin").mkdir()
-    for program in ('ssh', 'mosh', 'mc'):
+    for program in ('ssh', 'mosh', 'mc', 'sftp'):
         stub = home / "bin" / program
         stub.write_text('#!/bin/sh\nexit 0\n')
         stub.chmod(0o755)
