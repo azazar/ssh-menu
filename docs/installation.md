@@ -2,7 +2,7 @@
 
 ## Get a binary
 
-Download **[v0.1.0-rc.2](https://github.com/azazar/ssh-menu/releases/tag/v0.1.0-rc.2)** from GitHub Releases. All seven platform builds passed. Choose the archive for your system and download `SHA256SUMS` to verify it.
+Download **[v0.1.0-rc.3](https://github.com/azazar/ssh-menu/releases/tag/v0.1.0-rc.3)** from GitHub Releases. All seven platform builds passed. Choose the archive for your system and download `SHA256SUMS` to verify it.
 
 F1 help is embedded in the executable and works offline. You only need to install `ssh-menu` (or `ssh-menu.exe`); the documentation files in the archive are optional.
 
@@ -50,7 +50,7 @@ Add the `PATH` line to your shell's startup file to keep it across sessions. Lin
 Use an explicit version for release candidates; GitHub's `latest` download URL excludes prereleases. For example:
 
 ```sh
-version=v0.1.0-rc.2
+version=v0.1.0-rc.3
 archive=ssh-menu-x86_64-unknown-linux-musl.tar.gz
 base="https://github.com/azazar/ssh-menu/releases/download/$version"
 curl -fLO "$base/$archive"
@@ -78,7 +78,7 @@ cargo build --locked --release
 ./target/release/ssh-menu
 ```
 
-The repository pins its Rust toolchain. To build the RC source specifically, run `git checkout v0.1.0-rc.2` before building. On Linux x86-64, add `--target x86_64-unknown-linux-musl` for a static build; the binary will be in `target/x86_64-unknown-linux-musl/release/`.
+The repository pins its Rust toolchain. To build the RC source specifically, run `git checkout v0.1.0-rc.3` before building. On Linux x86-64, add `--target x86_64-unknown-linux-musl` for a static build; the binary will be in `target/x86_64-unknown-linux-musl/release/`.
 
 ## Requirements
 

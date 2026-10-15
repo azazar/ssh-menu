@@ -118,7 +118,8 @@ jobs:
         run: cat dist/*.sha256 > dist/SHA256SUMS
       - uses: softprops/action-gh-release@v3.0.3
         with:
-          draft: false
+          # Immutable releases must receive all assets before publication.
+          draft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
           fail_on_unmatched_files: true
@@ -126,3 +127,9 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
             dist/SHA256SUMS
+      - name: Publish completed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release edit "$RELEASE_TAG" --draft=false

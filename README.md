@@ -27,48 +27,48 @@ Written in Rust with [Ratatui](https://ratatui.rs/), SSH Menu uses a compact, bo
 
 ## Get started
 
-Install the published **v0.1.0-rc.2** release with the command for your system. Linux and macOS install the executable into `~/.local/bin` without sudo.
+Install the published **v0.1.0-rc.3** release with the command for your system. Linux and macOS install the executable into `~/.local/bin` without sudo.
 
 **Linux x86-64 (including WSL)**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.2/ssh-menu-x86_64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.3/ssh-menu-x86_64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
 ```
 
 **Linux ARM64**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.2/ssh-menu-aarch64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.3/ssh-menu-aarch64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
 ```
 
 **Linux ARMv7 (hard-float)**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.2/ssh-menu-armv7-unknown-linux-musleabihf.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.3/ssh-menu-armv7-unknown-linux-musleabihf.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
 ```
 
 **macOS Apple Silicon**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.2/ssh-menu-aarch64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.3/ssh-menu-aarch64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
 ```
 
 **macOS Intel**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.2/ssh-menu-x86_64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.3/ssh-menu-x86_64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
 ```
 
 **Windows x64 — PowerShell**
 
 ```powershell
-& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.2/ssh-menu-x86_64-pc-windows-msvc.zip -OutFile "$env:TEMP/ssh-menu.zip"; New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null; tar.exe -xf "$env:TEMP/ssh-menu.zip" -C "$HOME/.local/bin" ssh-menu.exe }
+& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.3/ssh-menu-x86_64-pc-windows-msvc.zip -OutFile "$env:TEMP/ssh-menu.zip"; New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null; tar.exe -xf "$env:TEMP/ssh-menu.zip" -C "$HOME/.local/bin" ssh-menu.exe }
 ```
 
 **Windows ARM64 — PowerShell**
 
 ```powershell
-& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.2/ssh-menu-aarch64-pc-windows-msvc.zip -OutFile "$env:TEMP/ssh-menu.zip"; New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null; tar.exe -xf "$env:TEMP/ssh-menu.zip" -C "$HOME/.local/bin" ssh-menu.exe }
+& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.3/ssh-menu-aarch64-pc-windows-msvc.zip -OutFile "$env:TEMP/ssh-menu.zip"; New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null; tar.exe -xf "$env:TEMP/ssh-menu.zip" -C "$HOME/.local/bin" ssh-menu.exe }
 ```
 
 Add `~/.local/bin` to your `PATH` (in Bash or Zsh: `export PATH="$HOME/.local/bin:$PATH"`). On Windows, run SSH Menu from [Git Bash](https://git-scm.com/downloads/win); PowerShell is only used for installation. macOS binaries are unsigned. See the [installation guide](docs/installation.md) for checksum verification, platform requirements, and source builds, or browse [GitHub Releases](https://github.com/azazar/ssh-menu/releases).
