@@ -83,7 +83,7 @@ The [documentation index](docs/README.md) covers daily use, installation, config
 
 ![Built-in documentation viewer](screenshot-help.png)
 
-Edit `~/.ssh/ssh-menu-config.yml` to customize launch profiles and setup recipes. The [commented example](ssh-menu-config.example.yml) contains the shipped defaults.
+Edit `~/.ssh/ssh-menu-config.yml` to customize launch profiles and setup recipes. Profile `available_command` checks hide unavailable tools at startup. The [commented example](ssh-menu-config.example.yml) contains the shipped defaults.
 
 ## License
 

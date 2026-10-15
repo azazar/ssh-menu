@@ -312,4 +312,37 @@ configuration_scripts:
     assert b"Setting up a remote" in output
     assert b"Profiles" not in output and b"TOPIC" not in output, "dialog help offered irrelevant topics"
     assert (root / "command").read_text().splitlines()[1:] == ["-p", "2222", "--", "help-host"]
+    # Launch availability is evaluated once at load, before history and navigation.
+    config_file.write_text("""default: Missing
+profiles:
+  - name: Missing
+    available_command: echo missing >> "$HOME/profile-checks"; exit 1
+    command: custom-connect %h
+  - name: SSH
+    available_command: echo ssh >> "$HOME/profile-checks"; command -v ssh
+    command: ssh -- %h
+  - name: Mosh
+    available_command: echo mosh >> "$HOME/profile-checks"; command-that-does-not-exist
+    command: mosh -- %h
+configuration_scripts:
+  - name: Setup
+    available_command: touch "$HOME/unexpected-setup-check"
+    command: true
+""")
+    for flag in ('--dump', '--help', '--version'):
+        subprocess.run([binary, flag], env=child_env, capture_output=True, check=True)
+    assert not (root / "profile-checks").exists(), "noninteractive mode ran availability checks"
+    (root / ".bash_history").write_text("mosh alpha\n")
+    output = session([b"alpha", b"\x1b[C", b"\x1b[D", b"\x1b[19~", b"\x1bOP", b"\x1bOP", b"\r"])
+    assert (root / "profile-checks").read_text().splitlines() == ["missing", "ssh", "mosh"]
+    assert not (root / "unexpected-setup-check").exists()
+    assert b"Missing" not in output and b"command-that-does-not-exist" not in output
+    assert (root / "command").read_text().splitlines()[0].endswith('/ssh')
+    assert (root / "command").read_text().splitlines()[1:] == ['--', 'alpha']
+    # All unavailable is an actionable error, without entering the alternate screen.
+    config_file.write_text("default: Missing\nprofiles: [{name: Missing, available_command: 'exit 1', command: 'ssh %h'}]\n")
+    result = subprocess.run([binary], env=child_env, capture_output=True)
+    assert result.returncode != 0 and b"no launch profiles are available" in result.stderr
+    assert b"\x1b[?1049h" not in result.stdout
+    config_file.write_text(original_config)
     print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, new remotes and setup recipes, embedded help, terminal restoration")

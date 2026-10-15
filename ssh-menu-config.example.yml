@@ -2,18 +2,24 @@
 # %h = user@host, %p = explicit port (empty if absent), %t = user@host[:port].
 # Placeholders are shell-escaped; leave them unquoted. %{field} references a field.
 # Left/Right changes only the selected entry; history remembers launched commands.
+# available_command runs locally at startup; nonzero status hides the profile.
 default: SSH
 profiles:
   - name: SSH
+    available_command: command -v ssh
     command: port=%p; exec ssh ${port:+-p "$port"} -- %h
   - name: Mosh
+    available_command: command -v mosh
     command: port=%p; exec mosh ${port:+--ssh="ssh -p $port"} -- %h
   - name: MC
+    available_command: command -v mc
     command: mc /sh://%t/
   - name: Bash
+    available_command: command -v ssh
     command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
     remote: exec bash -l
   - name: Zellij
+    available_command: command -v ssh
     command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
     remote: sh -c %{script}
     script: |

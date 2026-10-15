@@ -10,6 +10,7 @@ profiles:
   - name: SSH
     command: ssh %h
   - name: Mosh
+    available_command: command -v mosh
     command: mosh %h
   - name: MC
     command: mc /sh://%t/
@@ -18,6 +19,16 @@ profiles:
 Each profile needs a unique `name` and a `command`; `default` names one of them. Commands run through local `sh -c`, and additional string fields can hold reusable commands or scripts. **Placeholders are shell-escaped automatically—leave them unquoted.**
 
 The example above lets SSH config manage ports. The shipped defaults also handle explicitly entered ports. See the reference below for that template and remote-script quoting.
+
+## Profile availability
+
+An optional `available_command` checks whether a launch profile can be used. It runs once per profile when the configuration is loaded for an interactive session, before the TUI opens. Exit **0** keeps the profile; a nonzero status or failure to start hides it. Profiles without a check remain available.
+
+Checks are literal local `sh -c` commands with stdin closed and output discarded. Use quick, noninteractive checks such as `command -v mosh`; placeholders are not expanded and no remote connection is made automatically. Checks do not run for `--dump`, `--help`, or `--version`.
+
+If the configured default is unavailable, the first available profile becomes the session default. History restoration and F8 only select available profiles. If none remain, SSH Menu reports an error before opening the TUI. Filtering does not rewrite your config; restart after installing a missing tool.
+
+The shipped config checks for local `ssh`, `mosh`, and `mc`. Bash and Zellij check for `ssh`, since they run remotely; this does not verify remote tools or connectivity. Existing config files are preserved—add `available_command` to their profiles to enable checks.
 
 ## Placeholders and ports
 

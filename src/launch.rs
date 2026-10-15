@@ -413,13 +413,9 @@ impl Config {
         if config.profiles.is_empty() {
             return Err(invalid("profiles must not be empty"));
         }
-        if config
-            .profiles
-            .iter()
-            .any(|p| !p.inputs.is_empty() || p.available_command.is_some())
-        {
+        if config.profiles.iter().any(|p| !p.inputs.is_empty()) {
             return Err(invalid(
-                "inputs and available_command are supported only in configuration_scripts",
+                "inputs are supported only in configuration_scripts",
             ));
         }
         for group in [&config.profiles, &config.configuration_scripts] {
@@ -471,6 +467,20 @@ impl Config {
             return Err(invalid("default must name an existing profile"));
         }
         Ok(config)
+    }
+    fn available_profiles(mut self) -> io::Result<Self> {
+        self.profiles.retain(Profile::is_available);
+        let first = self.profiles.first().ok_or_else(|| {
+            invalid("no launch profiles are available; check available_command and installed tools")
+        })?;
+        if !self
+            .profiles
+            .iter()
+            .any(|profile| profile.name == self.default)
+        {
+            self.default = first.name.clone();
+        }
+        Ok(self)
     }
     pub fn default_index(&self) -> usize {
         self.profiles
@@ -560,7 +570,7 @@ impl Config {
     pub fn load(home: &Path) -> io::Result<Self> {
         let dir = home.join(".ssh");
         if !dir.is_dir() {
-            return Self::parse(DEFAULT_CONFIG);
+            return Self::parse(DEFAULT_CONFIG)?.available_profiles();
         }
         let path = dir.join(CONFIG_NAME);
         let load = || -> io::Result<Self> {
@@ -587,7 +597,7 @@ impl Config {
                 }
                 Err(e) => return Err(e),
             };
-            Self::parse(&text)
+            Self::parse(&text)?.available_profiles()
         };
         load().map_err(|e| io::Error::new(e.kind(), format!("{}: {e}", path.display())))
     }
@@ -825,6 +835,27 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
         fs::remove_file(home.join(".ssh/id_work's key")).unwrap();
         assert!(input.resolve().is_err());
         fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn profile_availability_preserves_order_and_available_default() {
+        let config = Config::parse(
+            "default: Preferred\nprofiles:\n  - {name: First, command: 'ssh %h'}\n  - {name: Missing, command: 'mc %h', available_command: 'exit 1'}\n  - {name: Preferred, command: 'mosh %h', available_command: 'exit 0'}\n",
+        ).unwrap();
+        assert_eq!(config.profiles.len(), 3, "parsing must not run checks");
+        let available = config.available_profiles().unwrap();
+        assert_eq!(
+            available
+                .profiles
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect::<Vec<_>>(),
+            ["First", "Preferred"]
+        );
+        assert_eq!(available.default_index(), 1);
+        for command in ["''", "' '", "\"\\0\""] {
+            assert!(Config::parse(&format!("default: X\nprofiles: [{{name: X, command: 'ssh %h', available_command: {command}}}]\n")).is_err());
+        }
     }
 
     #[test]

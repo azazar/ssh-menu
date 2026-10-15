@@ -36,6 +36,11 @@ screen = pyte.Screen(cols, rows)
 stream = pyte.ByteStream(screen)
 with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
     home = Path(directory)
+    (home / "bin").mkdir()
+    for program in ('ssh', 'mosh', 'mc'):
+        stub = home / "bin" / program
+        stub.write_text('#!/bin/sh\nexit 0\n')
+        stub.chmod(0o755)
     (home / ".ssh").mkdir()
     (home / ".ssh/id_ed25519").write_text("demo fixture")
     (home / ".ssh/id_ed25519.pub").write_text("demo fixture")
@@ -49,7 +54,8 @@ with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
     )
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
-    child_env = dict(os.environ, HOME=str(home), USER='demo', TERM='xterm-256color')
+    child_env = dict(os.environ, HOME=str(home), USER='demo', TERM='xterm-256color',
+                     PATH=str(home / 'bin') + os.pathsep + os.environ['PATH'])
     child_env.pop('NO_COLOR', None)
     child = subprocess.Popen([str(binary)], stdin=slave, stdout=slave, stderr=slave,
                              env=child_env)
