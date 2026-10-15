@@ -6,7 +6,7 @@ Enter `user@host[:port]` (or `user@[IPv6]:port`), and choose an optional setup r
 
 ![New remote dialog with SSH keypair and dotfiles inputs](../screenshot-new-remote.png)
 
-The samples included in the config are:
+The included setup recipes are:
 
 | Recipe | What it does |
 | --- | --- |
@@ -33,60 +33,21 @@ Each setup run selects one recipe. The terminal-tool and terminal-definition rec
 
 ## Custom inputs
 
-Add recipes under top-level `configuration_scripts`. They use the same command templates as launch profiles, plus optional `inputs`:
+Recipes belong under top-level `configuration_scripts` and share the profile command format. Commented examples are in the shipped config; F4 opens your copy.
 
-```yaml
-configuration_scripts:
-  - name: Install tools
-    inputs:
-      - id: email
-        type: promptString
-        description: Git email
-        required: true
-      - id: mode
-        type: pickString
-        description: Install mode
-        options: [minimal, full]
-        default: minimal
-    command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
-    remote: sh -c %{script} -- %{input:email} %{input:mode}
-    script: |
-      exec ~/bin/install-tools.sh --email "$1" --mode "$2"
-```
+`promptString` creates a text field; `pickString` creates a dropdown. IDs are unique within a recipe and contain letters, digits, `_`, or `-`. `description` supplies the label, otherwise the ID is shown. Text fields default to empty; dropdowns default to their first option. The `required` flag rejects blank values.
 
-`promptString` creates a text field; `pickString` creates a dropdown. IDs are unique within a recipe and contain letters, digits, `_`, or `-`. `description` supplies the label, otherwise the ID is shown. Text fields default to empty; dropdowns default to their first option. `required: true` rejects blank values.
-
-Pass remote-script inputs as positional arguments, as above. Values survive switching recipes within the dialog but are not saved to YAML or history. Fields display plain text and are intended for installation parameters. Launch profiles also support these input declarations in the connection dialog (Ctrl+Enter).
+Pass remote-script inputs as positional arguments, as shown in the config comments. Values survive switching recipes within the dialog but are not saved to YAML or history. Fields display plain text and are intended for installation parameters. Launch profiles also support these input declarations in the connection dialog (Ctrl+Enter).
 
 ## Generate field defaults or choices
 
-An input's `command` can produce a YAML or JSON object containing `default`, `options`, and/or `description`. Returned fields override static values; omitted fields remain unchanged. For example, place this under a recipe:
-
-```yaml
-inputs:
-  - id: email
-    type: promptString
-    command: |
-      email=$(git config --global user.email) || exit 1
-      escaped=$(printf '%s' "$email" | sed "s/'/''/g")
-      printf "default: '%s'\n" "$escaped"
-  - id: mode
-    type: pickString
-    command: printf '%s' '{"options":["minimal","full"],"default":"full"}'
-```
+An input's `command` can produce a YAML or JSON object containing `default`, `options`, and/or `description`. Returned fields override static values; omitted fields remain unchanged.
 
 Generators run when the recipe is first selected. Successful results are cached for that dialog. A failure blocks submission and displays an error; switch away and back to retry. Output must be a valid mapping of at most 64 KiB; dropdown choices must be nonempty and contain the default if one is specified. The shipped SSH key selector uses this mechanism.
 
 ## Show a recipe only when available
 
-A recipe's `available_command` controls whether it appears in the selector. For example:
-
-```yaml
-configuration_scripts:
-  - name: Install custom tools
-    available_command: command -v my-setup-tool
-    command: my-setup-tool %h
-```
+A recipe’s `available_command` controls whether it appears in the selector. The config comments include a custom availability check.
 
 Exit **0** shows the recipe; another status or failure to start hides it. Without a check, the recipe is always available. Checks run once each time the dialog opens, and **None** is always an option. Hidden recipes' input generators do not run.
 

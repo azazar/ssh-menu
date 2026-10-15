@@ -669,12 +669,8 @@ mod tests {
         );
     }
     #[test]
-    fn zellij_script_and_history_round_trip() {
+    fn default_profiles_history_round_trip() {
         let config = Config::parse(DEFAULT_CONFIG).unwrap();
-        assert_eq!(
-            config.profiles[4].fields["script"],
-            include_str!("../scripts/zellij-remote.sh")
-        );
         for (index, profile) in config.profiles.iter().enumerate() {
             let target = target(Some("2222"));
             let line = profile.history_line(&target);

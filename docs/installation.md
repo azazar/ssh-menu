@@ -92,21 +92,4 @@ Run `ssh-menu` to open the menu. Use `ssh-menu --dump` to list hosts without ope
 
 Re-run the install command for your platform to replace the executable. Check `ssh-menu --version` afterward; this release is **0.1.0-rc.4**. Help remains embedded, so no separate documentation installation is needed.
 
-An existing `~/.ssh/ssh-menu-config.yml` is never overwritten. To enable the new shortcuts and availability checks, add these fields to the corresponding profiles, preserving your commands and other customizations:
-
-| Profile | `key` | `available_command` |
-| --- | --- | --- |
-| SSH | `Alt+S` | `command -v ssh` |
-| Mosh | `Alt+M` | `command -v mosh` |
-| MC | `Alt+C` | `command -v mc` |
-| Bash | `Alt+B` | `command -v ssh` |
-| Zellij | `Alt+Z` | `command -v ssh` |
-| Tmux | `Alt+T` | `command -v ssh` |
-| SFTP | `Alt+F` | `command -v sftp` |
-| Monitor | `Alt+H` | `command -v ssh` |
-| Tunnel | `Ctrl+Alt+L` | `command -v ssh` |
-| SOCKS | `Ctrl+Alt+D` | `command -v ssh` |
-
-For profiles or setup recipes missing from your config, copy the complete entries from the [example config](../ssh-menu-config.example.yml), including their inputs and script fields. Restart SSH Menu after editing. Profiles whose checks fail are hidden; if the default is unavailable, the first available profile is used. Ctrl+Q no longer quits and can be assigned to a profile. Use Esc or Ctrl+C to quit.
-
-For configurations from the earlier return-to-menu build, remove the top-level `return_to_menu` line. Use the configurable `connect_and_return` action (Alt+Enter by default) instead; see [keybindings](keybindings.md).
+An existing `~/.ssh/ssh-menu-config.yml` is never overwritten. To adopt new profiles or recipes, merge complete entries from the [commented config](../ssh-menu-config.example.yml), including their inputs and script fields. Preserve your custom commands and choose unused shortcuts. Saving through F4 validates and reloads the result; restart after external edits.

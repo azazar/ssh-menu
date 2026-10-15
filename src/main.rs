@@ -643,7 +643,7 @@ fn run() -> io::Result<()> {
     let args: Vec<_> = env::args().skip(1).collect();
     if args == ["--help"] || args == ["-h"] {
         println!(
-            "ssh-menu [--dump | --help | --version]\nInteractive SSH/Mosh picker. Reads ~/.ssh/config, ~/.bash_history and MC hotlist."
+            "ssh-menu [--dump | --help | --version]\nTerminal menu for SSH connections and remote tools. Reads ~/.ssh/config, ~/.bash_history and MC hotlist."
         );
         return Ok(());
     }

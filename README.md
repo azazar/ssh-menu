@@ -79,7 +79,7 @@ Add `~/.local/bin` to your `PATH` (in Bash or Zsh: `export PATH="$HOME/.local/bi
 
 Help is embedded in the executable. Only `ssh-menu` (or `ssh-menu.exe`) is needed; no documentation files are required for F1 help.
 
-Run `ssh-menu`, type to fuzzy-search your hosts and their SSH config settings/comments, and press Enter to connect, or use a profile shortcut to connect immediately. The single-row action bar reveals shortcuts while holding Alt, Ctrl or Ctrl+Alt. **Alt+Enter** connects and returns to the menu afterward. **Ctrl+Enter** adjusts one connection. **F2** adds a remote with optional setup. **F4** edits and validates configuration. **F1** opens the built-in documentation, including navigation help and configuration examples.
+Run `ssh-menu`, type to fuzzy-search your hosts and their SSH config settings/comments, and press Enter to connect, or use a profile shortcut to connect immediately. The single-row action bar reveals shortcuts while holding Alt, Ctrl or Ctrl+Alt. **Alt+Enter** connects and returns to the menu afterward. **Ctrl+Enter** adjusts one connection. **F2** adds a remote with optional setup. **F4** edits and validates configuration. **F1** opens the built-in documentation, including navigation help and the configuration reference.
 
 ## Documentation
 
@@ -87,7 +87,7 @@ The [documentation index](docs/README.md) covers daily use, installation, config
 
 ![Built-in documentation viewer](screenshot-help.png)
 
-Edit `~/.ssh/ssh-menu-config.yml` to customize launch profiles, setup recipes and all app keybindings. Profile `available_command` checks hide unavailable tools at startup; `key: Alt+M` adds a direct launch shortcut. The [commented example](ssh-menu-config.example.yml) contains the shipped defaults. Existing configs are preserved; see [upgrading](docs/installation.md#upgrading) to add the new bindings and availability checks.
+Edit `~/.ssh/ssh-menu-config.yml` to customize launch profiles, setup recipes and all app keybindings. Availability checks hide missing tools; profile shortcuts launch the selected host directly. The [commented example](ssh-menu-config.example.yml) contains the shipped defaults, editing guidance and configuration examples. Existing configs are preserved; see [upgrading](docs/installation.md#upgrading) when merging new defaults.
 
 ## License
 

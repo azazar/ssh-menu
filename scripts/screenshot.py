@@ -40,7 +40,7 @@ elif args.dialog:
     keys = b'\x1bOQdeploy@new.example.org:2222\t\x1b[C\x1b[C\t'
     title, output_name, quit_keys = 'NEW REMOTE', 'screenshot-new-remote.png', b'\x03\x03'
 elif args.help_viewer:
-    keys = b'\x1bOP'
+    keys = b'\x1bOP\x1b[C'
     title, output_name, quit_keys = 'HELP', 'screenshot-help.png', b'\x03\x03'
 else:
     keys = b'\x1b[C' * 4

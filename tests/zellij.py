@@ -1,19 +1,28 @@
 """Offline tests of the remote bootstrap, with controlled download/hash fixtures."""
 import io
+import itertools
 import os
 from pathlib import Path
 import re
 import subprocess
 import tarfile
 import tempfile
+import textwrap
 
 repo = Path(__file__).resolve().parents[1]
-script = repo / 'scripts/zellij-remote.sh'
-source = script.read_text()
+# Read the literal script field from the shipped recipe (no extra YAML dependency).
+config = (repo / 'ssh-menu-config.example.yml').read_text()
+block = config.split('  - name: Zellij\n', 1)[1].split('    script: |\n', 1)[1]
+source = textwrap.dedent(''.join(itertools.takewhile(
+    lambda line: line.startswith('      ') or not line.strip(), block.splitlines(keepends=True)
+))).rstrip() + '\n'
+assert source.startswith('#!/bin/sh\n'), 'Zellij recipe must contain a literal shell script'
 expected = re.search(r'expected=([0-9a-f]{64})', source).group(1)
 
 with tempfile.TemporaryDirectory(prefix='ssh-menu-zellij-test-') as directory:
     root = Path(directory)
+    script = root / 'zellij-remote.sh'
+    script.write_text(source)
     bins = root / 'bin'
     bins.mkdir()
     fake_zellij = '''#!/bin/sh
