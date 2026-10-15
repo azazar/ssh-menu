@@ -1,6 +1,6 @@
 # Setting up a remote
 
-Press **F2** to open remote setup for the selected host. With no selected host, the dialog starts in **Add new** mode.
+Press **F4** to open remote setup for the selected host. Press **Shift+F4** to open **Add new** directly with an empty address. With no selected host, F4 also starts in **Add new** mode.
 
 Use Left/Right on **Action** to switch between:
 
@@ -40,7 +40,7 @@ Each setup run selects one recipe. The terminal-tool and terminal-definition rec
 
 ## Custom inputs
 
-Recipes belong under top-level `configuration_scripts` and share the profile command format. Commented examples are in the shipped config; F4 opens your copy.
+Recipes belong under top-level `configuration_scripts` and share the profile command format. Commented examples are in the shipped config; F9 opens your copy.
 
 `promptString` creates a text field; `pickString` creates a dropdown. IDs are unique within a recipe and contain letters, digits, `_`, or `-`. `description` supplies the label, otherwise the ID is shown. Text fields default to empty; dropdowns default to their first option. The `required` flag rejects blank values.
 

@@ -20,8 +20,9 @@ Changing a profile affects only the selected host. Moving away or changing the f
 | Alt+F / Alt+H | Open SFTP / remote monitor |
 | Ctrl+Alt+L / Ctrl+Alt+D | Configure a local tunnel / SOCKS proxy |
 | F1 | Open built-in help |
-| F2 | Configure the selected host or add a new remote |
-| F4 | Edit configuration with format help and validation |
+| F4 | Configure the selected host |
+| Shift+F4 | Add a new remote |
+| F9 | Edit configuration with format help and validation |
 | F8 | Toggle plain SSH / Mosh for the selected host |
 | Backspace / Delete | Remove the last character |
 | Ctrl-Backspace / Ctrl-Delete | Remove the last word |
@@ -75,7 +76,7 @@ Use **Alt+Enter** (`connect_and_return`) to reopen the menu after the launched c
 
 **Ctrl+Enter** opens a connection dialog; profiles with inputs also open it on Enter or their shortcut. Changes are temporary and are not written to history. The terminal must support distinct modified Enter events. Press F1 in the dialog for input help; configuration examples are in the config comments.
 
-**F4** immediately launches `$VISUAL`, then `$EDITOR`, or `vi` as fallback, skipping empty values. Editor arguments are supported. If the editor fails or validation rejects the file, a recovery screen offers Edit to retry, F1 for the format reference, and Esc to keep the active configuration. After a successful editor exit, YAML, templates, inputs and shortcut conflicts are validated and profile availability is refreshed. Valid changes take effect immediately; invalid changes remain on disk for correction while the current configuration stays active. Configuration files are created only when `~/.ssh` already exists.
+**F9** immediately launches `$VISUAL`, then `$EDITOR`, or `vi` as fallback, skipping empty values. Editor arguments are supported. If the editor fails or validation rejects the file, a recovery screen offers Edit to retry, F1 for the format reference, and Esc to keep the active configuration. After a successful editor exit, YAML, templates, inputs and shortcut conflicts are validated and profile availability is refreshed. Valid changes take effect immediately; invalid changes remain on disk for correction while the current configuration stays active. Configuration files are created only when `~/.ssh` already exists.
 
 ## One-row action bar
 

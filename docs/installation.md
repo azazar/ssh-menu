@@ -92,4 +92,4 @@ Run `ssh-menu` to open the menu. Use `ssh-menu --dump` to list hosts without ope
 
 Re-run the install command for your platform to replace the executable. Check `ssh-menu --version` afterward; this release is **0.1.0-rc.4**. Help remains embedded, so no separate documentation installation is needed.
 
-An existing `~/.ssh/ssh-menu-config.yml` is never overwritten. To adopt new profiles or recipes, merge complete entries from the [commented config](../ssh-menu-config.example.yml), including their inputs and script fields. Preserve your custom commands and choose unused shortcuts. Saving through F4 validates and reloads the result; restart after external edits.
+An existing `~/.ssh/ssh-menu-config.yml` is never overwritten. To adopt new profiles or recipes, merge complete entries from the [commented config](../ssh-menu-config.example.yml), including their inputs and script fields. Preserve your custom commands and choose unused shortcuts. Saving through F9 validates and reloads the result; restart after external edits.

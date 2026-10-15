@@ -8,6 +8,6 @@ Your terminal must send a distinct Ctrl+Enter sequence (such as CSI `13;5u`). Te
 
 Profiles can declare `inputs` just like configuration scripts. Use `%{input:id}` in a command or named field; values are shell-escaped. Profiles with inputs also open this dialog on Enter or their shortcut, so required values cannot be bypassed. Input generators run when the profile is selected in the dialog. Values are cached only while that dialog is open.
 
-Configuration examples are documented in the shipped config comments; use F4 from the host list to edit your copy.
+Configuration examples are documented in the shipped config comments; use F9 from the host list to edit your copy.
 
 Both `promptString` and `pickString`, optional generator `command`, defaults, and required fields use the same format as setup inputs. Inputs are visible text: do not use them for passwords. Changes are temporary and do not modify your configuration or history. Ordinary connections still record history as usual.

@@ -154,8 +154,9 @@ fn defaults(scope: &str) -> Vec<(&'static str, &'static str, Vec<&'static str>)>
             ("connect", "Enter", vec!["Enter"]),
             ("connect_and_return", "Alt+Enter", vec!["Alt+Enter"]),
             ("connection_settings", "Ctrl+Enter", vec!["Ctrl+Enter"]),
-            ("new_remote", "F2", vec!["F2"]),
-            ("edit_config", "F4", vec!["F4"]),
+            ("configure_remote", "F4", vec!["F4"]),
+            ("new_remote", "Shift+F4", vec!["Shift+F4"]),
+            ("edit_config", "F9", vec!["F9"]),
             ("toggle_transport", "F8", vec!["F8"]),
         ]),
         "dialog" => result.extend([
@@ -174,7 +175,7 @@ fn defaults(scope: &str) -> Vec<(&'static str, &'static str, Vec<&'static str>)>
         ]),
         "editor" => result.extend([
             ("cancel", "Esc", vec!["Esc", "Ctrl+C"]),
-            ("edit", "Enter", vec!["Enter", "F4"]),
+            ("edit", "Enter", vec!["Enter", "F9"]),
         ]),
         _ => {}
     }

@@ -393,7 +393,8 @@ fn menu(
                     bar::Item::action(keys, "menu", "connect", "Open", 2),
                     bar::Item::action(keys, "menu", "connect_and_return", "Return", 4),
                     bar::Item::action(keys, "menu", "connection_settings", "Edit", 5),
-                    bar::Item::action(keys, "menu", "new_remote", "Setup", 6),
+                    bar::Item::action(keys, "menu", "configure_remote", "Setup", 6),
+                    bar::Item::action(keys, "menu", "new_remote", "New", 8),
                     bar::Item::action(keys, "menu", "edit_config", "Config", 7),
                     bar::Item::action(keys, "menu", "help", "Help", 0),
                     bar::Item::action(keys, "menu", "quit", "Quit", 1),
@@ -488,16 +489,20 @@ fn menu(
                     bar_state.reset();
                     help::show(terminal, help::Context::Hosts, config)?;
                 }
-                KeyCode::F(4) => {
+                KeyCode::F(9) => {
                     bar_state.reset();
                     editor::edit(terminal, home, config, profiles)?;
                 }
-                KeyCode::F(2) => {
+                KeyCode::F(4) => {
                     bar_state.reset();
                     if let Some(mut selection) = new_remote::dialog(
                         terminal,
                         config,
-                        visible.get(*selection).map(|i| &targets[*i]),
+                        if key.modifiers.contains(KeyModifiers::SHIFT) {
+                            None
+                        } else {
+                            visible.get(*selection).map(|i| &targets[*i])
+                        },
                     )? {
                         if !selection.configure_only
                             && !config.profiles[selection.profile].inputs.is_empty()

@@ -79,7 +79,7 @@ pub(super) fn edit(
             KeyCode::Esc => return Ok(()),
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return Ok(()),
             KeyCode::F(1) => help::show(terminal, help::Context::Configuration, config)?,
-            KeyCode::Enter | KeyCode::F(4) => edit_requested = true,
+            KeyCode::Enter => edit_requested = true,
             _ => {}
         }
     }

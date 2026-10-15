@@ -38,10 +38,10 @@ elif args.connection:
     keys = b'\x1b[13;5u'
     title, output_name, quit_keys = 'CONNECT', 'screenshot-connection.png', b'\x03\x03'
 elif args.configure:
-    keys = b'\x1bOQ\t\t\x1b[C\t'
+    keys = b'\x1bOS\t\t\x1b[C\t'
     title, output_name, quit_keys = 'REMOTE SETUP', 'screenshot-configure-remote.png', b'\x03\x03'
 elif args.dialog:
-    keys = b'\x1bOQ\x1b[C\tdeploy@new.example.org:2222\t\x1b[C\x1b[C\t'
+    keys = b'\x1b[1;2Sdeploy@new.example.org:2222\t\x1b[C\x1b[C\t'
     title, output_name, quit_keys = 'REMOTE SETUP', 'screenshot-new-remote.png', b'\x03\x03'
 elif args.help_viewer:
     keys = b'\x1bOP\x1b[C'

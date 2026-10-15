@@ -12,8 +12,8 @@ import tempfile
 import termios
 import time
 
-# F2 starts on the selected host; choose Add new and focus its blank remote.
-ADD_REMOTE = b"\x1bOQ\x1b[C\t"
+# Shift+F4 opens Add new directly, focused on its blank remote.
+ADD_REMOTE = b"\x1b[1;2S"
 
 source_binary = Path(sys.argv[1]).resolve()
 with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
@@ -231,26 +231,26 @@ configuration_scripts:
     before = (root / ".bash_history").read_text()
     config_before = (root / ".ssh/config").read_text()
     (root / "command").unlink(missing_ok=True)
-    output = session([b"added:2222", b"\x1bOQ", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
+    output = session([b"added:2222", b"\x1bOS", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
     assert b"Configure host" in output and b"completed" in output
     assert (root / "command.setup").read_text().splitlines() == ["added", "2222", "literal ; $HOME"]
     assert not (root / "command").exists(), "configure-only launched a connection"
     assert (root / ".bash_history").read_text() == before
     assert (root / ".ssh/config").read_text() == config_before
     child_env["SETUP_EXIT"] = "7"
-    output = session([b"added:2222", b"\x1bOQ", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
+    output = session([b"added:2222", b"\x1bOS", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
     assert b"failed" in output and not (root / "command").exists()
     assert (root / ".bash_history").read_text() == before
     del child_env["SETUP_EXIT"]
     # No recipe means no side effects; cancelling and changing modes preserve drafts.
     (root / "command.setup").unlink()
-    output = session([b"added:2222", b"\x1bOQ", b"\r", b"\x1b", b"\x03"])
+    output = session([b"added:2222", b"\x1bOS", b"\r", b"\x1b", b"\x03"])
     assert b"Choose a setup recipe" in output
     assert not (root / "command.setup").exists()
-    session([b"added:2222", b"\x1bOQ", b"\x1b[C", b"\t", b"draft", b"\x1b[Z", b"\x1b[D", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
+    session([b"added:2222", b"\x1bOS", b"\x1b[C", b"\t", b"draft", b"\x1b[Z", b"\x1b[D", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
     assert (root / "command.setup").read_text().splitlines()[:2] == ["added", "2222"]
-    # With no selected match, F2 still starts with an empty Add new form.
-    session([b"no-such-host", b"\x1bOQ", b"no-selection", b"\r"])
+    # With no selected match, F4 still starts with an empty Add new form.
+    session([b"no-such-host", b"\x1bOS", b"no-selection", b"\r"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "no-selection"]
     # Script-specific fields, required validation, choices, cancellation and literal input.
     config_file.write_text("""default: SSH
@@ -278,7 +278,7 @@ configuration_scripts:
     command: ssh -- %h %{input:launch}
     inputs: [{id: launch, type: promptString, required: true}]"""))
     (root / "command").unlink()
-    output = session([b"added:2222", b"\x1bOQ", b"\t", b"\t", b"\x1b[C", b"\r",
+    output = session([b"added:2222", b"\x1bOS", b"\t", b"\t", b"\x1b[C", b"\r",
                       b"configure-value", b"\t", b"\x1b[C", b"\x1b\r", b"\x03"], rows=9, cols=90)
     assert b"is required" in output and b"completed" in output
     assert (root / "command.setup").read_text().splitlines() == ["added", "configure-value", "full"]
@@ -482,22 +482,22 @@ profiles:
     editor.chmod(0o755)
     child_env["VISUAL"] = str(editor)
     (root / "edited.yml").write_text("default: Custom\nprofiles: [{name: Custom, command: 'custom-connect %h'}]\n")
-    output = session([b"alpha", b"\x1bOS", b"\r"])
+    output = session([b"alpha", b"\x1b[20~", b"\r"])
     assert output.count(b"SSH_MENU_EDITOR") == 1
     assert b"CONFIGURATION" not in output
     assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
     # Empty environment values fall through to EDITOR, then vi.
     child_env["VISUAL"] = " "
     child_env["EDITOR"] = str(editor)
-    output = session([b"\x1bOS", b"\x03"])
+    output = session([b"\x1b[20~", b"\x03"])
     assert output.count(b"SSH_MENU_EDITOR") == 1
     shutil.copy2(editor, root / "bin/vi")
     child_env["EDITOR"] = ""
-    output = session([b"\x1bOS", b"\x03"])
+    output = session([b"\x1b[20~", b"\x03"])
     assert output.count(b"SSH_MENU_EDITOR") == 1
     child_env["VISUAL"] = str(editor)
     (root / "edited.yml").write_text("profiles: [broken\n")
-    output = session([b"alpha", b"\x1bOS", b"\x1bOP", b"\x1bOP", b"\r", b"\x1b", b"\r"])
+    output = session([b"alpha", b"\x1b[20~", b"\x1bOP", b"\x1bOP", b"\r", b"\x1b", b"\r"])
     assert output.count(b"SSH_MENU_EDITOR") == 2
     assert b"Configuration not reloaded" in output
     assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
@@ -511,7 +511,8 @@ keybindings:
     connect_and_return: [Ctrl+R]
     connection_settings: [F5]
     help: [F6]
-    new_remote: [F9]
+    new_remote: [F2]
+    configure_remote: [F9]
     edit_config: [F10]
     quit: [Ctrl+Q]
   dialog:
@@ -537,7 +538,7 @@ keybindings:
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     output = session([b"alpha", b"\x1b[15~", b"\r", b"\x1b[15~", b"\x11"])
     assert output.count(b"SSH_MENU_HANDOFF") == 1
-    session([b"\x1b[20~\x1b[C\t", b"new-rebound", b"\x1bOR"])
+    session([b"\x1bOQ", b"new-rebound", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "new-rebound"]
     config_file.write_text(config_file.read_text() + "\nconfiguration_scripts: [{name: Rebound setup, command: 'setup-test %h'}]\n")
     (root / "command").unlink()

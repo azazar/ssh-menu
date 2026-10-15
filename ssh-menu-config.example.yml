@@ -1,5 +1,5 @@
 # ~/.ssh/ssh-menu-config.yml
-# F4 edits this file and validates/reloads it after saving. Existing files are
+# F9 edits this file and validates/reloads it after saving. Existing files are
 # never overwritten on upgrade; merge desired profiles/recipes from the defaults.
 # Commands and scripts are trusted shell code. Checks and generators run locally.
 #
@@ -21,7 +21,7 @@
 #
 # available_command: quick, noninteractive local sh -c check, without placeholders.
 # Exit 0 keeps the entry; other statuses hide it. Profile checks run at load/reload;
-# setup checks run when F2 opens. No check means always available. Output is ignored.
+# setup checks run when F4 opens. No check means always available. Output is ignored.
 # These checks do not test remote connectivity or remote tool availability.
 default: SSH
 # Binding reference: omitted actions keep defaults; [] disables an action.
@@ -38,8 +38,9 @@ keybindings:
     connect_and_return: [Alt+Enter]
     connection_settings: [Ctrl+Enter]
     # help: [F1]
-    # new_remote: [F2]
-    # edit_config: [F4]
+    # configure_remote: [F4]
+    # new_remote: [Shift+F4]
+    # edit_config: [F9]
     # toggle_transport: [F8]
     # quit: [Esc, Ctrl+C]
     # up: [Up]
@@ -74,7 +75,7 @@ keybindings:
     # end: [End]
   # editor:
     # help: [F1]
-    # edit: [Enter, F4]
+    # edit: [Enter, F9]
     # cancel: [Esc, Ctrl+C]
 
 profiles:
@@ -209,7 +210,7 @@ profiles:
     script: |
       set -eu
       command -v btop >/dev/null 2>&1 || {
-        echo 'Monitor requires btop on the remote. Use F2 > Install terminal tools > btop, or install it with the remote package manager.' >&2
+        echo 'Monitor requires btop on the remote. Use F4 > Install terminal tools > btop, or install it with the remote package manager.' >&2
         exit 1
       }
       # Isolate the dashboard from the user's regular btop configuration.
@@ -250,7 +251,8 @@ profiles:
       printf 'SOCKS proxy on 127.0.0.1:%s. Ctrl+C stops the proxy.\n' "$listen"
       exec ssh ${port:+-p "$port"} -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -D "127.0.0.1:$listen" -- %h
 
-# F2 configures the selected host; switch Action to Add new to add and connect.
+# F4 configures the selected host; Shift+F4 opens Add new to add and connect.
+# You can also switch between these modes using the Action field.
 # Configure host runs one recipe and returns to the menu without saving history.
 # None is selected by default; a recipe is required only in Configure host mode.
 # Same command templates and named fields as launch profiles; runs locally.

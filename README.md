@@ -25,7 +25,7 @@ Find a machine, choose how to connect, and press Enter. SSH Menu brings your SSH
 | **Tunnel / SOCKS** | Ctrl+Alt+L / Ctrl+Alt+D | A localhost port forward or SOCKS proxy, with editable settings |
 | **Your own profile** | Configurable | Any command or remote script defined in YAML |
 
-Hosts come from SSH config, Bash history, and Midnight Commander bookmarks. Launch choices are remembered through history, so you can return to the same machine with the same tool. Press **F2** to configure the selected host or add a new remote, choose an SSH keypair (or generate one when none exists), and optionally install dotfiles. Other setup recipes install terminal tools or copy your terminal definition to the remote.
+Hosts come from SSH config, Bash history, and Midnight Commander bookmarks. Launch choices are remembered through history, so you can return to the same machine with the same tool. Press **F4** to configure the selected host or **Shift+F4** to add a new remote, choose an SSH keypair (or generate one when none exists), and optionally install dotfiles. Other setup recipes install terminal tools or copy your terminal definition to the remote.
 
 Written in Rust with [Ratatui](https://ratatui.rs/), SSH Menu uses a compact, borderless [Catppuccin Mocha](https://catppuccin.com/palette/) interface. Linux builds are static executables. SSH, Mosh, and other connection tools run as separate programs, with your terminal restored before handoff.
 
@@ -79,7 +79,7 @@ Add `~/.local/bin` to your `PATH` (in Bash or Zsh: `export PATH="$HOME/.local/bi
 
 Help is embedded in the executable. Only `ssh-menu` (or `ssh-menu.exe`) is needed; no documentation files are required for F1 help.
 
-Run `ssh-menu`, type to fuzzy-search your hosts and their SSH config settings/comments, and press Enter to connect, or use a profile shortcut to connect immediately. The single-row action bar reveals shortcuts while holding Alt, Ctrl or Ctrl+Alt. **Alt+Enter** connects and returns to the menu afterward. **Ctrl+Enter** adjusts one connection. **F2** configures the selected host or adds a new remote. **F4** edits and validates configuration. **F1** opens the built-in documentation, including navigation help and the configuration reference.
+Run `ssh-menu`, type to fuzzy-search your hosts and their SSH config settings/comments, and press Enter to connect, or use a profile shortcut to connect immediately. The single-row action bar reveals shortcuts while holding Alt, Ctrl or Ctrl+Alt. **Alt+Enter** connects and returns to the menu afterward. **Ctrl+Enter** adjusts one connection. **F4** configures the selected host. **Shift+F4** adds a new remote. **F9** edits and validates configuration. **F1** opens the built-in documentation, including navigation help and the configuration reference.
 
 ## Documentation
 
