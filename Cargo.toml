@@ -1,6 +1,6 @@
 [package]
 name = "ssh-menu"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 edition = "2024"
 license = "GPL-3.0-only"
 description = "A fast SSH and Mosh connection picker built with Ratatui"

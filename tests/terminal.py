@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import pty
 import select
+import shutil
 import struct
 import subprocess
 import sys
@@ -11,9 +12,12 @@ import tempfile
 import termios
 import time
 
-binary = str(Path(sys.argv[1]).resolve())
+source_binary = Path(sys.argv[1]).resolve()
 with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
     root = Path(directory)
+    # Exercise a single-file installation, with no docs beside it or in the cwd.
+    binary = str(root / "ssh-menu")
+    shutil.copy2(source_binary, binary)
     (root / ".ssh").mkdir()
     (root / ".ssh/id_ed25519").write_text("fake private key")
     (root / ".ssh/id_ed25519.pub").write_text("fake public key")
@@ -38,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
         before = termios.tcgetattr(slave)
         tty_before = subprocess.check_output(["stty", "-g"], stdin=slave).strip()
         (root / "command.tty").unlink(missing_ok=True)
-        process = subprocess.Popen([binary], stdin=slave, stdout=slave, stderr=slave, env=child_env)
+        process = subprocess.Popen([binary], stdin=slave, stdout=slave, stderr=slave, env=child_env, cwd=root)
         output = bytearray()
         def read_for(seconds):
             end = time.monotonic() + seconds
