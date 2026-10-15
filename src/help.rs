@@ -1,5 +1,5 @@
 use crate::*;
-use ratatui::{Frame, widgets::Wrap};
+use ratatui::{Frame, layout::Alignment, widgets::Wrap};
 
 #[derive(Clone, Copy)]
 pub(super) enum Context {
@@ -71,6 +71,12 @@ impl Help {
             Constraint::Length(2),
         ])
         .split(frame.area());
+        let version = concat!("v", env!("CARGO_PKG_VERSION"));
+        let header = Layout::horizontal([
+            Constraint::Min(0),
+            Constraint::Length(version.len() as u16 + 1),
+        ])
+        .split(areas[0]);
         let mut tabs = vec![Span::styled(
             " HELP ",
             Style::default()
@@ -78,7 +84,7 @@ impl Help {
                 .bg(theme::LAVENDER)
                 .add_modifier(Modifier::BOLD),
         )];
-        if frame.area().width < 65 {
+        if header[0].width < 65 {
             tabs.push(Span::raw(format!(
                 " {}/{} {}",
                 self.topic + 1,
@@ -100,7 +106,13 @@ impl Help {
                 ));
             }
         }
-        frame.render_widget(Paragraph::new(Line::from(tabs)), areas[0]);
+        frame.render_widget(Paragraph::new(Line::from(tabs)), header[0]);
+        frame.render_widget(
+            Paragraph::new(version)
+                .alignment(Alignment::Right)
+                .style(Style::default().fg(theme::SUBTEXT)),
+            header[1],
+        );
         let options = tui_markdown::Options::new(HelpStyle).table_width(areas[1].width.max(1));
         let text = tui_markdown::from_str_with_options(self.topics[self.topic].1, &options);
         let paragraph = Paragraph::new(text).wrap(Wrap { trim: false });
