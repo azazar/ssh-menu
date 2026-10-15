@@ -6,6 +6,7 @@ from pathlib import Path
 import pty
 import re
 import select
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -17,6 +18,7 @@ import pyte
 
 parser = argparse.ArgumentParser(description=__doc__)
 modes = parser.add_mutually_exclusive_group()
+modes.add_argument('--install-prompt', action='store_true', help='capture a missing-tool prompt with isolated fake tools')
 modes.add_argument('--search', action='store_true', help='capture a search matching config comments')
 modes.add_argument('--monitor', action='store_true', help='capture the real btop dashboard (requires local btop)')
 modes.add_argument('--shift-shortcuts', action='store_true', help='capture the Shift shortcut bar')
@@ -26,7 +28,10 @@ modes.add_argument('--configure', action='store_true', help='capture setup for t
 modes.add_argument('--dialog', action='store_true', help='capture the new-remote dialog')
 modes.add_argument('--help-viewer', action='store_true', help='capture built-in help')
 args = parser.parse_args()
-if args.search:
+if args.install_prompt:
+    keys = b'\x1bc'
+    title, output_name, quit_keys = 'Install mc? [y/N]', 'screenshot-install-prompt.png', b'n\n'
+elif args.search:
     keys = b'maintenance'
     title, output_name, quit_keys = 'SSH MENU', 'screenshot-search.png', b'\x03'
 elif args.monitor:
@@ -56,7 +61,7 @@ else:
 
 repo = Path(__file__).resolve().parents[1]
 binary = repo / 'target/x86_64-unknown-linux-musl/release/ssh-menu'
-cols, rows = (110, 30) if args.monitor else (90, 22)
+cols, rows = (110, 30) if args.monitor else (90, 5) if args.install_prompt else (90, 22)
 screen = pyte.Screen(cols, rows)
 stream = pyte.ByteStream(screen)
 with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
@@ -102,6 +107,10 @@ profiles:
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
     child_env = dict(os.environ, HOME=str(home), USER='demo', TERM='xterm-256color',
                      PATH=str(home / 'bin') + os.pathsep + os.environ['PATH'])
+    if args.install_prompt:
+        (home / 'bin/mc').unlink()
+        (home / 'bin/sh').symlink_to(shutil.which('sh'))
+        child_env['PATH'] = str(home / 'bin')
     child_env.pop('NO_COLOR', None)
     child = subprocess.Popen([str(binary)], stdin=slave, stdout=slave, stderr=slave,
                              env=child_env)
@@ -110,12 +119,20 @@ profiles:
         deadline = time.monotonic() + (4 if args.monitor else 1)
         while time.monotonic() < deadline:
             if select.select([master], [], [], 0.05)[0]:
-                stream.feed(os.read(master, 65536))
+                data = os.read(master, 65536)
+                if args.install_prompt and b'\x1b[?1049l' in data:
+                    # pyte has no alternate-screen buffer: restore this PTY's blank normal screen.
+                    screen.reset()
+                    data = data.rsplit(b'\x1b[?1049l', 1)[1]
+                stream.feed(data)
                 if not keys_sent and any('SSH MENU' in line for line in screen.display):
                     os.write(master, keys)
                     keys_sent = True
         assert any(title in line for line in screen.display), screen.display
         os.write(master, quit_keys)
+        if args.install_prompt:
+            time.sleep(0.2)
+            os.write(master, b'\x03')
         child.wait(timeout=3)
         assert child.returncode == 0
     finally:

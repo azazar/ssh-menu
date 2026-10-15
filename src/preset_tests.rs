@@ -5,9 +5,10 @@ use crate::{
 };
 use std::{
     fs,
+    io::Write,
     os::unix::fs::{PermissionsExt, symlink},
     path::PathBuf,
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
 };
 
 struct Sandbox(PathBuf);
@@ -38,6 +39,15 @@ impl Sandbox {
         .unwrap();
     }
     fn run(&self, profile: &Profile, port: Option<&str>, input: Option<(&str, &str)>) -> Output {
+        self.run_input(profile, port, input, b"")
+    }
+    fn run_input(
+        &self,
+        profile: &Profile,
+        port: Option<&str>,
+        input: Option<(&str, &str)>,
+        stdin: &[u8],
+    ) -> Output {
         let mut values = profile.input_defaults();
         if let Some((id, value)) = input {
             values.insert(id.into(), value.into());
@@ -51,15 +61,20 @@ impl Sandbox {
                 &values,
             )
             .unwrap();
-        Command::new("/bin/sh")
+        let mut child = Command::new("/bin/sh")
             .current_dir(&self.0)
             .args(args)
             .env("PATH", self.0.join("bin"))
             .env("HOME", &self.0)
             .env("TMPDIR", &self.0)
             .env("TERM", "test-terminal")
-            .output()
-            .unwrap()
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child.stdin.take().unwrap().write_all(stdin).unwrap();
+        child.wait_with_output().unwrap()
     }
 }
 impl Drop for Sandbox {
@@ -99,10 +114,9 @@ fn shipped_transports_preserve_ports_and_tunnel_arguments() {
             stdout(env.run(&profile("SFTP"), port, None)),
             format!("{sftp_port}<-->\n<user@host>\n")
         );
-        assert_eq!(
-            stdout(env.run(&profile("Tmux"), port, None)),
-            format!("{ssh_port}<-tt>\n<-->\n<user@host>\n<exec tmux new-session -A -s main>\n")
-        );
+        let tmux = stdout(env.run(&profile("Tmux"), port, None));
+        assert!(tmux.starts_with(&format!("{ssh_port}<-tt>\n<-->\n<user@host>\n<sh -c ")));
+        assert!(tmux.contains("exec tmux new-session -A -s main"));
         for (name, flag, value) in [("Tunnel", "L", "8080:localhost:80"), ("SOCKS", "D", "1080")] {
             let out = stdout(env.run(&profile(name), port, None));
             assert!(out.contains(&format!("{ssh_port}<-N>\n<-T>")), "{out}");
@@ -134,7 +148,7 @@ fn monitor_uses_isolated_dashboard_and_cleans_up_on_failure() {
     }
     let missing = env.run(&p, None, None);
     assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("requires btop"));
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("btop is missing on the remote"));
     fs::create_dir_all(env.0.join(".config/btop")).unwrap();
     let personal = env.0.join(".config/btop/btop.conf");
     fs::write(&personal, "personal configuration").unwrap();
@@ -158,12 +172,12 @@ fn monitor_uses_isolated_dashboard_and_cleans_up_on_failure() {
 }
 
 #[test]
-fn package_recipe_selects_manager_and_propagates_failure() {
+fn profile_installer_selects_manager_and_propagates_failure() {
     let env = Sandbox::new("packages");
     env.stub("id", "echo 1000");
     env.stub("sudo", "printf 'sudo\\n'; shift; exec \"$@\"");
-    let mut p = profile("Install terminal tools");
-    p.command = "sh -c %{remote}".into();
+    let mut p = profile("SSH");
+    p.command = "sh -c %{install} -- tmux tmux".into();
     assert!(!env.run(&p, None, None).status.success());
     for (manager, args) in [
         ("brew", "install"),
@@ -178,22 +192,28 @@ fn package_recipe_selects_manager_and_propagates_failure() {
         let prefix = if manager == "brew" { "" } else { "sudo\n" };
         assert_eq!(
             stdout(env.run(&p, None, None)),
-            format!("{prefix}{args}\ntmux\nbtop\n")
+            format!("{prefix}{args}\ntmux\n")
         );
+        p.command = "sh -c %{install} -- openssh sftp".into();
+        let package = match manager {
+            "apt-get" => "openssh-client",
+            "dnf" | "yum" => "openssh-clients",
+            "apk" => "openssh-sftp-client",
+            _ => "openssh",
+        };
         assert_eq!(
-            stdout(env.run(&p, None, Some(("tools", "mosh")))),
-            format!("{prefix}{args}\nmosh\n")
+            stdout(env.run(&p, None, None)),
+            format!("{prefix}{args}\n{package}\n")
         );
+        p.command = "sh -c %{install} -- tmux tmux".into();
         env.stub(manager, "exit 42");
         assert_eq!(env.run(&p, None, None).status.code(), Some(42));
         fs::remove_file(env.0.join("bin").join(manager)).unwrap();
     }
     env.stub("id", "echo 0");
     env.stub("apt-get", "printf '%s\\n' \"$@\"");
-    assert_eq!(
-        stdout(env.run(&p, None, Some(("tools", "btop")))),
-        "install\nbtop\n"
-    );
+    p.command = "sh -c %{install} -- btop btop".into();
+    assert_eq!(stdout(env.run(&p, None, None)), "install\nbtop\n");
 }
 
 #[test]
@@ -228,4 +248,36 @@ fn terminal_definition_is_exported_before_ssh_and_temp_files_are_removed() {
     env.stub("infocmp", "echo partial; exit 1");
     assert!(!env.run(&p, None, None).status.success());
     assert!(!env.0.join("contacted").exists());
+}
+
+#[test]
+fn dependency_installation_requires_consent_and_verifies_the_result() {
+    let env = Sandbox::new("dependency");
+    let mut p = profile("SSH");
+    p.command = "sh -c %{ensure} -- wanted wanted 'this machine' %{install}".into();
+    env.stub(
+        "brew",
+        "printf '#!/bin/sh\\nexit 0\\n' > \"$HOME/bin/wanted\"; /bin/chmod +x \"$HOME/bin/wanted\"",
+    );
+    for reply in [b"n\n".as_slice(), b"\n", b""] {
+        let result = env.run_input(&p, None, None, reply);
+        assert!(!result.status.success());
+        assert!(String::from_utf8_lossy(&result.stderr).contains("Install wanted? [y/N]"));
+        assert!(!env.0.join("bin/wanted").exists());
+    }
+    assert!(env.run_input(&p, None, None, b"yes\n").status.success());
+    assert!(
+        env.run(&p, None, None).stderr.is_empty(),
+        "installed tools must not prompt"
+    );
+    fs::remove_file(env.0.join("bin/wanted")).unwrap();
+    env.stub("brew", "exit 42");
+    assert_eq!(
+        env.run_input(&p, None, None, b"y\n").status.code(),
+        Some(42)
+    );
+    env.stub("brew", "exit 0");
+    let result = env.run_input(&p, None, None, b"y\n");
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("still unavailable"));
 }

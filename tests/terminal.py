@@ -107,7 +107,9 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
     assert command[0].endswith("/mc"), command
     assert command[1:] == ["/sh://beta:2222/"], command
     session([b"beta:2222", b"\x1b[C", b"\r"])  # Right from remembered MC to Bash
-    assert (root / "command").read_text().splitlines()[1:] == ["-p", "2222", "-tt", "--", "beta", "exec bash -l"]
+    command = (root / "command").read_text().splitlines()
+    assert command[1:6] == ["-p", "2222", "-tt", "--", "beta"]
+    assert "exec bash -l" in "\n".join(command[6:])
     assert config_file.read_text() == original_config, "existing config was overwritten"
     session([b"beta:2222", b"\x1b[C", b"\r"])  # Bash -> Zellij
     command = (root / "command").read_text().splitlines()
@@ -125,10 +127,12 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
     session([b"beta:2222", b"\r"])  # Zellij is restored from the single-line history entry.
     assert "\n".join((root / "command").read_text().splitlines()[6:]) == remote_command
     # New direct shortcuts and input-bearing forwarding profiles use normal handoff.
-    for key, suffix in [(b"\x1bt", ["-tt", "--", "beta", "exec tmux new-session -A -s main"]),
-                        (b"\x1bf", ["-P", "2222", "--", "beta"])]:
-        session([b"beta:2222", key])
-        assert (root / "command").read_text().splitlines()[-len(suffix):] == suffix
+    session([b"beta:2222", b"\x1bt"])
+    command = (root / "command").read_text().splitlines()
+    assert command[1:6] == ["-p", "2222", "-tt", "--", "beta"]
+    assert "exec tmux new-session -A -s main" in "\n".join(command[6:])
+    session([b"beta:2222", b"\x1bf"])
+    assert (root / "command").read_text().splitlines()[1:] == ["-P", "2222", "--", "beta"]
     session([b"beta:2222", b"\x1bh"])
     assert 'shown_boxes = "cpu mem net"' in (root / "command").read_text()
     for key, flag, value in [(b"\x1b[108;7u", "-L", "127.0.0.1:8080:localhost:80"),
@@ -378,6 +382,20 @@ configuration_scripts:
     session([b"\x1bOP", b"\x11", b"\x1bOP", b"\x03"])
     output = session([ADD_REMOTE, b"\x11", b"ctrlq-host", b"\r"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "ctrlq-host"]
+    # Preparation runs with a restored tty and must succeed before connection/history.
+    prepare = root / "bin/prepare-test"
+    prepare.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SSH_MENU_TEST_LOG.prepare"\nstty -g > "$SSH_MENU_TEST_LOG.setup-tty"\nprintf "Install test dependency? [y/N] "\nread -r reply\n[ "$reply" = y ]\n')
+    prepare.chmod(0o755)
+    config_file.write_text("default: SSH\nprofiles: [{name: SSH, command: 'ssh -- %h', prepare_command: 'prepare-test %h %p %{literal}', literal: 'a ; $HOME'}]\n")
+    before = (root / ".bash_history").read_text()
+    (root / "command").unlink(missing_ok=True)
+    output = session([b"help-host:2222", b"\r", b"n\n", b"\x03"])
+    assert b"preparation cancelled or failed" in output
+    assert not (root / "command").exists() and (root / ".bash_history").read_text() == before
+    assert (root / "command.prepare").read_text().splitlines() == ["help-host", "2222", "a ; $HOME"]
+    session([b"help-host:2222", b"\r", b"y\n"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "help-host"]
+    assert "prepare-test" not in (root / ".bash_history").read_text()
     # Launch availability is evaluated once at load, before history and navigation.
     config_file.write_text("""default: Missing
 profiles:

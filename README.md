@@ -25,7 +25,7 @@ Find a machine, choose how to connect, and press Enter. SSH Menu brings your SSH
 | **Tunnel / SOCKS** | Ctrl+Alt+L / Ctrl+Alt+D | A localhost port forward or SOCKS proxy, with editable settings |
 | **Your own profile** | Configurable | Any command or remote script defined in YAML |
 
-Hosts come from SSH config, Bash history, and Midnight Commander bookmarks. Launch choices are remembered through history, so you can return to the same machine with the same tool. Press **F4** to configure the selected host or **Shift+F4** to add a new remote, choose an SSH keypair (or generate one when none exists), and optionally install dotfiles. Other setup recipes install terminal tools or copy your terminal definition to the remote.
+Hosts come from SSH config, Bash history, and Midnight Commander bookmarks. Launch choices are remembered through history, so you can return to the same machine with the same tool. Press **F4** to configure the selected host or **Shift+F4** to add a new remote, choose an SSH keypair (or generate one when none exists), and optionally install dotfiles. Setup can also copy your terminal definition. Launch profiles offer to install their missing tools when you use them.
 
 Written in Rust with [Ratatui](https://ratatui.rs/), SSH Menu uses a compact, borderless [Catppuccin Mocha](https://catppuccin.com/palette/) interface. Linux builds are static executables. SSH, Mosh, and other connection tools run as separate programs, with your terminal restored before handoff.
 
@@ -87,7 +87,7 @@ The [documentation index](docs/README.md) covers daily use, installation, config
 
 ![Built-in documentation viewer](screenshot-help.png)
 
-Edit `~/.ssh/ssh-menu-config.yml` to customize launch profiles, setup recipes and all app keybindings. Availability checks hide missing tools; profile shortcuts launch the selected host directly. The [commented example](ssh-menu-config.example.yml) contains the shipped defaults, editing guidance and configuration examples. Existing configs are preserved; see [upgrading](docs/installation.md#upgrading) when merging new defaults.
+Edit `~/.ssh/ssh-menu-config.yml` to customize launch profiles, setup recipes and all app keybindings. Default profiles offer installation of missing dependencies before continuing; profile shortcuts launch the selected host directly. The [commented example](ssh-menu-config.example.yml) contains the shipped defaults, editing guidance and configuration examples. Existing configs are preserved; see [upgrading](docs/installation.md#upgrading) when merging new defaults.
 
 ## License
 

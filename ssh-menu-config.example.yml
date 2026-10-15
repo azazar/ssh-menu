@@ -4,7 +4,7 @@
 # Commands and scripts are trusted shell code. Checks and generators run locally.
 #
 # Profile fields: name (unique), command (required), key, available_command,
-# inputs, and arbitrary string fields referenced by %{field}.
+# prepare_command, inputs, and arbitrary string fields referenced by %{field}.
 # default names a profile. Left/Right changes only the selected host's profile.
 #
 # Templates: %h = user@host; %p = explicit port or empty; %t = user@host[:port];
@@ -23,6 +23,14 @@
 # Exit 0 keeps the entry; other statuses hide it. Profile checks run at load/reload;
 # setup checks run when F4 opens. No check means always available. Output is ignored.
 # These checks do not test remote connectivity or remote tool availability.
+# Default profiles instead offer dependency installation when launched.
+# prepare_command runs locally with the terminal restored, before setup/connect/history.
+# Exit 0 continues; any failure/cancellation returns to the menu. It supports %h,
+# %p, %t and named fields, but not dialog inputs. It is only for launch profiles.
+# Remote requirements are checked inside the remote command (Mosh uses a preliminary
+# SSH session). Helpers ask before installing and verify the executable afterward.
+# YAML *ensure/*install aliases refer to anchors in SSH; copy those fields too
+# when adopting an individual profile in an existing config.
 default: SSH
 # Binding reference: omitted actions keep defaults; [] disables an action.
 # Uncomment entries to override them; merge within each scope, not a second map.
@@ -82,24 +90,90 @@ keybindings:
 profiles:
   - name: SSH
     key: Alt+S
-    available_command: command -v ssh
+    prepare_command: &prepare_ssh sh -c %{ensure} -- ssh openssh 'this machine' %{install}
+    # Helpers are ordinary template fields, reused with YAML anchors below.
+    ensure: &ensure |
+      set -eu
+      tool=$1
+      package=$2
+      location=$3
+      command -v "$tool" >/dev/null 2>&1 && exit 0
+      printf '%s is missing on %s. Install %s? [y/N] ' "$tool" "$location" "$package" >&2
+      IFS= read -r answer || exit 1
+      case "$answer" in y|Y|yes|YES) ;; *) echo 'Installation cancelled.' >&2; exit 1 ;; esac
+      sh -c "$4" -- "$package" "$tool"
+      command -v "$tool" >/dev/null 2>&1 || {
+        printf '%s is still unavailable after installation. Check PATH or install it manually.\n' "$tool" >&2
+        exit 1
+      }
+    install: &install |
+      set -eu
+      package=$1
+      tool=$2
+      # Use configured repositories; preserve package-manager and sudo prompts.
+      if command -v brew >/dev/null 2>&1; then
+        exec brew install "$package"
+      elif command -v apt-get >/dev/null 2>&1; then
+        [ "$package" != openssh ] || package=openssh-client
+        set -- apt-get install "$package"
+      elif command -v dnf >/dev/null 2>&1; then
+        [ "$package" != openssh ] || package=openssh-clients
+        set -- dnf install "$package"
+      elif command -v yum >/dev/null 2>&1; then
+        [ "$package" != openssh ] || package=openssh-clients
+        set -- yum install "$package"
+      elif command -v pacman >/dev/null 2>&1; then
+        set -- pacman -S --needed "$package"
+      elif command -v zypper >/dev/null 2>&1; then
+        set -- zypper install "$package"
+      elif command -v apk >/dev/null 2>&1; then
+        if [ "$package" = openssh ]; then
+          case "$tool" in sftp) package=openssh-sftp-client ;; *) package=openssh-client ;; esac
+        fi
+        set -- apk add "$package"
+      else
+        printf 'No supported package manager found. Install %s manually.\n' "$package" >&2
+        exit 1
+      fi
+      if [ "$(id -u)" = 0 ]; then exec "$@"; fi
+      command -v sudo >/dev/null 2>&1 || { echo 'Installation requires root or sudo.' >&2; exit 1; }
+      exec sudo -- "$@"
     command: port=%p; exec ssh ${port:+-p "$port"} -- %h
   - name: Mosh
     key: Alt+M
-    available_command: command -v mosh
+    prepare_command: |
+      sh -c %{ensure} -- ssh openssh 'this machine' %{install} || exit $?
+      sh -c %{ensure} -- mosh mosh 'this machine' %{install} || exit $?
+      port=%p
+      ssh ${port:+-p "$port"} -tt -- %h %{check_remote}
+    check_remote: sh -c %{ensure} -- mosh-server mosh 'the remote' %{install}
+    ensure: *ensure
+    install: *install
     command: port=%p; exec mosh ${port:+--ssh="ssh -p $port"} -- %h
   - name: MC
     key: Alt+C
-    available_command: command -v mc
+    prepare_command: |
+      sh -c %{ensure} -- ssh openssh 'this machine' %{install} || exit $?
+      sh -c %{ensure} -- mc mc 'this machine' %{install}
+    ensure: *ensure
+    install: *install
     command: mc /sh://%t/
   - name: Bash
     key: Alt+B
-    available_command: command -v ssh
-    command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
+    prepare_command: *prepare_ssh
+    ensure: *ensure
+    install: *install
+    command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{launch_remote}
+    launch_remote: sh -c %{script}
+    script: |
+      sh -c %{ensure} -- bash bash 'the remote' %{install} || exit $?
+      exec sh -c %{remote}
     remote: exec bash -l
   - name: Zellij
     key: Alt+Z
-    available_command: command -v ssh
+    prepare_command: *prepare_ssh
+    ensure: *ensure
+    install: *install
     command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
     remote: sh -c %{script}
     script: |
@@ -113,6 +187,9 @@ profiles:
       elif [ -x "$HOME/.local/bin/zellij" ]; then
           zellij_bin=$HOME/.local/bin/zellij
       else
+          printf 'Zellij is missing on the remote. Install into ~/.local/bin? [y/N] ' >&2
+          IFS= read -r answer || exit 1
+          case "$answer" in y|Y|yes|YES) ;; *) fail 'installation cancelled' ;; esac
           case "$(uname -s):$(uname -m)" in
               Linux:x86_64)
                   platform=x86_64-unknown-linux-musl
@@ -178,16 +255,26 @@ profiles:
   # Persistent sessions, file transfers, monitoring and SSH forwarding.
   - name: Tmux
     key: Alt+T
-    available_command: command -v ssh
-    command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
+    prepare_command: *prepare_ssh
+    ensure: *ensure
+    install: *install
+    command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{launch_remote}
+    launch_remote: sh -c %{script}
+    script: |
+      sh -c %{ensure} -- tmux tmux 'the remote' %{install} || exit $?
+      exec sh -c %{remote}
     remote: exec tmux new-session -A -s main
   - name: SFTP
     key: Alt+F
-    available_command: command -v sftp
+    prepare_command: sh -c %{ensure} -- sftp openssh 'this machine' %{install}
+    ensure: *ensure
+    install: *install
     command: port=%p; exec sftp ${port:+-P "$port"} -- %h
   - name: Monitor
     key: Alt+H
-    available_command: command -v ssh
+    prepare_command: *prepare_ssh
+    ensure: *ensure
+    install: *install
     command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
     remote: sh -c %{script} -- %{dashboard}
     # A compact health overview. Press 4 in btop to toggle the process list,
@@ -210,10 +297,7 @@ profiles:
       show_swap = true
     script: |
       set -eu
-      command -v btop >/dev/null 2>&1 || {
-        echo 'Monitor requires btop on the remote. Use F4 > Install terminal tools > btop, or install it with the remote package manager.' >&2
-        exit 1
-      }
+      sh -c %{ensure} -- btop btop 'the remote' %{install} || exit $?
       # Isolate the dashboard from the user's regular btop configuration.
       umask 077
       config_dir=$(mktemp -d "${TMPDIR:-/tmp}/ssh-menu-monitor.XXXXXX")
@@ -224,7 +308,6 @@ profiles:
       XDG_CONFIG_HOME="$config_dir" XDG_STATE_HOME="$config_dir" btop
   - name: Tunnel
     key: Ctrl+Alt+L
-    available_command: command -v ssh
     inputs:
       - id: forward
         type: promptString
@@ -232,6 +315,9 @@ profiles:
         default: '8080:localhost:80'
         required: true
     # The destination is reached from the SSH server; listen only on loopback.
+    prepare_command: *prepare_ssh
+    ensure: *ensure
+    install: *install
     command: |
       port=%p
       forward=%{input:forward}
@@ -239,13 +325,15 @@ profiles:
       exec ssh ${port:+-p "$port"} -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -L "127.0.0.1:$forward" -- %h
   - name: SOCKS
     key: Ctrl+Alt+D
-    available_command: command -v ssh
     inputs:
       - id: port
         type: promptString
         description: Local SOCKS port
         default: '1080'
         required: true
+    prepare_command: *prepare_ssh
+    ensure: *ensure
+    install: *install
     command: |
       port=%p
       listen=%{input:port}
@@ -343,50 +431,6 @@ configuration_scripts:
       set -eu
       cd "$HOME/src/dotfiles"
       exec "$2" "./$1"
-  - name: Install terminal tools
-    available_command: command -v ssh
-    inputs:
-      - id: tools
-        type: pickString
-        description: Remote packages
-        options: ['tmux + btop', tmux, btop, htop, mosh, mc]
-        default: 'tmux + btop'
-    command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
-    remote: sh -c %{script} -- %{input:tools}
-    script: |
-      set -eu
-      case "$1" in
-        'tmux + btop') set -- tmux btop ;;
-        tmux|htop|btop|mosh|mc) set -- "$1" ;;
-        *) echo 'Unknown terminal tools selection.' >&2; exit 1 ;;
-      esac
-      # Use the remote's repositories and normal package-manager prompts.
-      if command -v brew >/dev/null 2>&1; then
-        exec brew install "$@"
-      elif command -v apt-get >/dev/null 2>&1; then
-        set -- apt-get install "$@"
-      elif command -v dnf >/dev/null 2>&1; then
-        set -- dnf install "$@"
-      elif command -v yum >/dev/null 2>&1; then
-        set -- yum install "$@"
-      elif command -v pacman >/dev/null 2>&1; then
-        set -- pacman -S --needed "$@"
-      elif command -v zypper >/dev/null 2>&1; then
-        set -- zypper install "$@"
-      elif command -v apk >/dev/null 2>&1; then
-        set -- apk add "$@"
-      else
-        echo 'No supported package manager found; install the tools manually.' >&2
-        exit 1
-      fi
-      if [ "$(id -u)" = 0 ]; then
-        exec "$@"
-      fi
-      command -v sudo >/dev/null 2>&1 || {
-        echo 'Installing system packages requires root or sudo.' >&2
-        exit 1
-      }
-      exec sudo -- "$@"
   - name: Copy terminal definition
     available_command: command -v ssh && command -v infocmp && test -n "${TERM:-}"
     # Export before connecting so a failed infocmp cannot send a partial definition.

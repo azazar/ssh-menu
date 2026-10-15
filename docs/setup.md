@@ -19,7 +19,6 @@ The included setup recipes are:
 | --- | --- |
 | **Configure key-based auth** | Selects an existing keypair or offers generation when none is available, then copies its public key with ssh-copy-id |
 | **Configure key-based auth + install dotfiles** | Copies the key, uploads a dotfiles directory, and runs its installer |
-| **Install terminal tools** | Installs tmux + btop, or an individual tmux, btop, htop, mosh or mc package |
 | **Copy terminal definition** | Exports local `$TERM` and compiles it into remote `~/.terminfo` for terminals unknown to the server |
 
 The dotfiles sample defaults to local `~/src/dotfiles`, installer `install.sh`, and shell `sh`. Change the dialog values or edit the recipe for your own repository. Both key-based auth samples remain available when no matching `~/.ssh/id_*` private/public keypairs exist. The key selector reads filenames, not key contents. If no usable pair is found, it offers **Generate new Ed25519 key** instead.
@@ -30,13 +29,13 @@ Existing configuration files are preserved. To adopt these samples in an existin
 
 Setup defaults to **None**. Configure mode requires a recipe; adding a remote can skip setup. Authentication prompts run with the terminal restored. Failed setup prevents adding or connecting. In configure mode, failures return to the menu so you can retry. Setup is not repeated on later connections. The dialog itself does not edit SSH config; the selected recipe determines what changes on the local or remote machine.
 
-## Terminal tools and compatibility
+## Terminal compatibility
 
-**Install terminal tools** follows the [tmux installation guide](https://github.com/tmux/tmux/wiki/Installing) approach of using the remote's package repositories. It supports Homebrew, apt-get, dnf, yum, pacman, zypper and apk, in that order. Homebrew runs as the remote user; system package managers run as root or through sudo. Normal package-manager prompts are preserved, with no automatic yes flag. Packages must exist in the configured repositories, and stale indexes may need a manual refresh. A failed install stops setup. The recipe does not change repositories, the login shell, SSH configuration or firewall rules; installing Mosh alone does not configure UDP access.
+Launch profiles handle their own tool dependencies. Select Monitor, Tmux, Mosh, or another profile to check and optionally install what it needs; tool installation is not a host setup recipe.
 
 **Copy terminal definition** addresses errors such as `unknown terminal: xterm-kitty`. It uses the method documented by [Kitty](https://github.com/kovidgoyal/kitty/blob/master/docs/kittens/ssh.rst), generalized to the current `$TERM`. Local `infocmp` and remote `tic` (ncurses tools) are required. The remote compiles a temporary source file, which also works on systems whose tic cannot read `/dev/stdin`, and removes it afterward. Matching definitions in `~/.terminfo` are updated; system definitions are untouched. The recipe is hidden if local ssh, infocmp or TERM is missing. It copies terminal capabilities, not fonts or shell integration.
 
-Each setup run selects one recipe. The terminal-tool and terminal-definition recipes use existing authentication; configure key-based auth first or authenticate normally when prompted.
+Each setup run selects one recipe. The terminal-definition recipe uses existing authentication; configure key-based auth first or authenticate normally when prompted.
 
 ## Custom inputs
 

@@ -65,7 +65,7 @@ exit 1
     # process for successful orchestration; production hashes remain untouched.
     executable('sha256sum', '#!/bin/sh\nprintf "%s  %s\\n" "$TEST_DIGEST" "$1"\n')
 
-    def run(name, sessions='', **changes):
+    def run(name, sessions='', consent=None, **changes):
         home = root / name
         home.mkdir(exist_ok=True)
         log = root / 'calls'
@@ -77,7 +77,7 @@ exit 1
                          TEST_ARCHIVE=str(archive), TEST_DIGEST=expected,
                          TEST_SESSIONS=sessions)
         child_env.update(changes)
-        result = subprocess.run(['sh', str(script)], env=child_env, input='terminal-input\n',
+        result = subprocess.run(['sh', str(script)], env=child_env, input=('y\n' if consent is None and not (bins / 'zellij').exists() and not (home / '.local/bin/zellij').exists() else (consent or '')) + 'terminal-input\n',
                                 text=True, capture_output=True, timeout=10)
         return home, result, log.read_text().splitlines() if log.exists() else [], downloads
 
@@ -87,6 +87,11 @@ exit 1
     assert calls == ['list-sessions --short --no-formatting', 'attach --create old session'], calls
     assert not downloads.exists() and not (home / '.local').exists()
     installed.unlink()
+
+    for answer in ['n\n', '\n']:
+        home, result, calls, downloads = run('declined', consent=answer)
+        assert result.returncode != 0 and not calls and not downloads.exists()
+        assert not (home / '.local').exists()
 
     home, result, calls, downloads = run('install')
     assert result.returncode == 0, result.stderr

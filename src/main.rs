@@ -716,6 +716,18 @@ fn run() -> io::Result<()> {
             return_to_menu,
         }) = result?
         {
+            if !configure_only
+                && let Some((program, args)) = config.profiles[profile_index].prepare(&target)?
+            {
+                let status = Command::new(program).args(args).status();
+                if !status.as_ref().is_ok_and(|status| status.success()) {
+                    state.notice = Some(format!(
+                        "{}: preparation cancelled or failed; connection not started",
+                        config.profiles[profile_index].name
+                    ));
+                    continue;
+                }
+            }
             if let Some(index) = setup {
                 let script = &config.configuration_scripts[index];
                 println!("Running {} for {}", script.name, target.label());

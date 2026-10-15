@@ -42,7 +42,7 @@ Launching appends its command to an existing `.bash_history`; adding a remote cr
 
 ## How the Zellij profile works
 
-The recipe attaches to an existing remote session, or creates one if none exists. It reuses an installed Zellij; otherwise it installs pinned **0.45.1** into remote `~/.local/bin` and verifies the executable's SHA-256 against the published checksum. It uses no sudo and leaves existing installations in place.
+The recipe attaches to an existing remote session, or creates one if none exists. It reuses an installed Zellij; otherwise it offers to install pinned **0.45.1** into remote `~/.local/bin` and verifies the executable's SHA-256 against the published checksum. It uses no sudo and leaves existing installations in place.
 
 Automatic installation supports Linux x86-64 and ARM64 and requires `tar`, `curl` or `wget`, and `sha256sum` or `shasum`. See the [Zellij recipe in the config](../ssh-menu-config.example.yml) for the complete recipe.
 

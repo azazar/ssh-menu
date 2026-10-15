@@ -164,6 +164,8 @@ pub struct Profile {
     pub available_command: Option<String>,
     pub command: String,
     #[serde(default)]
+    pub prepare_command: Option<String>,
+    #[serde(default)]
     pub inputs: Vec<Input>,
     #[serde(flatten)]
     pub fields: HashMap<String, String>,
@@ -317,6 +319,15 @@ impl Profile {
             values,
         )?))
     }
+    pub fn prepare(&self, target: &Target) -> io::Result<Option<(String, Vec<String>)>> {
+        self.prepare_command
+            .as_ref()
+            .map(|command| {
+                self.expand(command, target, &mut Vec::new(), true, &HashMap::new())
+                    .map(Self::shell_command)
+            })
+            .transpose()
+    }
     pub fn program(&self) -> String {
         let words = shell_words::split(&self.command).unwrap_or_default();
         let i = words.iter().position(|s| s == "exec").map_or(0, |i| i + 1);
@@ -421,8 +432,14 @@ impl Config {
         if config.profiles.is_empty() {
             return Err(invalid("profiles must not be empty"));
         }
-        if config.configuration_scripts.iter().any(|p| p.key.is_some()) {
-            return Err(invalid("key is supported only in launch profiles"));
+        if config
+            .configuration_scripts
+            .iter()
+            .any(|p| p.key.is_some() || p.prepare_command.is_some())
+        {
+            return Err(invalid(
+                "key and prepare_command are supported only in launch profiles",
+            ));
         }
         let mut keys = HashSet::new();
         for profile in &config.profiles {
@@ -442,6 +459,15 @@ impl Config {
                 {
                     return Err(invalid(
                         "available_command must be nonempty and contain no NUL",
+                    ));
+                }
+                if profile
+                    .prepare_command
+                    .as_ref()
+                    .is_some_and(|c| c.trim().is_empty() || c.contains('\0'))
+                {
+                    return Err(invalid(
+                        "prepare_command must be nonempty and contain no NUL",
                     ));
                 }
                 let mut ids = HashSet::new();
@@ -468,6 +494,10 @@ impl Config {
                     ));
                 }
                 for port in [None, Some("2222".into())] {
+                    profile.prepare(&Target {
+                        host: "user@host".into(),
+                        port: port.clone(),
+                    })?;
                     profile
                         .expanded(&Target {
                             host: "user@host".into(),
@@ -510,7 +540,11 @@ impl Config {
         };
         self.profiles
             .iter()
-            .position(|p| p.program() == program && p.fields.is_empty())
+            .position(|p| {
+                p.program() == program
+                    && !p.fields.contains_key("remote")
+                    && p.command.trim_end().ends_with("%h")
+            })
             .unwrap_or(current)
     }
     pub fn history_profiles(&self, targets: &[Target], history: &str, user: &str) -> Vec<usize> {
@@ -567,7 +601,7 @@ impl Config {
                         return false;
                     }
                     if remote.is_empty() {
-                        return profile.fields.is_empty()
+                        return !profile.fields.contains_key("remote")
                             && profile.command.trim_end().ends_with("%h");
                     }
                     // Conventional named remote command supports ordinary manually entered SSH history.
@@ -706,6 +740,9 @@ mod tests {
     fn invalid_templates_fail_without_executing() {
         for profile in [
             "{name: X, command: ''}",
+            "{name: X, command: 'true', prepare_command: ''}",
+            "{name: X, command: 'true', prepare_command: 'echo %{missing}'}",
+            "{name: X, command: 'true', prepare_command: 'echo %{input:x}', inputs: [{id: x, type: promptString, default: test}]}",
             "{name: X, command: 'echo %{missing}'}",
             "{name: X, command: 'echo %{a}', a: '%{b}', b: '%{a}'}",
             "{name: X, command: 'echo %{unclosed'}",
