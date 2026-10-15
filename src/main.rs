@@ -1,6 +1,7 @@
 mod help;
 mod launch;
 mod new_remote;
+mod shortcut;
 
 use crossterm::{
     cursor::Show,
@@ -260,6 +261,18 @@ fn menu(
 ) -> io::Result<Option<Selection>> {
     let mut query = String::new();
     let mut selection = 0usize;
+    let profile_keys = config
+        .profiles
+        .iter()
+        .filter_map(|profile| {
+            profile
+                .key
+                .as_ref()
+                .map(|key| format!("{key} {}", profile.name))
+        })
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let footer_height = if profile_keys.is_empty() { 1 } else { 2 };
     loop {
         let visible = matching(targets, &query);
         selection = selection.min(visible.len().saturating_sub(1));
@@ -275,7 +288,7 @@ fn menu(
             let areas = Layout::vertical([
                 Constraint::Length(1),
                 Constraint::Min(0),
-                Constraint::Length(1),
+                Constraint::Length(footer_height),
             ])
             .split(frame.area());
             let header = Line::from(vec![
@@ -370,10 +383,34 @@ fn menu(
             } else {
                 Line::from(shortcuts)
             };
-            frame.render_widget(Paragraph::new(footer), areas[2]);
+            let mut lines = Vec::new();
+            if !profile_keys.is_empty() {
+                lines.push(Line::styled(
+                    format!(" {profile_keys}"),
+                    Style::default().fg(theme::PEACH),
+                ));
+            }
+            lines.push(footer);
+            frame.render_widget(Paragraph::new(lines), areas[2]);
         })?;
         if let Event::Key(key) = event::read()? {
             if key.kind != KeyEventKind::Press {
+                continue;
+            }
+            if let Some(profile) = config
+                .profiles
+                .iter()
+                .position(|p| p.key.as_ref().is_some_and(|shortcut| shortcut.matches(key)))
+            {
+                if let Some(i) = visible.get(selection) {
+                    return Ok(Some(Selection {
+                        target: targets[*i].clone(),
+                        profile,
+                        setup: None,
+                        setup_command: None,
+                        new: false,
+                    }));
+                }
                 continue;
             }
             match key.code {
@@ -409,12 +446,22 @@ fn menu(
                 KeyCode::Up => selection = selection.saturating_sub(1),
                 KeyCode::Down => selection = selection.saturating_add(1),
                 KeyCode::PageUp => {
-                    selection = selection
-                        .saturating_sub(terminal.size()?.height.saturating_sub(2).max(1) as usize)
+                    selection = selection.saturating_sub(
+                        terminal
+                            .size()?
+                            .height
+                            .saturating_sub(footer_height + 1)
+                            .max(1) as usize,
+                    )
                 }
                 KeyCode::PageDown => {
-                    selection = selection
-                        .saturating_add(terminal.size()?.height.saturating_sub(2).max(1) as usize)
+                    selection = selection.saturating_add(
+                        terminal
+                            .size()?
+                            .height
+                            .saturating_sub(footer_height + 1)
+                            .max(1) as usize,
+                    )
                 }
                 KeyCode::Left => {
                     if let Some(i) = visible.get(selection) {

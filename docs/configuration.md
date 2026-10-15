@@ -10,6 +10,7 @@ profiles:
   - name: SSH
     command: ssh %h
   - name: Mosh
+    key: Alt+M
     available_command: command -v mosh
     command: mosh %h
   - name: MC
@@ -19,6 +20,16 @@ profiles:
 Each profile needs a unique `name` and a `command`; `default` names one of them. Commands run through local `sh -c`, and additional string fields can hold reusable commands or scripts. **Placeholders are shell-escaped automatically—leave them unquoted.**
 
 The example above lets SSH config manage ports. The shipped defaults also handle explicitly entered ports. See the reference below for that template and remote-script quoting.
+
+## Profile shortcuts
+
+Set `key: Alt+M` on a launch profile to connect the selected host with it immediately. Available shortcuts appear above the menu controls. They apply only to the host list, preserve the filter while selecting the target, and do nothing when no host matches. The launched profile is remembered in history as usual. Hidden profiles have no active shortcut.
+
+Use **Ctrl+letter**, **Alt+letter**, or **Ctrl+Alt+letter**, with an ASCII letter A–Z. Names are case-insensitive; `Alt+M` does not require Shift. Plain letters, Shift-only bindings, special keys, and duplicate bindings are rejected. Duplicate checks include unavailable profiles so installing a tool cannot introduce a conflict.
+
+Ctrl+C, Ctrl+H, Ctrl+I, Ctrl+J, Ctrl+M, Ctrl+Q, Ctrl+S, and Ctrl+Z are reserved, including combinations with Alt. These cover existing quit/edit keys, terminal aliases for Backspace/Tab/Enter, flow control, and suspend. Profile shortcuts cannot replace the app's function keys, arrows, Enter, Esc, or editing keys. A terminal or desktop may intercept other combinations; choose another binding if needed.
+
+The shipped bindings are **Alt+S** SSH, **Alt+M** Mosh, **Alt+C** MC, **Alt+B** Bash, and **Alt+Z** Zellij. Existing configs are preserved; add `key` to enable shortcuts there. Setup recipes do not accept `key`.
 
 ## Profile availability
 

@@ -13,6 +13,7 @@ Changing a profile affects only the selected host. Moving away or changing the f
 | ↑ / ↓ · PgUp / PgDn | Move through hosts |
 | ← / → | Change the selected host's profile |
 | Enter | Connect |
+| Configured Ctrl/Alt shortcut | Connect using that profile immediately |
 | F1 | Open built-in help |
 | F2 | Add a remote with optional setup |
 | F8 | Toggle plain SSH / Mosh for the selected host |

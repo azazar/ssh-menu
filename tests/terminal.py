@@ -345,4 +345,31 @@ configuration_scripts:
     assert result.returncode != 0 and b"no launch profiles are available" in result.stderr
     assert b"\x1b[?1049h" not in result.stdout
     config_file.write_text(original_config)
+    config_file.write_text("""default: SSH
+profiles:
+  - {name: SSH, key: Ctrl+P, command: 'ssh -- %h'}
+  - {name: Mosh, key: Alt+M, command: 'mosh -- %h'}
+  - {name: Custom, key: Ctrl+Alt+X, command: 'custom-connect %h'}
+""")
+    (root / ".bash_history").write_text("ssh alpha\n")
+    for shortcut, program, arguments in [
+        (b"\x1bm", "mosh", ["--", "alpha"]),
+        (b"\x10", "ssh", ["--", "alpha"]),
+        (b"\x1b\x18", "custom-connect", ["alpha"]),
+    ]:
+        session([b"alpha", shortcut])
+        command = (root / "command").read_text().splitlines()
+        assert command[0].endswith('/' + program) and command[1:] == arguments, command
+    # The directly launched profile is restored on the next ordinary Enter.
+    session([b"alpha", b"\r"])
+    assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
+    before = (root / ".bash_history").read_text()
+    (root / "command").unlink()
+    session([b"m", b"\x11"])  # Plain typing must not launch the Alt+M profile.
+    session([b"no-such-host", b"\x1bm", b"\x11"])
+    session([b"\x1bOP", b"\x1bm", b"\x1bOP", b"\x11"])  # Help does not launch profiles.
+    session([b"\x1bOQ", b"\x1bm", b"\x1b", b"\x11"])  # Neither does the dialog.
+    assert not (root / "command").exists()
+    assert (root / ".bash_history").read_text() == before
+    config_file.write_text(original_config)
     print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, new remotes and setup recipes, embedded help, terminal restoration")

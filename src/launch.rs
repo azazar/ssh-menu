@@ -159,6 +159,8 @@ impl Input {
 pub struct Profile {
     pub name: String,
     #[serde(default)]
+    pub key: Option<crate::shortcut::Shortcut>,
+    #[serde(default)]
     pub available_command: Option<String>,
     pub command: String,
     #[serde(default)]
@@ -417,6 +419,17 @@ impl Config {
             return Err(invalid(
                 "inputs are supported only in configuration_scripts",
             ));
+        }
+        if config.configuration_scripts.iter().any(|p| p.key.is_some()) {
+            return Err(invalid("key is supported only in launch profiles"));
+        }
+        let mut keys = HashSet::new();
+        for profile in &config.profiles {
+            if let Some(key) = &profile.key
+                && !keys.insert(key)
+            {
+                return Err(invalid(format!("duplicate profile key: {key}")));
+            }
         }
         for group in [&config.profiles, &config.configuration_scripts] {
             let mut names = HashSet::new();
@@ -835,6 +848,20 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
         fs::remove_file(home.join(".ssh/id_work's key")).unwrap();
         assert!(input.resolve().is_err());
         fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn rejects_conflicting_or_misplaced_profile_keys() {
+        assert!(Config::parse("default: A\nprofiles: [{name: A, command: 'ssh %h', key: Alt+M}, {name: B, command: 'mosh %h', key: alt+m, available_command: 'exit 1'}]").is_err());
+        assert!(Config::parse("default: A\nprofiles: [{name: A, command: 'ssh %h'}]\nconfiguration_scripts: [{name: Setup, command: 'true', key: Alt+M}]").is_err());
+        for key in ["M", "Ctrl+Q", "Alt+Enter", "Ctrl+Alt+H"] {
+            assert!(
+                Config::parse(&format!(
+                    "default: A\nprofiles: [{{name: A, command: 'ssh %h', key: '{key}'}}]"
+                ))
+                .is_err()
+            );
+        }
     }
 
     #[test]
