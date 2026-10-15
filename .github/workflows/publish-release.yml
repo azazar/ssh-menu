@@ -1,0 +1,76 @@
+name: Publish existing release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish
+        required: true
+        type: string
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    # The commit marker allows an explicit promotion through Git when API access
+    # is unavailable. Normal pushes never publish an existing draft.
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[publish-release]')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      REQUESTED_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select release tag
+        shell: bash
+        run: |
+          tag="$REQUESTED_TAG"
+          if [[ -z "$tag" ]]; then
+            tag="v$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo 'Expected a version tag such as v0.1.0-rc.1' >&2
+            exit 1
+          fi
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+      - name: Verify all platform assets exist
+        run: |
+          gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' > assets.txt
+          for target in \
+            x86_64-unknown-linux-musl \
+            aarch64-unknown-linux-musl \
+            armv7-unknown-linux-musleabihf \
+            x86_64-apple-darwin \
+            aarch64-apple-darwin \
+            x86_64-pc-windows-msvc \
+            aarch64-pc-windows-msvc; do
+            extension=tar.gz
+            if [[ "$target" == *windows* ]]; then extension=zip; fi
+            grep -Fx "ssh-menu-$target.$extension" assets.txt
+          done
+          grep -Fx SHA256SUMS assets.txt
+      - name: Verify archive checksums
+        run: |
+          gh release download "$RELEASE_TAG" --dir dist
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          archives = {p.name for p in Path("dist").iterdir() if p.name.endswith((".tar.gz", ".zip"))}
+          entries = [line.split() for line in Path("dist/SHA256SUMS").read_text().splitlines()]
+          assert len(archives) == 7 and len(entries) == 7, "Expected seven archives and checksums"
+          assert all(len(entry) == 2 for entry in entries), "Malformed checksum entry"
+          assert {entry[1] for entry in entries} == archives, "Each archive needs a checksum"
+          PYTHON
+          cd dist
+          sha256sum --strict -c SHA256SUMS
+      - name: Publish release
+        run: |
+          prerelease=false
+          if [[ "$RELEASE_TAG" == *-* ]]; then prerelease=true; fi
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$prerelease"
+          gh release view "$RELEASE_TAG" --json url,isDraft,isPrerelease

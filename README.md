@@ -29,9 +29,9 @@ Written in Rust with [Ratatui](https://ratatui.rs/), SSH Menu uses a compact, bo
 
 ### Get a binary
 
-The current release candidate is **`v0.1.0-rc.1`**. Its seven platform builds have passed; download them from the **Artifacts** section of the [RC workflow run](https://github.com/azazar/ssh-menu/actions/runs/38724584773). Downloading Actions artifacts requires signing in to GitHub. Each artifact ZIP contains a platform archive and its `.sha256` checksum file—extract that outer ZIP first.
+Download **[v0.1.0-rc.1](https://github.com/azazar/ssh-menu/releases/tag/v0.1.0-rc.1)** from GitHub Releases. All seven platform builds passed. Choose the archive for your system and download `SHA256SUMS` to verify it.
 
-Published versions are available on [GitHub Releases](https://github.com/azazar/ssh-menu/releases), with a combined `SHA256SUMS` file. The RC workflow prepares a draft prerelease; release assets become publicly downloadable when that draft is published.
+For development builds, use the **Artifacts** section of a successful [Binaries workflow](https://github.com/azazar/ssh-menu/actions/workflows/binaries.yml) run. Downloading Actions artifacts requires signing in to GitHub. Each artifact ZIP contains a platform archive and its `.sha256` checksum file—extract that outer ZIP first.
 
 | System | Archive to choose |
 | --- | --- |
@@ -73,7 +73,7 @@ Add the `PATH` line to your shell's startup file to keep it across sessions. Lin
 <details>
 <summary>Download a published version from the command line</summary>
 
-Use an explicit version for release candidates; GitHub's `latest` download URL excludes prereleases. These commands work after the release has been published:
+Use an explicit version for release candidates; GitHub's `latest` download URL excludes prereleases. For example:
 
 ```sh
 version=v0.1.0-rc.1
@@ -319,7 +319,7 @@ The Python tests use temporary fixtures and fake connection tools; they do not c
 
 The [Binaries workflow](https://github.com/azazar/ssh-menu/blob/master/.github/workflows/binaries.yml) runs on pull requests, branch pushes, version tags, and manual dispatch. It runs the [Linux checks](https://github.com/azazar/ssh-menu/blob/master/.github/workflows/ci.yml), builds the platform matrix, smoke-tests native executables, verifies static Linux linkage, and uploads packaged artifacts. Linux ARM builds are cross-compiled; the workflow does not run their executables.
 
-To prepare a release, push a `v*` tag. After all builds and checks pass, the workflow creates or updates a **draft release** with archives and `SHA256SUMS`. Review its notes and publish it on GitHub. Windows builds statically link the MSVC runtime; macOS archives are not signed or notarized.
+To publish a release, push a `v*` tag. After all builds and checks pass, the workflow publishes the archives and `SHA256SUMS` in GitHub Releases. Tags containing a hyphen, such as `v0.1.0-rc.1`, are marked as prereleases. To publish an existing draft, run the **Publish existing release** workflow with its tag; it verifies all seven archives and their checksums first. Alternatively, a commit to `master` containing `[publish-release]` publishes the existing release matching the version in `Cargo.toml`. Windows builds statically link the MSVC runtime; macOS archives are not signed or notarized.
 
 ## License
 
