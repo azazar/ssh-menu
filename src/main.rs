@@ -11,7 +11,7 @@ use crossterm::{
 };
 use ratatui::{
     DefaultTerminal,
-    layout::{Constraint, Layout},
+    layout::{Alignment, Constraint, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Cell, List, ListItem, ListState, Paragraph, Row, Table, TableState},
@@ -33,6 +33,7 @@ mod theme {
     pub const SURFACE: Color = Color::Rgb(49, 50, 68);
     pub const SELECTION: Color = Color::Rgb(69, 71, 90);
     pub const LAVENDER: Color = Color::Rgb(180, 190, 254);
+    pub const USERNAME: Color = Color::Rgb(249, 226, 175);
     pub const PEACH: Color = Color::Rgb(250, 179, 135);
 }
 
@@ -311,18 +312,24 @@ fn menu(
             );
             let rows: Vec<_> = visible
                 .iter()
-                .enumerate()
-                .map(|(row, i)| {
+                .map(|i| {
                     let profile = &config.profiles[profiles[*i]];
                     let mosh = profile.program() == "mosh";
+                    let label = targets[*i].label();
+                    let (username, host) = label.rsplit_once('@').unwrap_or(("", &label));
                     Row::new(vec![
-                        Cell::from(if row == selection { "›" } else { "" }),
                         Cell::from(profile.name.clone()).style(Style::default().fg(if mosh {
                             theme::PEACH
                         } else {
                             theme::SUBTEXT
                         })),
-                        Cell::from(targets[*i].label()),
+                        Cell::from(Line::from(username.to_owned()).alignment(Alignment::Right))
+                            .style(
+                                Style::default()
+                                    .fg(theme::USERNAME)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                        Cell::from(host.to_owned()),
                     ])
                 })
                 .collect();
@@ -341,21 +348,29 @@ fn menu(
                     .map(|profile| Line::from(profile.name.as_str()).width())
                     .max()
                     .unwrap_or(0)
-                    .min(usize::from(areas[1].width.saturating_sub(3) / 3))
+                    .min(usize::from(areas[1].width.saturating_sub(4) / 3))
+                    as u16;
+                let username_width = targets
+                    .iter()
+                    .filter_map(|target| target.host.rsplit_once('@').map(|(user, _)| user))
+                    .map(|user| Line::from(user).width())
+                    .max()
+                    .unwrap_or(0)
+                    .min(usize::from(areas[1].width.saturating_sub(4) / 4))
                     as u16;
                 let table = Table::new(
                     rows,
                     [
-                        Constraint::Length(1),
                         Constraint::Length(profile_width),
+                        Constraint::Length(username_width),
                         Constraint::Min(1),
                     ],
                 )
                 .column_spacing(1)
+                .highlight_symbol("› ")
                 .row_highlight_style(
                     Style::default()
                         .bg(theme::SELECTION)
-                        .fg(theme::LAVENDER)
                         .add_modifier(Modifier::BOLD),
                 );
                 let mut state = TableState::default().with_selected(Some(selection));
