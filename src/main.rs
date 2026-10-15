@@ -14,7 +14,7 @@ use ratatui::{
     layout::{Constraint, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Cell, List, ListItem, ListState, Paragraph, Row, Table, TableState},
 };
 use std::{
     collections::HashMap,
@@ -309,21 +309,24 @@ fn menu(
                 Paragraph::new(header).style(Style::default().bg(theme::SURFACE)),
                 areas[0],
             );
-            let items: Vec<_> = visible
+            let rows: Vec<_> = visible
                 .iter()
-                .map(|i| {
+                .enumerate()
+                .map(|(row, i)| {
                     let profile = &config.profiles[profiles[*i]];
                     let mosh = profile.program() == "mosh";
-                    ListItem::new(Line::from(vec![
-                        Span::styled(
-                            format!(" {} ", profile.name),
-                            Style::default().fg(if mosh { theme::PEACH } else { theme::SUBTEXT }),
-                        ),
-                        Span::raw(format!(" {}", targets[*i].label())),
-                    ]))
+                    Row::new(vec![
+                        Cell::from(if row == selection { "›" } else { "" }),
+                        Cell::from(profile.name.clone()).style(Style::default().fg(if mosh {
+                            theme::PEACH
+                        } else {
+                            theme::SUBTEXT
+                        })),
+                        Cell::from(targets[*i].label()),
+                    ])
                 })
                 .collect();
-            if items.is_empty() {
+            if rows.is_empty() {
                 frame.render_widget(
                     Paragraph::new(
                         " No matches · type to search hosts from ~/.ssh/config or history",
@@ -332,14 +335,31 @@ fn menu(
                     areas[1],
                 );
             } else {
-                let list = List::new(items).highlight_symbol("› ").highlight_style(
+                let profile_width = config
+                    .profiles
+                    .iter()
+                    .map(|profile| Line::from(profile.name.as_str()).width())
+                    .max()
+                    .unwrap_or(0)
+                    .min(usize::from(areas[1].width.saturating_sub(3) / 3))
+                    as u16;
+                let table = Table::new(
+                    rows,
+                    [
+                        Constraint::Length(1),
+                        Constraint::Length(profile_width),
+                        Constraint::Min(1),
+                    ],
+                )
+                .column_spacing(1)
+                .row_highlight_style(
                     Style::default()
                         .bg(theme::SELECTION)
                         .fg(theme::LAVENDER)
                         .add_modifier(Modifier::BOLD),
                 );
-                let mut state = ListState::default().with_selected(Some(selection));
-                frame.render_stateful_widget(list, areas[1], &mut state);
+                let mut state = TableState::default().with_selected(Some(selection));
+                frame.render_stateful_widget(table, areas[1], &mut state);
             }
             let mosh = profile.program() == "mosh";
             let mut shortcuts = Vec::new();

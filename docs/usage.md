@@ -1,6 +1,6 @@
 # Using SSH Menu
 
-Your existing hosts appear automatically.
+Your existing hosts appear automatically in three aligned, borderless columns: selection marker, launch profile, and host.
 
 1. Type part of a hostname and select a matching row with **↑ / ↓**.
 2. Use **← / →** to choose how that host opens, then press **Enter**.
