@@ -88,7 +88,9 @@ mod tests {
                 .lines()
                 .map(|line| format!("{}\n", line.strip_prefix("# ").unwrap()))
                 .collect::<String>();
-            assert_eq!(restored, OPTIONAL);
+            // Git may check out source YAML with CRLF on Windows.
+            // Rendering deliberately uses LF; all line contents must survive.
+            assert_eq!(restored, OPTIONAL.replace("\r\n", "\n"));
             Config::parse(&compose(&[&defaults(windows, false).unwrap(), &restored]).unwrap())
                 .unwrap();
         }
