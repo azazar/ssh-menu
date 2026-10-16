@@ -99,10 +99,6 @@ fn display_usernames<'a>(
         .collect()
 }
 
-fn normalized_target(target: &Target, home: &Path, user: &str) -> Target {
-    ssh_config::normalize_target(target, &ssh_config::load(home, user).users)
-}
-
 fn valid_host(host: &str) -> bool {
     !host.is_empty()
         && !host.starts_with('-')
@@ -558,7 +554,8 @@ fn menu(
                     .map(|i| targets[*i].clone())
                     .or_else(|| direct_target.clone());
                 if let Some(target) = target {
-                    let target = ssh_config::normalize_target(&target, &configured_users);
+                    let target =
+                        config.profiles[profile].normalize_target(&target, &configured_users);
                     if !config.profiles[profile].inputs.is_empty() {
                         bar_state.reset();
                         if let Some(mut result) =
@@ -768,8 +765,9 @@ fn menu(
                 }
                 KeyCode::Enter if visible.is_empty() => {
                     if let Some(target) = new_remote::parse_remote(query) {
-                        let target = ssh_config::normalize_target(&target, &configured_users);
                         let profile = profile_index;
+                        let target =
+                            config.profiles[profile].normalize_target(&target, &configured_users);
                         if !config.profiles[profile].inputs.is_empty() {
                             bar_state.reset();
                             if let Some(mut result) =
@@ -1044,7 +1042,8 @@ fn run() -> io::Result<()> {
             return_to_menu,
         }) = result?
         {
-            let target = normalized_target(&target, home, &user);
+            let target = config.profiles[profile_index]
+                .normalize_target(&target, &ssh_config::load(home, &user).users);
             if !configure_only
                 && let Some((program, args)) = config.profiles[profile_index].prepare(&target)?
             {

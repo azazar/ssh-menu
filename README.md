@@ -15,6 +15,8 @@ Find a machine, choose how to connect, and press Enter. Shui brings your SSH hos
 | Choose | Shortcut | Open |
 | --- | --- | --- |
 | **SSH** | Alt+S | Your usual remote shell, using existing SSH settings |
+| **Dropbear** | Alt+D | A lightweight SSH session using `dbclient` |
+| **PuTTY** | Alt+P | A PuTTY SSH window on Windows |
 | **Mosh** | Alt+M | A Mosh session for connections that need to survive network changes |
 | **MC** | Alt+C | Midnight Commander browsing the remote filesystem |
 | **Bash** | Alt+B | An interactive remote Bash login shell |
@@ -25,7 +27,7 @@ Find a machine, choose how to connect, and press Enter. Shui brings your SSH hos
 | **Tunnel / SOCKS** | Ctrl+Alt+L / Ctrl+Alt+D | A localhost port forward or SOCKS proxy, with editable settings |
 | **Your own profile** | Configurable | Any command or remote script defined in YAML |
 
-Hosts come from SSH config, Bash history, and Midnight Commander bookmarks. Shui remembers each host's launch profile. Setup recipes can install tools, configure SSH keys, copy terminal definitions, and deploy dotfiles. Missing tools can be installed when you need them.
+Hosts come from SSH config, Bash history, and Midnight Commander bookmarks. Shui remembers each host's launch profile. Setup recipes can install tools, configure SSH keys, copy terminal definitions, and deploy dotfiles. Profiles appear when their local clients are installed; remote tools can be installed when you need them.
 
 ## Installation
 

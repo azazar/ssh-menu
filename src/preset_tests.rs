@@ -114,6 +114,56 @@ fn stdout(out: Output) -> String {
 }
 
 #[test]
+fn shipped_profiles_check_every_local_dependency_without_running_it() {
+    let env = Sandbox::new("availability");
+    for (name, tools) in [
+        ("SSH", vec!["ssh"]),
+        ("Mosh", vec!["ssh", "mosh"]),
+        ("MC", vec!["ssh", "mc"]),
+        ("Bash", vec!["ssh"]),
+        ("Zellij", vec!["ssh"]),
+        ("Tmux", vec!["ssh"]),
+        ("SFTP", vec!["sftp"]),
+        ("Monitor", vec!["ssh"]),
+        ("Tunnel", vec!["ssh"]),
+        ("SOCKS", vec!["ssh"]),
+        ("Dropbear", vec!["dbclient"]),
+        ("PuTTY", vec!["putty.exe"]),
+    ] {
+        let check = profile(name).available_command.unwrap();
+        let available = |os| {
+            Command::new("/bin/sh")
+                .args(["-c", &check])
+                .env("PATH", env.0.join("bin"))
+                .env("OS", os)
+                .current_dir(&env.0)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        };
+        assert!(
+            !available("Windows_NT"),
+            "{name} visible without its client"
+        );
+        for tool in &tools {
+            env.stub(tool, "echo executed > unexpected; exit 99");
+        }
+        assert!(available("Windows_NT"), "{name} hidden with its clients");
+        assert_eq!(available("Linux"), name != "PuTTY");
+        for missing in &tools {
+            fs::remove_file(env.0.join("bin").join(missing)).unwrap();
+            assert!(!available("Windows_NT"), "{name} did not check {missing}");
+            env.stub(missing, "echo executed > unexpected; exit 99");
+        }
+        assert!(!env.0.join("unexpected").exists());
+        for tool in tools {
+            fs::remove_file(env.0.join("bin").join(tool)).unwrap();
+        }
+    }
+}
+
+#[test]
 fn shipped_transports_preserve_ports_and_tunnel_arguments() {
     let env = Sandbox::new("transports");
     for name in ["ssh", "sftp"] {

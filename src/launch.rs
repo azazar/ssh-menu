@@ -727,6 +727,15 @@ impl Profile {
         let i = words.iter().position(|s| s == "exec").map_or(0, |i| i + 1);
         words.get(i).cloned().unwrap_or_default()
     }
+    pub fn normalize_target(&self, target: &Target, users: &HashMap<String, String>) -> Target {
+        // These clients do not apply OpenSSH's User directives. An explicit
+        // username must not be dropped based on another client's configuration.
+        if matches!(self.program().as_str(), "dbclient" | "putty" | "putty.exe") {
+            target.clone()
+        } else {
+            crate::ssh_config::normalize_target(target, users)
+        }
+    }
     pub fn command(&self, target: &Target) -> io::Result<(String, Vec<String>)> {
         self.expanded(target).map(Self::shell_command)
     }
@@ -935,7 +944,14 @@ impl Config {
         Ok(config)
     }
     fn available_profiles(mut self) -> io::Result<Self> {
-        self.profiles.retain(Profile::is_available);
+        let mut checks = HashMap::new();
+        self.profiles.retain(|profile| {
+            profile.available_command.as_ref().is_none_or(|command| {
+                *checks
+                    .entry(command.clone())
+                    .or_insert_with(|| profile.is_available())
+            })
+        });
         let first = self.profiles.first().ok_or_else(|| {
             invalid("no launch profiles are available; check available_command and installed tools")
         })?;
@@ -1376,6 +1392,50 @@ mod tests {
         }
     }
     #[test]
+    fn alternate_clients_preserve_port_and_user_arguments() {
+        let config = Config::parse(DEFAULT_CONFIG).unwrap();
+        for (name, prefix, port_flag, separator) in [
+            ("Dropbear", "", "-p", "--\n"),
+            ("PuTTY", "-ssh\n", "-P", ""),
+        ] {
+            let mut profile = config
+                .profiles
+                .iter()
+                .find(|p| p.name == name)
+                .unwrap()
+                .clone();
+            // Execute the shipped shell template on every target, substituting
+            // only the connection process with an argument recorder.
+            profile.command = profile
+                .command
+                .replace(&format!("exec {}", profile.program()), "printf '%s\\n'");
+            for port in [None, Some("2222")] {
+                let output = run(&profile, &target(port));
+                assert!(output.status.success(), "{name}: {:?}", output.stderr);
+                let options = port.map_or(String::new(), |p| format!("{port_flag}\n{p}\n"));
+                assert_eq!(
+                    String::from_utf8(output.stdout).unwrap(),
+                    format!("{prefix}{options}{separator}alice@host\n")
+                );
+            }
+        }
+    }
+    #[test]
+    fn alternate_clients_keep_users_that_only_openssh_would_supply() {
+        let config = Config::parse(DEFAULT_CONFIG).unwrap();
+        let target = target(Some("2222"));
+        let users = HashMap::from([("host".into(), "alice".into())]);
+        for name in ["SSH", "Dropbear", "PuTTY"] {
+            let profile = config.profiles.iter().find(|p| p.name == name).unwrap();
+            let normalized = profile.normalize_target(&target, &users);
+            assert_eq!(
+                normalized.host,
+                if name == "SSH" { "host" } else { "alice@host" }
+            );
+            assert_eq!(normalized.port, target.port);
+        }
+    }
+    #[test]
     fn history_matches_each_entry_and_ignores_unconfigured_commands() {
         let config = Config::parse(DEFAULT_CONFIG).unwrap();
         let targets = vec![target(None), target(Some("2222"))];
@@ -1592,6 +1652,29 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
         for command in ["''", "' '", "\"\\0\""] {
             assert!(Config::parse(&format!("default: X\nprofiles: [{{name: X, command: 'ssh %h', available_command: {command}}}]\n")).is_err());
         }
+    }
+
+    #[test]
+    fn identical_availability_checks_run_once_per_load() {
+        let path = std::env::temp_dir().join(format!("shui-check-cache-{}", std::process::id()));
+        fs::write(&path, "").unwrap();
+        let command = format!(
+            "printf x >> {}",
+            shell_words::quote(&path.to_str().unwrap().replace('\\', "/"))
+        );
+        let mut config = Config::parse(
+            "default: A\nprofiles: [{name: A, command: 'ssh %h'}, {name: B, command: 'ssh %h'}]\n",
+        )
+        .unwrap();
+        for profile in &mut config.profiles {
+            profile.available_command = Some(command.clone());
+        }
+        let config = config.available_profiles().unwrap();
+        assert_eq!(config.profiles.len(), 2);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "x");
+        config.available_profiles().unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "xx");
+        fs::remove_file(path).unwrap();
     }
 
     #[test]

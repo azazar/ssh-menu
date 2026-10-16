@@ -514,7 +514,17 @@ fn form(
                     continue;
                 };
                 let target = if let Some(home) = env::home_dir() {
-                    normalized_target(&target, Path::new(&home), &local_username())
+                    let users = ssh_config::load(Path::new(&home), &local_username()).users;
+                    if configuring {
+                        ssh_config::normalize_target(&target, &users)
+                    } else {
+                        config.profiles[if connecting {
+                            setup - 1
+                        } else {
+                            config.default_index()
+                        }]
+                        .normalize_target(&target, &users)
+                    }
                 } else {
                     target
                 };

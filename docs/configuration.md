@@ -12,10 +12,12 @@ Each profile needs a unique `name` and a `command`; `default` names one of them.
 
 ## Included profiles
 
-Alongside SSH, Mosh, MC, Bash and Zellij, the defaults include:
+Profiles appear only when their local clients are available. Alongside SSH, Mosh, MC, Bash and Zellij, the defaults include:
 
 | Profile | Behavior and requirements |
 | --- | --- |
+| Dropbear | Runs `dbclient` with an optional `-p` port. Requires local Dropbear client. |
+| PuTTY | Opens `putty.exe -ssh` on Windows, with an optional `-P` port. Requires PuTTY on PATH. |
 | Tmux | Attaches to the remote `main` session or creates it. Requires remote tmux; edit `remote` to use another session name. Detach with tmux's Ctrl+B, then D. |
 | SFTP | Interactive OpenSSH file transfers; type `help` for commands and `bye` to exit. Requires local sftp and a remote SFTP subsystem. |
 | Monitor | Opens a compact btop health dashboard: CPU/load/temperature, memory/swap, mounted filesystem space, disk busy time, network traffic and supported GPU statistics. Requires remote btop. |
@@ -46,7 +48,7 @@ The Keys help topic lists active profile shortcuts. Setup recipes do not accept 
 
 ## Missing tools and installation
 
-Default profiles stay visible when a dependency is missing. Launching a profile checks the tools it needs and asks **Install …? [y/N]**. Enter or any answer other than yes declines. Successful installation is followed by another executable check before continuing; already installed tools do not prompt.
+Default profiles check local clients before appearing in the menu. Remote tools are checked when connecting. Where installation is supported, a missing tool prompts **Install …? [y/N]**. Enter or any answer other than yes declines. Successful installation is followed by another executable check before continuing; already installed tools do not prompt.
 
 SSH and forwarding profiles check local SSH; MC checks local MC and SSH; SFTP checks local SFTP. Bash, Tmux and Monitor check their remote tools inside the SSH session. Mosh checks the local client and runs a preliminary SSH session to check/install remote `mosh-server`, so it may authenticate twice. Zellij asks before its verified installation into remote `~/.local/bin`.
 
@@ -60,7 +62,7 @@ Remote checks inside `command` follow the connection's normal lifecycle: declini
 
 ## Profile availability
 
-An optional `available_command` checks whether a launch profile can be used. It runs once per profile when the configuration is loaded for an interactive session, before the TUI opens. Exit **0** keeps the profile; a nonzero status or failure to start hides it. Profiles without a check remain available.
+An optional `available_command` checks whether a launch profile can be used. It runs once per profile when the configuration is loaded for an interactive session, before the TUI opens. Exit **0** keeps the profile; a nonzero status or failure to start hides it. Profiles without a check remain available. Identical checks are shared within each load/reload.
 
 Checks time out after five seconds. Input generators have the same deadline and a 64 KiB limit for each output stream, enforced while reading. On Unix, checks and generators run without a controlling terminal, and their process group is stopped on completion, timeout, or output-limit failure. Windows uses a job object to stop the shell and its descendants on the same paths. Interactive work belongs in preparation or connection commands.
 
@@ -68,7 +70,7 @@ Checks are literal local `sh -c` commands with stdin closed and output discarded
 
 If the configured default is unavailable, the first available profile becomes the session default. History restoration and F8 only select available profiles. If none remain, Shui reports an error before opening the TUI. Filtering does not rewrite your config; restart after installing a missing tool.
 
-The shipped launch profiles use preparation and remote checks instead of `available_command`, so a missing tool can be offered for installation. Custom availability checks still hide profiles before launch; omit such a check if you want its preparation to offer installation. Existing config files are preserved.
+Every shipped launch profile has an `available_command` for its local clients: SSH-based profiles require `ssh`, Mosh requires `ssh` and `mosh`, MC requires `ssh` and `mc`, SFTP requires `sftp`, Dropbear requires `dbclient`, and PuTTY requires Windows (`OS=Windows_NT`) and `putty.exe`. Remote tools are checked after connecting. Remove a local availability check if you want the existing preparation helper to offer installation instead. Existing config files are preserved; copy the new checks and profiles from the [commented config](config.example.yml).
 
 ## Placeholders and ports
 
@@ -106,3 +108,9 @@ Use **[Git for Windows](https://git-scm.com/downloads/win)** for the POSIX `sh` 
 ## Upgrading
 
 If upgrading from an older configuration path, move your existing configuration to `$XDG_CONFIG_HOME/shui.yml` (default: `~/.config/shui.yml`) before the first launch to preserve custom settings. Older paths are not loaded or migrated automatically. When upgrading from the previous project name, update shell aliases and scripts to invoke `shui`.
+
+## Alternative SSH clients
+
+**Dropbear** (Alt+D) uses [dbclient](https://github.com/mkj/dropbear/blob/master/manpages/dbclient.1). **PuTTY** (Alt+P) opens a [PuTTY window](https://the.earth.li/~sgtatham/putty/latest/htmldoc/Chapter3.html#using-cmdline) on Windows. Both accept explicit `user@host:port` targets; each client's normal host-key verification remains enabled.
+
+These clients do not read OpenSSH's `~/.ssh/config`. Use a real hostname/address, or a PuTTY saved session, and configure keys and proxies in the chosen client. OpenSSH aliases, `User`, `IdentityFile`, and `ProxyJump` settings are not translated. Explicit usernames are retained in these clients' commands, even when they match an OpenSSH `User` directive. PuTTY opens its own window; Plink is not used.

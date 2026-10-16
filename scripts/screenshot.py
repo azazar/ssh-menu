@@ -112,6 +112,11 @@ profiles:
     child_env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / '.config'), USER='demo', TERM='xterm-256color',
                      PATH=str(home / 'bin') + os.pathsep + os.environ['PATH'])
     if args.install_prompt:
+        # Demonstrate the optional install-on-launch behavior with MC's local
+        # visibility check removed, as described in the configuration guide.
+        config = (repo / 'docs/config.example.yml').read_text()
+        config = config.replace('  - name: MC\n    available_command: command -v ssh && command -v mc\n', '  - name: MC\n')
+        (home / '.config/shui.yml').write_text(config)
         (home / 'bin/mc').unlink()
         (home / 'bin/sh').symlink_to(shutil.which('sh'))
         child_env['PATH'] = str(home / 'bin')

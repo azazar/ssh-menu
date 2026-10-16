@@ -26,7 +26,8 @@
 # and a 64 KiB limit on each output stream. They have no controlling terminal
 # on Unix, so prompts cannot interfere with the menu.
 # These checks do not test remote connectivity or remote tool availability.
-# Default profiles instead offer dependency installation when launched.
+# Shipped profiles check local client availability; remote tools are checked
+# after connecting. Remove a local check to allow preparation to offer installation.
 # prepare_command runs locally with the terminal restored, before setup/connect/history.
 # Exit 0 continues; any failure/cancellation returns to the menu. It supports %h,
 # %p, %t and named fields, but not dialog inputs. It is only for launch profiles.
@@ -100,6 +101,7 @@ keybindings:
 
 profiles:
   - name: SSH
+    available_command: command -v ssh
     key: Alt+S
     prepare_command: &prepare_ssh sh -c %{ensure} -- ssh openssh 'this machine' %{install}
     # Helpers are ordinary template fields, reused with YAML anchors below.
@@ -151,6 +153,7 @@ profiles:
       exec sudo -- "$@"
     command: port=%p; exec ssh ${port:+-p "$port"} -- %h
   - name: Mosh
+    available_command: command -v ssh && command -v mosh
     key: Alt+M
     prepare_command: |
       sh -c %{ensure} -- ssh openssh 'this machine' %{install} || exit $?
@@ -162,6 +165,7 @@ profiles:
     install: *install
     command: port=%p; exec mosh ${port:+--ssh="ssh -p $port"} -- %h
   - name: MC
+    available_command: command -v ssh && command -v mc
     key: Alt+C
     prepare_command: |
       sh -c %{ensure} -- ssh openssh 'this machine' %{install} || exit $?
@@ -170,6 +174,7 @@ profiles:
     install: *install
     command: mc /sh://%t/
   - name: Bash
+    available_command: command -v ssh
     key: Alt+B
     prepare_command: *prepare_ssh
     ensure: *ensure
@@ -181,6 +186,7 @@ profiles:
       exec sh -c %{remote}
     remote: exec bash -l
   - name: Zellij
+    available_command: command -v ssh
     key: Alt+Z
     prepare_command: *prepare_ssh
     ensure: *ensure
@@ -265,6 +271,7 @@ profiles:
 
   # Persistent sessions, file transfers, monitoring and SSH forwarding.
   - name: Tmux
+    available_command: command -v ssh
     key: Alt+T
     prepare_command: *prepare_ssh
     ensure: *ensure
@@ -276,12 +283,14 @@ profiles:
       exec sh -c %{remote}
     remote: exec tmux new-session -A -s main
   - name: SFTP
+    available_command: command -v sftp
     key: Alt+F
     prepare_command: sh -c %{ensure} -- sftp openssh 'this machine' %{install}
     ensure: *ensure
     install: *install
     command: port=%p; exec sftp ${port:+-P "$port"} -- %h
   - name: Monitor
+    available_command: command -v ssh
     key: Alt+H
     prepare_command: *prepare_ssh
     ensure: *ensure
@@ -318,6 +327,7 @@ profiles:
       printf '%s\n' "$1" > "$config_dir/btop/btop.conf"
       XDG_CONFIG_HOME="$config_dir" XDG_STATE_HOME="$config_dir" btop
   - name: Tunnel
+    available_command: command -v ssh
     key: Ctrl+Alt+L
     inputs:
       - id: forward
@@ -335,6 +345,7 @@ profiles:
       printf 'Forwarding 127.0.0.1:%s through SSH. Ctrl+C stops the tunnel.\n' "$forward"
       exec ssh ${port:+-p "$port"} -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -L "127.0.0.1:$forward" -- %h
   - name: SOCKS
+    available_command: command -v ssh
     key: Ctrl+Alt+D
     inputs:
       - id: port
@@ -350,6 +361,17 @@ profiles:
       listen=%{input:port}
       printf 'SOCKS proxy on 127.0.0.1:%s. Ctrl+C stops the proxy.\n' "$listen"
       exec ssh ${port:+-p "$port"} -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -D "127.0.0.1:$listen" -- %h
+
+  # Alternative clients use their own settings, not OpenSSH's ~/.ssh/config.
+  # Use a real hostname/address (or a PuTTY saved session) and explicit user/port.
+  - name: Dropbear
+    key: Alt+D
+    available_command: command -v dbclient
+    command: port=%p; exec dbclient ${port:+-p "$port"} -- %h
+  - name: PuTTY
+    key: Alt+P
+    available_command: test "${OS:-}" = Windows_NT && command -v putty.exe
+    command: port=%p; exec putty.exe -ssh ${port:+-P "$port"} %h
 
 # F4 configures the selected host; Shift+F4 opens Add new to add and connect.
 # You can also switch between these modes using the Action field.
