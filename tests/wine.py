@@ -52,11 +52,14 @@ int wmain(void) {
 runner = source.with_suffix(".exe")
 run("x86_64-w64-mingw32-gcc", "-municode", "-Wall", "-Wextra", "-Werror",
     str(source), "-o", str(runner))
+native_client = Path(os.environ["CARGO_TARGET_DIR"]) / "native-client.exe"
+run("rustc", "--target", target, "tests/native_client.rs", "-o", str(native_client))
 Path(os.environ["WINEPREFIX"]).mkdir(parents=True, exist_ok=True)
 try:
     run("wineboot", "-u")
     run("cargo", "test", "--locked", "--target", target,
-        env={**os.environ, "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUNNER": "wine"})
+        env={**os.environ, "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUNNER": "wine",
+             "SHUI_TEST_WINE": "1", "SHUI_TEST_NATIVE_CLIENT": "Z:" + str(native_client).replace("/", "\\")})
     run(sys.executable, "tests/cli.py", str(binary),
         env={**os.environ, "SHUI_TEST_WINE": "wine", "SHUI_TEST_WINE_RUNNER": str(runner)})
 finally:

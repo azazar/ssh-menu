@@ -1,0 +1,35 @@
+# Native variants of optional examples; merged only for Windows examples/tests.
+profiles:
+  - name: Work
+    shell: direct
+    command: ssh -tt -- %h %{remote}
+    port_args: [-p, '%p']
+  - name: Remote command
+    shell: direct
+    command: ssh -- %h %{input:remote}
+    port_args: [-p, '%p']
+configuration_scripts:
+  - name: Install tools
+    shell: direct
+    command: ssh -tt -- %h %{remote}
+    port_args: [-p, '%p']
+  - name: Generated inputs
+    shell: direct
+    command: ssh -tt -- %h %{remote}
+    port_args: [-p, '%p']
+    inputs:
+      - id: email
+        type: promptString
+        shell: powershell
+        command: |
+          $email = git.exe config --global user.email
+          if ($LASTEXITCODE -ne 0) { throw 'Set your Git email first' }
+          @{ default = $email } | ConvertTo-Json -Compress
+      - id: mode
+        type: pickString
+        shell: powershell
+        command: "@{ options = @('minimal', 'full'); default = 'full' } | ConvertTo-Json -Compress"
+  - name: Install custom tools
+    shell: direct
+    available_command: where.exe my-setup-tool
+    command: my-setup-tool %h

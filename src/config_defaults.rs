@@ -3,12 +3,17 @@ use serde_yaml_ng::Value;
 
 pub const SHARED: &str = include_str!("../docs/config.example.yml");
 pub const WINDOWS: &str = include_str!("../docs/config.windows.yml");
+pub const WINDOWS_OPTIONAL: &str = include_str!("../docs/config.optional.windows.yml");
 pub const OPTIONAL: &str = include_str!("../docs/config.optional.yml");
 
 fn merge(base: &mut Value, overlay: Value, named: bool) {
     match (base, overlay) {
         (Value::Mapping(base), Value::Mapping(overlay)) => {
             for (key, value) in overlay {
+                if value.is_null() {
+                    base.remove(&key);
+                    continue;
+                }
                 let named = matches!(key.as_str(), Some("profiles" | "configuration_scripts"));
                 match base.get_mut(&key) {
                     Some(existing) => merge(existing, value, named),
@@ -49,8 +54,19 @@ pub fn defaults(windows: bool, optional: bool) -> Result<String, serde_yaml_ng::
     }
     if optional {
         parts.push(OPTIONAL);
+        if windows {
+            parts.push(WINDOWS_OPTIONAL);
+        }
     }
     compose(&parts)
+}
+
+fn optional_examples(windows: bool) -> Result<String, serde_yaml_ng::Error> {
+    if windows {
+        compose(&[OPTIONAL, WINDOWS_OPTIONAL])
+    } else {
+        Ok(OPTIONAL.into())
+    }
 }
 
 pub fn user_config(windows: bool) -> Result<String, serde_yaml_ng::Error> {
@@ -58,7 +74,8 @@ pub fn user_config(windows: bool) -> Result<String, serde_yaml_ng::Error> {
         "# Shui config: F9 edits and reloads. Existing files are preserved on upgrade.\n# Reference: https://github.com/azazar/shui/blob/master/docs/configuration.md\n{}\n# Optional examples: uncomment desired entries and merge into the sections above.\n# Do not add a second profiles or configuration_scripts section.\n",
         defaults(windows, false)?
     );
-    for line in OPTIONAL.lines() {
+    let examples = optional_examples(windows)?;
+    for line in examples.lines() {
         config.push_str("# ");
         config.push_str(line);
         config.push('\n');
@@ -79,7 +96,8 @@ mod tests {
             let expected: Value =
                 serde_yaml_ng::from_str(&defaults(windows, false).unwrap()).unwrap();
             assert_eq!(active, expected);
-            let commented = OPTIONAL
+            let examples = optional_examples(windows).unwrap();
+            let commented = examples
                 .lines()
                 .map(|line| format!("# {line}\n"))
                 .collect::<String>();
@@ -90,7 +108,7 @@ mod tests {
                 .collect::<String>();
             // Git may check out source YAML with CRLF on Windows.
             // Rendering deliberately uses LF; all line contents must survive.
-            assert_eq!(restored, OPTIONAL.replace("\r\n", "\n"));
+            assert_eq!(restored, examples.replace("\r\n", "\n"));
             Config::parse(&compose(&[&defaults(windows, false).unwrap(), &restored]).unwrap())
                 .unwrap();
         }

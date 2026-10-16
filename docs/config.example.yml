@@ -4,7 +4,8 @@
 # Commands and scripts are trusted shell code. Checks and generators run locally.
 #
 # Profile fields: name (unique), command (required), key, available_command,
-# prepare_command, inputs, and arbitrary string fields referenced by %{field}.
+# prepare_command, inputs, shell, prepare_shell, port_args, and arbitrary string
+# fields referenced by %{field}. Windows overrides use direct commands/PowerShell.
 # default names a profile. Left/Right changes only the selected host's profile.
 #
 # Templates: %h = user@host; %p = explicit port or empty; %t = user@host[:port];

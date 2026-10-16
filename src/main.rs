@@ -3,6 +3,7 @@ mod action_tests;
 mod bar;
 mod bindings;
 mod cli;
+mod command;
 #[cfg(test)]
 mod config_defaults;
 #[cfg(all(test, unix))]
@@ -17,6 +18,8 @@ mod search;
 mod shortcut;
 mod ssh_config;
 mod ui;
+#[cfg(all(test, windows))]
+mod windows_tests;
 
 use crossterm::{
     cursor::Show,
@@ -1013,8 +1016,6 @@ fn run() -> io::Result<()> {
         unreachable!()
     };
     cli::require_terminal(auto_terminal)?;
-    #[cfg(windows)]
-    launch::require_shell()?;
     let mut targets = discover(home, &user);
     let mut config = launch::Config::load(home)?;
     let history = read_history(&home.join(".bash_history")).unwrap_or_default();

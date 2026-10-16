@@ -33,7 +33,7 @@ The profile's `dashboard` field holds editable btop settings. Mounted filesystem
 
 Both forwarding profiles bind only to `127.0.0.1`, remain in the foreground, and stop with Ctrl+C. They request no remote shell, fail if the listening socket cannot be created, and use SSH keepalives to detect a lost connection. A successful listener does not guarantee the destination service is reachable; the SSH server must allow forwarding. Use Alt+Enter in the dialog to return to the menu when the tunnel stops. Explicit SSH ports and alias settings work as in the other profiles.
 
-Existing configs are not migrated. Copy the desired entries from the [shared defaults](config.example.yml), [Windows additions](config.windows.yml), or [optional examples](config.optional.yml), choosing unused shortcuts if yours differ.
+Existing configs are not migrated. Copy the desired entries from the [shared defaults](config.example.yml), [Windows overrides](config.windows.yml), or [optional examples](config.optional.yml), choosing unused shortcuts if yours differ.
 
 These presets follow the upstream [tmux manual](https://github.com/tmux/tmux/blob/master/tmux.1), [OpenSSH ssh manual](https://github.com/openssh/openssh-portable/blob/master/ssh.1), [SFTP manual](https://github.com/openssh/openssh-portable/blob/master/sftp.1), and the [btop project](https://github.com/aristocratos/btop).
 
@@ -71,7 +71,15 @@ Checks are literal local `sh -c` commands with stdin closed and output discarded
 
 If the configured default is unavailable, the first available profile becomes the session default. History restoration and F8 only select available profiles. If none remain, Shui reports an error before opening the TUI. Filtering does not rewrite your config; restart after installing a missing tool.
 
-Every shipped launch profile has an `available_command` for its local clients: SSH-based profiles require `ssh`, Mosh requires `ssh` and `mosh`, MC requires `ssh` and `mc`, SFTP requires `sftp`, Dropbear requires `dbclient`, and PuTTY/Plink require Windows (`OS=Windows_NT`) and their respective executables. Remote tools are checked after connecting. Remove a local availability check if you want the existing preparation helper to offer installation instead. Existing config files are preserved; copy the new checks and profiles from the [shared defaults](config.example.yml) and [Windows additions](config.windows.yml).
+Every shipped launch profile has an `available_command` for its local clients: SSH-based profiles require `ssh`, Mosh requires `ssh` and `mosh`, MC requires `ssh` and `mc`, SFTP requires `sftp`, Dropbear requires `dbclient`, and PuTTY/Plink require Windows (`OS=Windows_NT`) and their respective executables. Remote tools are checked after connecting. Remove a local availability check if you want the existing preparation helper to offer installation instead. Existing config files are preserved; copy the new checks and profiles from the [shared defaults](config.example.yml) and [Windows overrides](config.windows.yml).
+
+## Command execution
+
+`command`, `available_command`, and `prepare_command` use the profile’s `shell`: `sh` (default), `direct`, or `powershell`. `prepare_shell` overrides it for preparation only. Input generators have their own `shell` field, defaulting to `sh`.
+
+With `direct`, Shui splits the command into an executable and arguments using shell-style quoting, then launches it without a shell. Pipes, variable expansion, and shell operators are not evaluated. Optional `port_args` are prepended only when the target has an explicit port; `%p` in these arguments is replaced with that port.
+
+PowerShell commands run without loading user profiles. Top-level placeholders become literal PowerShell strings; nested named fields keep POSIX quoting for remote scripts. Put local PowerShell scripts in literal fields without template substitutions, passing values as parameters. Background checks and generators retain their timeout and process cleanup protections for every execution mode.
 
 ## Placeholders and ports
 
@@ -104,7 +112,7 @@ Launch profiles may declare `inputs` using the same `promptString`, `pickString`
 
 ## Windows
 
-Use **[Git for Windows](https://git-scm.com/downloads/win)** for the POSIX `sh` used by command templates. From PowerShell or Windows Terminal, add Git’s `bin` and `usr/bin` directories to `PATH`; Git Bash already provides it. Shui reads the native `USERPROFILE` and `USERNAME`, ignores a conflicting POSIX `HOME`, and defaults to Notepad for config editing. `VISUAL` / `EDITOR` use Windows command-line quoting (quote executable paths containing spaces). Configuration remains under `XDG_CONFIG_HOME/shui.yml`, falling back to `%USERPROFILE%/.config/shui.yml`; discovery reads `%USERPROFILE%/.ssh/config`. Read-only CLI commands do not require a shell. For WSL, install a Linux build inside WSL instead.
+Windows defaults launch connection clients directly, with built-in Windows PowerShell for setup and input generators. No Git installation or local POSIX shell is required. Install the desired client and make it available on PATH. Existing custom configs using POSIX commands still need their chosen shell; adopt the [Windows overrides](config.windows.yml) to remove that dependency. Shui reads the native `USERPROFILE` and `USERNAME`, ignores a conflicting POSIX `HOME`, and defaults to Notepad for config editing. `VISUAL` / `EDITOR` use Windows command-line quoting (quote executable paths containing spaces). Configuration remains under `XDG_CONFIG_HOME/shui.yml`, falling back to `%USERPROFILE%/.config/shui.yml`; discovery reads `%USERPROFILE%/.ssh/config`. Read-only CLI commands do not require a shell. For WSL, install a Linux build inside WSL instead.
 
 ## Upgrading
 
@@ -112,11 +120,11 @@ If upgrading from an older configuration path, move your existing configuration 
 
 ## Default config parts
 
-Builds merge [shared defaults](config.example.yml) with [Windows additions](config.windows.yml) for Windows targets. Linux and macOS defaults omit PuTTY and Plink. Each binary embeds one complete config; there are no runtime includes. Existing user configs are preserved.
+Builds merge [shared defaults](config.example.yml) with [Windows overrides](config.windows.yml) for Windows targets. Linux and macOS defaults omit PuTTY and Plink. Each binary embeds one complete config; there are no runtime includes. Existing user configs are preserved.
 
-[Optional examples](config.optional.yml) contain editable keybindings, custom commands, setup recipes, and generated inputs as active YAML. Tests merge these examples with both platform variants and validate their commands and bindings. Builds append these tested examples as comments in new user configs, so they are available through F9 without being enabled. Uncomment desired entries and merge them into the existing sections.
+[Optional examples](config.optional.yml) contain editable keybindings, custom commands, setup recipes, and generated inputs as active YAML, with [native Windows variants](config.optional.windows.yml). Tests merge these examples with both platform variants and validate their commands and bindings. Builds append these tested examples as comments in new user configs, so they are available through F9 without being enabled. Uncomment desired entries and merge them into the existing sections.
 
-Build-time merging combines mappings recursively and matches `profiles` and `configuration_scripts` by `name`, preserving unspecified fields and entry order. Other lists, including keybindings and inputs, are replaced. To customize a live config, copy the desired entries or fields into it; the live file does not use this build-time merge mechanism.
+Build-time merging combines mappings recursively and matches `profiles` and `configuration_scripts` by `name`, preserving unspecified fields and entry order. Other lists, including keybindings and inputs, are replaced. A `null` override removes an inherited field. To customize a live config, copy the desired entries or fields into it; the live file does not use this build-time merge mechanism.
 
 ## Alternative SSH clients
 

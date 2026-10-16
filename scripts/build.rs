@@ -6,6 +6,7 @@ fn main() {
         "docs/config.example.yml",
         "docs/config.windows.yml",
         "docs/config.optional.yml",
+        "docs/config.optional.windows.yml",
         "src/config_defaults.rs",
     ] {
         println!("cargo:rerun-if-changed={path}");

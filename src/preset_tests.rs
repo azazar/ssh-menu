@@ -96,7 +96,7 @@ impl Drop for Sandbox {
     }
 }
 fn profile(name: &str) -> Profile {
-    let config = Config::parse(&crate::config_defaults::defaults(true, true).unwrap()).unwrap();
+    let config = Config::parse(&crate::config_defaults::defaults(false, true).unwrap()).unwrap();
     config
         .profiles
         .into_iter()
@@ -209,8 +209,6 @@ fn shipped_profiles_check_every_local_dependency_without_running_it() {
         ("Tunnel", vec!["ssh"]),
         ("SOCKS", vec!["ssh"]),
         ("Dropbear", vec!["dbclient"]),
-        ("PuTTY", vec!["putty.exe"]),
-        ("Plink", vec!["plink.exe"]),
     ] {
         let check = profile(name).available_command.unwrap();
         let available = |os| {

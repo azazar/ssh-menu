@@ -1,4 +1,5 @@
 use crate::Target;
+use crate::command::Shell;
 use serde::Deserialize;
 use std::{
     collections::{HashMap, HashSet},
@@ -23,24 +24,6 @@ fn config_path_with_base(home: &Path, base: Option<&Path>) -> PathBuf {
         .unwrap_or_else(|| home.join(".config"))
         .join("shui.yml")
 }
-// Profiles deliberately use POSIX shell syntax on every supported platform.
-#[cfg(windows)]
-pub fn require_shell() -> io::Result<()> {
-    background::run(":", false, BACKGROUND_TIMEOUT)
-        .and_then(|output| {
-            if output.status.success() {
-                Ok(())
-            } else {
-                Err(io::Error::other("sh failed"))
-            }
-        })
-        .map_err(|error| {
-            io::Error::new(error.kind(), format!(
-                "POSIX sh unavailable; install Git for Windows or add its bin directory to PATH: {error}"
-            ))
-        })
-}
-
 pub const DEFAULT_CONFIG: &str = include_str!(concat!(env!("OUT_DIR"), "/config.yml"));
 const HISTORY_TARGET: &str = " # shui-target=";
 const LEGACY_HISTORY_TARGET: &str = " # ssh-menu-target=";
@@ -85,6 +68,48 @@ mod background {
     };
 
     const OUTPUT_LIMIT: usize = 64 * 1024;
+
+    #[cfg(windows)]
+    fn resume_child(pid: u32) -> io::Result<()> {
+        use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+        use windows_sys::Win32::{
+            Foundation::INVALID_HANDLE_VALUE,
+            System::{
+                Diagnostics::ToolHelp::{
+                    CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First,
+                    Thread32Next,
+                },
+                Threading::{OpenThread, ResumeThread, THREAD_SUSPEND_RESUME},
+            },
+        };
+        // SAFETY: snapshot and thread handles are checked and owned; entry size
+        // is initialized before enumeration. Only our suspended child is resumed.
+        unsafe {
+            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+            if snapshot == INVALID_HANDLE_VALUE {
+                return Err(io::Error::last_os_error());
+            }
+            let snapshot = OwnedHandle::from_raw_handle(snapshot);
+            let mut entry: THREADENTRY32 = std::mem::zeroed();
+            entry.dwSize = std::mem::size_of_val(&entry) as u32;
+            let mut found = Thread32First(snapshot.as_raw_handle(), &mut entry);
+            while found != 0 {
+                if entry.th32OwnerProcessID == pid {
+                    let thread = OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID);
+                    if thread.is_null() {
+                        return Err(io::Error::last_os_error());
+                    }
+                    let thread = OwnedHandle::from_raw_handle(thread);
+                    if ResumeThread(thread.as_raw_handle()) == u32::MAX {
+                        return Err(io::Error::last_os_error());
+                    }
+                    return Ok(());
+                }
+                found = Thread32Next(snapshot.as_raw_handle(), &mut entry);
+            }
+        }
+        Err(io::Error::other("suspended child thread not found"))
+    }
 
     #[cfg(windows)]
     fn create_job() -> io::Result<std::os::windows::io::OwnedHandle> {
@@ -242,26 +267,28 @@ mod background {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn run(command: &str, capture: bool, timeout: Duration) -> io::Result<Output> {
-        let mut command_builder = Command::new("sh");
-        #[cfg(not(windows))]
-        command_builder.arg("-c").arg(command).stdin(Stdio::null());
+        run_with(super::Shell::Sh, command, capture, timeout)
+    }
+
+    pub(super) fn run_with(
+        shell: super::Shell,
+        command: &str,
+        capture: bool,
+        timeout: Duration,
+    ) -> io::Result<Output> {
+        let (program, args) = shell.command(command.into())?;
+        let mut command_builder = Command::new(program);
+        command_builder.args(args).stdin(Stdio::null());
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
-            // Gate user code until the shell belongs to our job. Its read is a
-            // shell builtin, so no descendants can escape before assignment.
-            // Closing the pipe after the newline gives user code EOF on stdin.
-            command_builder
-                .args([
-                    "-c",
-                    "read -r gate && exec sh -c \"$1\"",
-                    "shui-background",
-                    command,
-                ])
-                .stdin(Stdio::piped())
-                // Background checks must not prompt through the UI's console.
-                .creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW);
+            // Assign the child to its cleanup job before any user code runs.
+            command_builder.creation_flags(
+                windows_sys::Win32::System::Threading::CREATE_NO_WINDOW
+                    | windows_sys::Win32::System::Threading::CREATE_SUSPENDED,
+            );
         }
         if capture {
             command_builder
@@ -289,7 +316,7 @@ mod background {
         };
         #[cfg(windows)]
         {
-            use std::{io::Write, os::windows::io::AsRawHandle};
+            use std::os::windows::io::AsRawHandle;
             // SAFETY: both handles are owned by process and remain live.
             if unsafe {
                 windows_sys::Win32::System::JobObjects::AssignProcessToJobObject(
@@ -300,12 +327,7 @@ mod background {
             {
                 return Err(io::Error::last_os_error());
             }
-            process
-                .child
-                .stdin
-                .take()
-                .expect("piped stdin")
-                .write_all(b"\n")?;
+            resume_child(process.child.id())?;
         }
         let mut stdout = process.child.stdout.take();
         let mut stderr = process.child.stderr.take();
@@ -383,6 +405,8 @@ pub struct Input {
     pub required: bool,
     #[serde(default)]
     pub command: Option<String>,
+    #[serde(default)]
+    pub shell: Shell,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -397,9 +421,9 @@ impl Input {
         let Some(command) = &self.command else {
             return Ok(self.clone());
         };
-        let output = background::run(command, true, BACKGROUND_TIMEOUT).map_err(|error| {
-            io::Error::new(error.kind(), format!("{}: generator {error}", self.label()))
-        })?;
+        let output = background::run_with(self.shell, command, true, BACKGROUND_TIMEOUT).map_err(
+            |error| io::Error::new(error.kind(), format!("{}: generator {error}", self.label())),
+        )?;
         if !output.status.success() {
             let message: String = String::from_utf8_lossy(&output.stderr)
                 .chars()
@@ -501,7 +525,13 @@ pub struct Profile {
     pub available_command: Option<String>,
     pub command: String,
     #[serde(default)]
+    pub shell: Shell,
+    #[serde(default)]
+    pub port_args: Vec<String>,
+    #[serde(default)]
     pub prepare_command: Option<String>,
+    #[serde(default)]
+    pub prepare_shell: Option<Shell>,
     #[serde(default)]
     pub inputs: Vec<Input>,
     #[serde(flatten)]
@@ -512,7 +542,7 @@ impl Profile {
         let Some(command) = &self.available_command else {
             return true;
         };
-        background::run(command, false, BACKGROUND_TIMEOUT)
+        background::run_with(self.shell, command, false, BACKGROUND_TIMEOUT)
             .is_ok_and(|output| output.status.success())
     }
     fn expand(
@@ -548,7 +578,7 @@ impl Profile {
         let mut chars = text.chars().peekable();
         let mut quote = None;
         while let Some(c) = chars.next() {
-            if c == '\\' && quote != Some('\'') {
+            if c == '\\' && quote != Some('\'') && !(short && self.shell == Shell::Powershell) {
                 result.push(c);
                 if let Some(next) = chars.next() {
                     result.push(next);
@@ -661,7 +691,11 @@ impl Profile {
                     "placeholders must be unquoted; they are shell-escaped automatically",
                 ));
             }
-            result.push_str(&shell_words::quote(&value));
+            if short && self.shell == Shell::Powershell {
+                result.push_str(&format!("'{}'", value.replace('\'', "''")));
+            } else {
+                result.push_str(&shell_words::quote(&value));
+            }
             if result.len() > 65536 {
                 return Err(invalid("expanded command exceeds 64 KiB"));
             }
@@ -705,20 +739,20 @@ impl Profile {
                 return Err(invalid(format!("invalid value for {}", input.label())));
             }
         }
-        Ok(Self::shell_command(self.expand(
-            &self.command,
+        self.build_command(
+            self.expand(&self.command, target, &mut Vec::new(), true, values)?,
             target,
-            &mut Vec::new(),
-            true,
-            values,
-        )?))
+        )
     }
     pub fn prepare(&self, target: &Target) -> io::Result<Option<(String, Vec<String>)>> {
         self.prepare_command
             .as_ref()
             .map(|command| {
-                self.expand(command, target, &mut Vec::new(), true, &HashMap::new())
-                    .map(Self::shell_command)
+                let mut preparer = self.clone();
+                preparer.shell = self.prepare_shell.unwrap_or(self.shell);
+                preparer
+                    .expand(command, target, &mut Vec::new(), true, &HashMap::new())
+                    .and_then(|code| preparer.shell.command(code))
             })
             .transpose()
     }
@@ -740,7 +774,18 @@ impl Profile {
         }
     }
     pub fn command(&self, target: &Target) -> io::Result<(String, Vec<String>)> {
-        self.expanded(target).map(Self::shell_command)
+        self.build_command(self.expanded(target)?, target)
+    }
+    fn build_command(&self, code: String, target: &Target) -> io::Result<(String, Vec<String>)> {
+        if self.shell == Shell::Sh {
+            return Ok(Self::shell_command(code));
+        }
+        let (program, mut args) = self.shell.command(code)?;
+        if let Some(port) = &target.port {
+            let port_args = self.port_args.iter().map(|arg| arg.replace("%p", port));
+            args.splice(0..0, port_args);
+        }
+        Ok((program, args))
     }
     fn shell_command(command: String) -> (String, Vec<String>) {
         // Keep scripts on one history line without sending the script through terminal stdin.
@@ -763,13 +808,14 @@ impl Profile {
     }
     pub fn history_line(&self, target: &Target) -> io::Result<String> {
         let (program, args) = self.command(target)?;
-        // The target hint lets generic shell commands rediscover the entry without executing them.
-        // Profile selection is still inferred from the command; no profile/state ID is stored.
-        Ok(format!(
-            "exec {}{HISTORY_TARGET}{}",
-            shell_words::join(std::iter::once(program).chain(args)),
-            target.label()
-        ))
+        // Preserve the existing single-line history encoding for multiline
+        // arguments. This is a record only: native launches still bypass sh.
+        let mut code = shell_words::join(std::iter::once(program).chain(args));
+        if code.contains(['\n', '\r']) {
+            let (program, args) = Self::shell_command(code);
+            code = shell_words::join(std::iter::once(program).chain(args));
+        }
+        Ok(format!("exec {code}{HISTORY_TARGET}{}", target.label()))
     }
 }
 
@@ -904,6 +950,13 @@ impl Config {
                         "prepare_command must be nonempty and contain no NUL",
                     ));
                 }
+                if (!profile.port_args.is_empty() && profile.shell != Shell::Direct)
+                    || profile.port_args.iter().any(|arg| arg.contains('\0'))
+                {
+                    return Err(invalid(
+                        "port_args require shell: direct and must not contain NUL",
+                    ));
+                }
                 let mut ids = HashSet::new();
                 for input in &profile.inputs {
                     input.validate()?;
@@ -951,7 +1004,7 @@ impl Config {
         self.profiles.retain(|profile| {
             profile.available_command.as_ref().is_none_or(|command| {
                 *checks
-                    .entry(command.clone())
+                    .entry((profile.shell, command.clone()))
                     .or_insert_with(|| profile.is_available())
             })
         });
@@ -1257,7 +1310,10 @@ mod tests {
                 key: None,
                 available_command: None,
                 command: command.into(),
+                shell: Shell::Sh,
+                port_args: vec![],
                 prepare_command: None,
+                prepare_shell: None,
                 inputs: vec![],
                 fields: HashMap::new(),
             };
@@ -1379,19 +1435,22 @@ mod tests {
     }
     #[test]
     fn default_profiles_history_round_trip() {
-        let config = Config::parse(DEFAULT_CONFIG).unwrap();
-        for (index, profile) in config.profiles.iter().enumerate() {
-            let target = target(Some("2222"));
-            let line = profile.history_line(&target).unwrap();
-            assert!(!line.contains('\n'));
-            assert_eq!(
-                config.history_profiles(std::slice::from_ref(&target), &line, "me"),
-                [index]
-            );
-            assert_eq!(
-                crate::history_target(&line, "me").unwrap().label(),
-                target.label()
-            );
+        let windows = crate::config_defaults::defaults(true, false).unwrap();
+        for source in [DEFAULT_CONFIG, windows.as_str()] {
+            let config = Config::parse(source).unwrap();
+            for (index, profile) in config.profiles.iter().enumerate() {
+                let target = target(Some("2222"));
+                let line = profile.history_line(&target).unwrap();
+                assert!(!line.contains('\n'));
+                assert_eq!(
+                    config.history_profiles(std::slice::from_ref(&target), &line, "me"),
+                    [index]
+                );
+                assert_eq!(
+                    crate::history_target(&line, "me").unwrap().label(),
+                    target.label()
+                );
+            }
         }
     }
     #[test]
@@ -1409,6 +1468,20 @@ mod tests {
                 .find(|p| p.name == name)
                 .unwrap()
                 .clone();
+            if profile.shell == Shell::Direct {
+                for port in [None, Some("2222")] {
+                    let (_, args) = profile.command(&target(port)).unwrap();
+                    let mut expected = Vec::new();
+                    if let Some(port) = port {
+                        expected.extend([port_flag.to_owned(), port.to_owned()]);
+                    }
+                    expected.extend(prefix.lines().map(str::to_owned));
+                    expected.extend(separator.lines().map(str::to_owned));
+                    expected.push("alice@host".into());
+                    assert_eq!(args, expected, "{name}");
+                }
+                continue;
+            }
             // Execute the shipped shell template on every target, substituting
             // only the connection process with an argument recorder.
             profile.command = profile
@@ -1585,7 +1658,8 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
         ] {
             fs::write(home.join(".ssh").join(name), "fixture").unwrap();
         }
-        let config = Config::parse(DEFAULT_CONFIG).unwrap();
+        let config =
+            Config::parse(&crate::config_defaults::defaults(false, false).unwrap()).unwrap();
         assert_eq!(
             config.configuration_scripts[0].name,
             "Configure key-based auth"

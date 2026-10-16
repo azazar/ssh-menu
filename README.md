@@ -46,7 +46,7 @@ irm https://azazar.github.io/shui/scripts/install.ps1 | iex
 
 Both installers detect your platform, verify the download, and install to `~/.local/bin`. Add that directory to your `PATH` if needed. Set `SHUI_INSTALL_DIR` to use another directory. Re-run the command to update.
 
-Windows needs [Git for Windows](https://git-scm.com/downloads/win); use Git Bash or add Git's `bin` and `usr/bin` directories to `PATH`. macOS binaries are unsigned.
+Windows runs connection clients directly and uses built-in PowerShell for setup; Git and a POSIX shell are not required. Install your preferred SSH client if needed. macOS binaries are unsigned.
 
 [Manual downloads: v0.1.0-rc.9](https://github.com/azazar/shui/releases/tag/v0.1.0-rc.9) · [Build from source](docs/development.md#build-from-source)
 
