@@ -31,48 +31,48 @@ Written in Rust with [Ratatui](https://ratatui.rs/), Shui uses a compact, border
 
 ## Get started
 
-Install the published **v0.1.0-rc.4** release with the command for your system. Linux and macOS install the executable into `~/.local/bin` without sudo.
+Install the published **v0.1.0-rc.5** release with the command for your system. Linux and macOS install the executable into `~/.local/bin` without sudo.
 
 **Linux x86-64 (including WSL)**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-x86_64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" shui
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-x86_64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" shui
 ```
 
 **Linux ARM64**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-aarch64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" shui
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-aarch64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" shui
 ```
 
 **Linux ARMv7 (hard-float)**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-armv7-unknown-linux-musleabihf.tar.gz | tar -xz -C "$HOME/.local/bin" shui
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-armv7-unknown-linux-musleabihf.tar.gz | tar -xz -C "$HOME/.local/bin" shui
 ```
 
 **macOS Apple Silicon**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-aarch64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" shui
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-aarch64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" shui
 ```
 
 **macOS Intel**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-x86_64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" shui
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-x86_64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" shui
 ```
 
 **Windows x64 — PowerShell**
 
 ```powershell
-& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-x86_64-pc-windows-msvc.zip -OutFile "$env:TEMP/shui.zip"; New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null; tar.exe -xf "$env:TEMP/shui.zip" -C "$HOME/.local/bin" shui.exe }
+& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-x86_64-pc-windows-msvc.zip -OutFile "$env:TEMP/shui.zip"; New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null; tar.exe -xf "$env:TEMP/shui.zip" -C "$HOME/.local/bin" shui.exe }
 ```
 
 **Windows ARM64 — PowerShell**
 
 ```powershell
-& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-aarch64-pc-windows-msvc.zip -OutFile "$env:TEMP/shui.zip"; New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null; tar.exe -xf "$env:TEMP/shui.zip" -C "$HOME/.local/bin" shui.exe }
+& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-aarch64-pc-windows-msvc.zip -OutFile "$env:TEMP/shui.zip"; New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null; tar.exe -xf "$env:TEMP/shui.zip" -C "$HOME/.local/bin" shui.exe }
 ```
 
 Add `~/.local/bin` to your `PATH` (in Bash or Zsh: `export PATH="$HOME/.local/bin:$PATH"`). On Windows, run Shui from [Git Bash](https://git-scm.com/downloads/win); PowerShell is only used for installation. macOS binaries are unsigned. See the [installation guide](docs/installation.md) for checksum verification, platform requirements, and source builds, or browse [GitHub Releases](https://github.com/azazar/shui/releases).

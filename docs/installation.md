@@ -2,7 +2,7 @@
 
 ## Get a binary
 
-Download **[v0.1.0-rc.4](https://github.com/azazar/shui/releases/tag/v0.1.0-rc.4)** from GitHub Releases. Release publication requires all platform builds and checks to pass. Choose the archive for your system and download `SHA256SUMS` to verify it.
+Download **[v0.1.0-rc.5](https://github.com/azazar/shui/releases/tag/v0.1.0-rc.5)** from GitHub Releases. Release publication requires all platform builds and checks to pass. Choose the archive for your system and download `SHA256SUMS` to verify it.
 
 F1 help is embedded in the executable and works offline. You only need to install `shui` (or `shui.exe`); the documentation files in the archive are optional.
 
@@ -50,7 +50,7 @@ Add the `PATH` line to your shell's startup file to keep it across sessions. Lin
 Use an explicit version for release candidates; GitHub's `latest` download URL excludes prereleases. For example:
 
 ```sh
-version=v0.1.0-rc.4
+version=v0.1.0-rc.5
 archive=shui-x86_64-unknown-linux-musl.tar.gz
 base="https://github.com/azazar/shui/releases/download/$version"
 curl -fLO "$base/$archive"
@@ -78,7 +78,7 @@ cargo build --locked --release
 ./target/release/shui
 ```
 
-The repository pins its Rust toolchain. To build the RC source specifically, run `git checkout v0.1.0-rc.4` before building. On Linux x86-64, add `--target x86_64-unknown-linux-musl` for a static build; the binary will be in `target/x86_64-unknown-linux-musl/release/`.
+The repository pins its Rust toolchain. To build the RC source specifically, run `git checkout v0.1.0-rc.5` before building. On Linux x86-64, add `--target x86_64-unknown-linux-musl` for a static build; the binary will be in `target/x86_64-unknown-linux-musl/release/`.
 
 ## Requirements
 
@@ -90,7 +90,7 @@ Run `shui` to open the menu. Use `shui --dump` to list hosts without opening the
 
 ## Upgrading
 
-Re-run the install command for your platform to replace the executable. Check `shui --version` afterward; this release is **0.1.0-rc.4**. Help remains embedded, so no separate documentation installation is needed.
+Re-run the install command for your platform to replace the executable. Check `shui --version` afterward; this release is **0.1.0-rc.5**. Help remains embedded, so no separate documentation installation is needed.
 
 When upgrading from the previous project name, copy your existing configuration to `$XDG_CONFIG_HOME/shui/config.yml` (default: `~/.config/shui/config.yml`) before the first launch to preserve custom settings. Update shell aliases and scripts to invoke `shui`.
 
