@@ -459,6 +459,29 @@ impl State {
             }
             items = revealed;
         }
+        if scope == "menu" {
+            // Sort the displayed keys after selecting the active modifier group.
+            // Keep non-function controls in their existing positions.
+            let number = |item: &Item| {
+                item.key
+                    .split('/')
+                    .next()?
+                    .strip_prefix('F')?
+                    .parse::<u8>()
+                    .ok()
+            };
+            let mut function_keys: Vec<_> = items
+                .iter()
+                .filter_map(|item| number(item).map(|key| (key, item.clone())))
+                .collect();
+            function_keys.sort_by_key(|(key, _)| *key);
+            let mut sorted = function_keys.into_iter();
+            for item in &mut items {
+                if number(item).is_some() {
+                    *item = sorted.next().unwrap().1;
+                }
+            }
+        }
         draw(frame, area, items);
     }
 }
@@ -512,6 +535,51 @@ mod tests {
                 2,
             ),
         ]
+    }
+
+    #[test]
+    fn menu_function_keys_follow_numeric_order_in_each_modifier_group() {
+        for modifiers in ["", "Shift+", "Ctrl+", "Alt+"] {
+            let config = configuration(&format!(
+                "keybindings:\n  menu:\n    help: [{modifiers}F12]\n    edit_config: [{modifiers}F2]\n    configure_remote: [{modifiers}F10]\n    refresh: [{modifiers}F3]\n"
+            ));
+            let mut state = State::default();
+            if let Some(modifier) = match modifiers {
+                "Shift+" => Some(LeftShift),
+                "Ctrl+" => Some(LeftControl),
+                "Alt+" => Some(LeftAlt),
+                _ => None,
+            } {
+                state.event(
+                    KeyEvent::new(KeyCode::Modifier(modifier), KeyModifiers::NONE),
+                    &config.keybindings,
+                    "menu",
+                );
+            }
+            let items = [
+                ("connect", "Open"),
+                ("help", "Help"),
+                ("configure_remote", "Setup"),
+                ("edit_config", "Config"),
+                ("refresh", "Refresh"),
+                ("quit", "Quit"),
+            ]
+            .into_iter()
+            .map(|(action, label)| Item::action(&config.keybindings, "menu", action, label, 1))
+            .collect();
+            let text = rendered(&state, &config, "menu", 240, items);
+            let positions: Vec<_> = ["F2 Config", "F3 Refresh", "F10 Setup", "F12 Help"]
+                .map(|label| {
+                    text.find(label)
+                        .unwrap_or_else(|| panic!("{label}: {text}"))
+                })
+                .into();
+            assert!(positions.windows(2).all(|pair| pair[0] < pair[1]), "{text}");
+            if modifiers.is_empty() {
+                assert!(text.starts_with("↵ Open"), "{text}");
+                assert!(text.ends_with("Esc Quit"), "{text}");
+            }
+        }
     }
 
     #[test]
