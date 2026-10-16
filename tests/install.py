@@ -53,6 +53,8 @@ function Invoke-WebRequest {
     }
     Copy-Item (Join-Path $env:SHUI_FIXTURES ($Uri.Split('/')[-1])) $OutFile
 }
+# Windows can reset PROCESSOR_ARCHITECTURE when starting a native process.
+$env:PROCESSOR_ARCHITECTURE = $env:SHUI_TEST_ARCH
 Get-Content -Raw $env:SHUI_INSTALLER | Invoke-Expression
 ''', encoding="utf-8")
         env["SHUI_INSTALLER"] = str(repo / "scripts/install.ps1")
