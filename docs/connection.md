@@ -1,6 +1,6 @@
 # Adjust one connection
 
-![Connection dialog](../screenshot-connection.png)
+![Connection dialog](images/connection.png)
 
 Press **Ctrl+Enter** on a host to change its remote (`user@host:port`), profile, and configured inputs before connecting. **Tab / Shift-Tab** or **Up / Down** moves between fields; **Left / Right** switches the profile or a pick-list value. Type to edit text; **Ctrl-Backspace / Ctrl-Delete** erases a word. **Enter** connects; **Alt+Enter** connects and returns to the menu afterward; **Esc** cancels. These are default bindings; the Keys topic shows your configured shortcuts.
 

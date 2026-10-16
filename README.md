@@ -4,7 +4,7 @@
 
 Find a machine, choose how to connect, and press Enter. Shui brings your SSH hosts, recent connections, remote file browser, and session launcher into one searchable list. Each host can use its own launch profile, and new machines can run a setup recipe before the first connection.
 
-![Shui showing a different launch profile for each remote](screenshot.png)
+![Shui showing a different launch profile for each remote](docs/images/hosts.png)
 
 **Type to fuzzy-search · ↑↓ to select · ←→ to choose a profile · Enter to connect**
 
@@ -81,9 +81,9 @@ Run `shui`, type to fuzzy-search your hosts and their SSH config settings/commen
 
 The [documentation index](docs/README.md) covers daily use, installation, configuration, setup scripts, and development. The user guide, profiles, and setup recipes are embedded in the executable and available offline through **F1**: Guide and Profiles from the host list, or Setup from the remote setup dialog.
 
-![Built-in documentation viewer](screenshot-help.png)
+![Built-in documentation viewer](docs/images/help.png)
 
-Edit `$XDG_CONFIG_HOME/shui/config.yml` (default: `~/.config/shui/config.yml`) to customize launch profiles, setup recipes and all app keybindings. Default profiles offer installation of missing dependencies before continuing; profile shortcuts launch the selected host directly. The [commented example](shui-config.example.yml) contains the shipped defaults, editing guidance and configuration examples. Existing configs are preserved; see [upgrading](docs/installation.md#upgrading) when merging new defaults.
+Edit `$XDG_CONFIG_HOME/shui/config.yml` (default: `~/.config/shui/config.yml`) to customize launch profiles, setup recipes and all app keybindings. Default profiles offer installation of missing dependencies before continuing; profile shortcuts launch the selected host directly. The [commented example](config/default.yml) contains the shipped defaults, editing guidance and configuration examples. Existing configs are preserved; see [upgrading](docs/installation.md#upgrading) when merging new defaults.
 
 Use `shui --config-path` to find your configuration and `shui --check-config` to validate it without launching commands or opening the UI. Pass a filename to validate a draft: `shui --check-config ./config.yml`.
 

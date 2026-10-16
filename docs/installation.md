@@ -127,4 +127,4 @@ Re-run the install command for your platform to replace the executable. Check `s
 
 When upgrading from the previous project name, copy your existing configuration to `$XDG_CONFIG_HOME/shui/config.yml` (default: `~/.config/shui/config.yml`) before the first launch to preserve custom settings. Update shell aliases and scripts to invoke `shui`.
 
-An existing `$XDG_CONFIG_HOME/shui/config.yml` is never overwritten. To adopt new profiles or recipes, merge complete entries from the [commented config](../shui-config.example.yml), including their inputs and script fields. Preserve your custom commands and choose unused shortcuts. Saving through F9 validates and reloads the result; restart after external edits.
+An existing `$XDG_CONFIG_HOME/shui/config.yml` is never overwritten. To adopt new profiles or recipes, merge complete entries from the [commented config](../config/default.yml), including their inputs and script fields. Preserve your custom commands and choose unused shortcuts. Saving through F9 validates and reloads the result; restart after external edits.

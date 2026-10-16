@@ -17,10 +17,13 @@ def package(target):
         executable: root / "target" / target / "release" / executable,
         "README.md": root / "README.md",
         "LICENSE": root / "LICENSE",
-        "shui-config.example.yml": root / "shui-config.example.yml",
+        "config/default.yml": root / "config/default.yml",
     }
-    files.update({path.name: path for path in sorted(root.glob("screenshot*.png"))})
-    files.update({path.relative_to(root).as_posix(): path for path in sorted((root / "docs").glob("*.md"))})
+    files.update({
+        path.relative_to(root).as_posix(): path
+        for path in sorted((root / "docs").rglob("*"))
+        if path.is_file()
+    })
     for source in files.values():
         if not source.is_file():
             raise FileNotFoundError(source)

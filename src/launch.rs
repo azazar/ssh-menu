@@ -42,7 +42,7 @@ pub fn require_shell() -> io::Result<()> {
         })
 }
 
-pub const DEFAULT_CONFIG: &str = include_str!("../shui-config.example.yml");
+pub const DEFAULT_CONFIG: &str = include_str!("../config/default.yml");
 const HISTORY_TARGET: &str = " # shui-target=";
 const LEGACY_HISTORY_TARGET: &str = " # ssh-menu-target=";
 const SCRIPT_PREFIX: &str = "exec sh -c \"$(printf '%b' ";

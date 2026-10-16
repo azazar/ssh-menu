@@ -57,7 +57,7 @@ Launching appends its command to an existing `.bash_history`; adding a remote cr
 
 The recipe attaches to an existing remote session, or creates one if none exists. It reuses an installed Zellij; otherwise it offers to install pinned **0.45.1** into remote `~/.local/bin` and verifies the executable's SHA-256 against the published checksum. It uses no sudo and leaves existing installations in place.
 
-Automatic installation supports Linux x86-64 and ARM64 and requires `tar`, `curl` or `wget`, and `sha256sum` or `shasum`. See the [Zellij recipe in the config](../shui-config.example.yml) for the complete recipe.
+Automatic installation supports Linux x86-64 and ARM64 and requires `tar`, `curl` or `wget`, and `sha256sum` or `shasum`. See the [Zellij recipe in the config](../config/default.yml) for the complete recipe.
 
 ## Built-in help
 
@@ -75,7 +75,7 @@ The app version appears in the top-right corner of help. The help viewer wraps t
 
 Search includes the complete text used by each host's configuration hint, even when the popup is hidden or clipped. For example, search an underlying `HostName` address, identity filename, port, or a note such as `maintenance`. Space-separated terms may match different fields (`deploy maintenance`); every term must match. Matching is case-insensitive and supports fuzzy abbreviations in both names and hints. Hostname/username/port matches rank ahead of matches that need hint text; within each group, substring matches rank ahead of fuzzy matches, with recency breaking ties. A fuzzy term matches within a single hint line, not across unrelated lines.
 
-![Searching a host by a maintenance comment](../screenshot-search.png)
+![Searching a host by a maintenance comment](images/search.png)
 
 ## Host configuration hint
 
@@ -93,7 +93,7 @@ Use **Alt+Enter** (`connect_and_return`) to reopen the menu after the launched c
 
 ## One-row action bar
 
-![Alt shortcuts revealed in the action bar](../screenshot-shortcuts.png)
+![Alt shortcuts revealed in the action bar](images/shortcuts.png)
 
 The menu, dialogs, help and configuration editor use the same single-row bar. Keys are highlighted against a quiet shared background. The profile selector shows both neighbors, for example `Bash ← → SSH`; the current profile remains in the selected host row. Directional hints show both directions (`←→`, `↑↓`). On narrow terminals, lower-priority hints are omitted; Keys in help lists all bindings, including profile shortcuts.
 
@@ -101,6 +101,6 @@ Hold **Alt**, **Shift**, **Ctrl**, or a combination to reveal only that exact gr
 
 Holding modifiers requires Kitty keyboard modifier press/release events. In other terminals, **Alt+?**, **Ctrl+?**, **Ctrl+Alt+?**, and **Shift+F1** toggle the corresponding menu; the next ordinary key closes it. These only reveal bindings: press the full shortcut to invoke an action. The configurable actions are `reveal_alt`, `reveal_ctrl`, `reveal_ctrl_alt`, and `reveal_shift` in each screen's binding map.
 
-![Shift shortcuts in their own action bar](../screenshot-shift-shortcuts.png)
+![Shift shortcuts in their own action bar](images/shift-shortcuts.png)
 
 Within a revealed group the modifier prefix is shown once; `S SSH` under Alt means Alt+S. Elsewhere compact key labels use `C-` for Ctrl, `A-` for Alt, `S-` for Shift and `↵` for Enter. Terminal keyboard and focus-reporting modes are restored before launching a connection or external editor.

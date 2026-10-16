@@ -9,9 +9,9 @@ Use Left/Right on **Action** to switch between:
 
 Each action retains its own address draft while you switch. Tab/Shift-Tab or Up/Down moves between fields; Left/Right changes the focused action, recipe, or dropdown choice. The dialog stays in place when recipes change; short terminals scroll fields to keep the selection visible. **Esc** cancels. All controls can be rebound under `keybindings.dialog`.
 
-![Configuring the selected host with a setup recipe](../screenshot-configure-remote.png)
+![Configuring the selected host with a setup recipe](images/configure-remote.png)
 
-![Adding a remote with SSH keypair and dotfiles inputs](../screenshot-new-remote.png)
+![Adding a remote with SSH keypair and dotfiles inputs](images/new-remote.png)
 
 The included setup recipes are:
 
@@ -29,7 +29,7 @@ Both key-auth recipes offer **Key expiry**: never (default), 8 hours, day, week,
 
 The updater expects a regular remote `~/.ssh/authorized_keys` file and an OpenSSH server supporting `expiry-time`. Custom authorized-key locations require adapting the recipe. If the post-copy update fails, setup reports failure, but the copied key remains installed.
 
-Existing configuration files are preserved. To adopt these samples in an existing installation, copy the desired entries under `configuration_scripts` from the [updated example](../shui-config.example.yml); keep your custom recipes.
+Existing configuration files are preserved. To adopt these samples in an existing installation, copy the desired entries under `configuration_scripts` from the [updated example](../config/default.yml); keep your custom recipes.
 
 Older bundled setup recipes combine placeholders with `$(...)` command substitution. These templates are now rejected because shell word escaping cannot safely handle nested quoting. Replace the two key-auth entries and **Copy terminal definition** with their current versions, including their helper fields and YAML anchors, then run `shui --check-config`. For custom recipes, move command substitution into a literal script field and pass placeholder values as positional arguments. Placeholders inside `${...}` parameter expansions are also rejected; ordinary expressions such as `${port:+-p "$port"}` remain supported beside placeholders.
 

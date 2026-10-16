@@ -31,34 +31,34 @@ modes.add_argument('--help-viewer', action='store_true', help='capture built-in 
 args = parser.parse_args()
 if args.install_prompt:
     keys = b'\x1bc'
-    title, output_name, quit_keys = 'Install mc? [y/N]', 'screenshot-install-prompt.png', b'n\n'
+    title, output_name, quit_keys = 'Install mc? [y/N]', 'install-prompt.png', b'n\n'
 elif args.search:
     keys = b'maintenance'
-    title, output_name, quit_keys = 'SHUI', 'screenshot-search.png', b'\x03'
+    title, output_name, quit_keys = 'SHUI', 'search.png', b'\x03'
 elif args.monitor:
     keys = b'\x1bh'
-    title, output_name, quit_keys = 'cpu', 'screenshot-monitor.png', b'q'
+    title, output_name, quit_keys = 'cpu', 'monitor.png', b'q'
 elif args.shift_shortcuts:
     keys = b'\x1b[57441;2u'
-    title, output_name, quit_keys = 'SHUI', 'screenshot-shift-shortcuts.png', b'\x1b[57441;2:3u\x03'
+    title, output_name, quit_keys = 'SHUI', 'shift-shortcuts.png', b'\x1b[57441;2:3u\x03'
 elif args.shortcuts:
     keys = b'\x1b[57443;3u'
-    title, output_name, quit_keys = 'SHUI', 'screenshot-shortcuts.png', b'\x1b[57443;3:3u\x03'
+    title, output_name, quit_keys = 'SHUI', 'shortcuts.png', b'\x1b[57443;3:3u\x03'
 elif args.connection:
     keys = b'\x1b[13;5u'
-    title, output_name, quit_keys = 'CONNECT', 'screenshot-connection.png', b'\x03\x03'
+    title, output_name, quit_keys = 'CONNECT', 'connection.png', b'\x03\x03'
 elif args.configure:
     keys = b'\x1bOS\x1b[C\t'
-    title, output_name, quit_keys = 'REMOTE SETUP', 'screenshot-configure-remote.png', b'\x03\x03'
+    title, output_name, quit_keys = 'REMOTE SETUP', 'configure-remote.png', b'\x03\x03'
 elif args.dialog:
     keys = b'\x1b[1;2Sdeploy@new.example.org:2222\t\x1b[C\x1b[C\t'
-    title, output_name, quit_keys = 'REMOTE SETUP', 'screenshot-new-remote.png', b'\x03\x03'
+    title, output_name, quit_keys = 'REMOTE SETUP', 'new-remote.png', b'\x03\x03'
 elif args.help_viewer:
     keys = b'\x1bOP\x1b[C'
-    title, output_name, quit_keys = 'HELP', 'screenshot-help.png', b'\x03\x03'
+    title, output_name, quit_keys = 'HELP', 'help.png', b'\x03\x03'
 else:
     keys = b'\x1b[C' * 4
-    title, output_name, quit_keys = 'SHUI', 'screenshot.png', b'\x03'
+    title, output_name, quit_keys = 'SHUI', 'hosts.png', b'\x03'
 
 repo = Path(__file__).resolve().parents[1]
 binary = (args.binary or repo / 'target/x86_64-unknown-linux-musl/release/shui').resolve()
@@ -81,7 +81,7 @@ with tempfile.TemporaryDirectory(prefix='shui-screenshot-') as directory:
     (home / ".config/shui").mkdir(parents=True)
     if args.monitor:
         # Keep this machine's container-specific mounts out of the demo capture.
-        config = (repo / 'shui-config.example.yml').read_text()
+        config = (repo / 'config/default.yml').read_text()
         config = re.sub(r'(?m)^      disks_filter = .*$', '      disks_filter = "/"', config)
         (home / '.config/shui/config.yml').write_text(config)
     (home / ".ssh/config").write_text("# Production · deploy window 02:00 UTC\nHost production.example.org\n User deploy\n HostName 192.0.2.10\n Port 2222\n # Check backups before maintenance\n")
@@ -174,5 +174,7 @@ for row in range(rows):
         x, y = pad + col * cell_w, pad + row * cell_h
         draw.rectangle((x, y, x + cell_w - 1, y + cell_h - 1), fill=bg)
         draw.text((x, y), char.data, font=font, fill=fg, stroke_width=0)
-image.save(repo / output_name)
-print(f'Updated {output_name}')
+output_path = repo / 'docs/images' / output_name
+output_path.parent.mkdir(parents=True, exist_ok=True)
+image.save(output_path)
+print(f'Updated {output_path.relative_to(repo)}')
