@@ -29,6 +29,52 @@ def read_pty(master):
         raise
 
 
+def wait_pty(process, master, timeout, consume):
+    """Keep draining output while waiting, including terminal teardown writes."""
+    deadline = time.monotonic() + timeout
+    while True:
+        status = process.poll()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(process.args, timeout)
+        if select.select([master], [], [], 0 if status is not None else min(remaining, 0.05))[0]:
+            chunk = read_pty(master)
+            if chunk:
+                consume(chunk)
+                continue
+        if status is not None:
+            return status
+
+
+def close_pty(process, master, slave):
+    # Closing the terminal before reaping also releases a killed session leader
+    # blocked in terminal teardown on macOS.
+    if process.poll() is None:
+        process.kill()
+    os.close(master)
+    os.close(slave)
+    process.wait(timeout=3)
+
+
+def check_pty_drain():
+    """Output larger than the PTY buffer must not deadlock exit or cleanup."""
+    for finish in [True, False]:
+        master, slave = pty.openpty()
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import os; os.write(1, b'x' * 262144)"],
+            stdin=slave, stdout=slave, stderr=slave)
+        try:
+            if finish:
+                output = bytearray()
+                assert wait_pty(process, master, 5, output.extend) == 0
+                assert output == b'x' * 262144
+            else:
+                assert select.select([master], [], [], 5)[0], "writer did not start"
+                assert process.poll() is None, "writer did not fill the PTY buffer"
+        finally:
+            close_pty(process, master, slave)
+
+
 def interaction_checks(binary):
     """Assert the final screen and geometry after real keyboard/focus/resize events."""
     import pyte
@@ -97,16 +143,12 @@ def interaction_checks(binary):
                         if self.process.poll() is not None:
                             break
                         self.send(b"\x03")
-                    self.process.wait(timeout=2)
+                    wait_pty(self.process, self.master, 2, self.stream.feed)
                     if error[0] is None:
                         self.require(self.process.returncode == 0, "unexpected exit")
                         assert termios.tcgetattr(self.slave) == self.before
                 finally:
-                    if self.process.poll() is None:
-                        self.process.kill()
-                        self.process.wait()
-                    os.close(self.master)
-                    os.close(self.slave)
+                    close_pty(self.process, self.master, self.slave)
 
             def drain(self):
                 # Wait for one complete redraw and a quiet period, with a hard bound.
@@ -311,6 +353,7 @@ def interaction_checks(binary):
 
 faulthandler.dump_traceback_later(60, repeat=True)
 source_binary = Path(sys.argv[1]).resolve()
+check_pty_drain()
 interaction_checks(source_binary)
 if sys.argv[2:] == ["--interaction-only"]:
     sys.exit(0)
@@ -381,7 +424,7 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
                     continue
                 os.write(master, key)
                 read_for(0.1)
-            process.wait(timeout=3)
+            wait_pty(process, master, 3, output.extend)
             assert process.returncode == expected_status, output
             assert termios.tcgetattr(slave) == before, "terminal settings were not restored"
             handoff = output.find(b"SHUI_HANDOFF")
@@ -397,11 +440,7 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
                 assert (root / "command.tty").read_bytes().strip() == tty_before, "child inherited modified tty settings"
             return output
         finally:
-            if process.poll() is None:
-                process.kill()
-                process.wait()
-            os.close(master)
-            os.close(slave)
+            close_pty(process, master, slave)
 
     # A fresh home needs no SSH directory; unset, empty and relative XDG values fall back.
     for index, xdg in enumerate((None, "", "relative-config")):
@@ -1081,12 +1120,8 @@ os.execv(sys.argv[1], [sys.argv[1]])
         assert b'SHUI' in output, output
         assert not (root / 'tty-leak').exists(), 'background check accessed the controlling terminal'
         os.write(master, b'\x03')
-        assert process.wait(timeout=3) == 0, 'TTY probe did not exit successfully'
+        assert wait_pty(process, master, 3, output.extend) == 0, 'TTY probe did not exit successfully'
     finally:
-        if process.poll() is None:
-            process.kill()
-            process.wait(timeout=3)
-        os.close(master)
-        os.close(slave)
+        close_pty(process, master, slave)
     faulthandler.cancel_dump_traceback_later()
     print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, adding/configuring remotes and setup recipes, embedded help, terminal restoration")
