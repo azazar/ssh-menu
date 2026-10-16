@@ -206,7 +206,7 @@ fn child(root: &Path) {
         let all = records(&log);
         assert!(!all.is_empty());
         for call in &all {
-            assert!(!call[0].ends_with("sh.exe"));
+            assert_ne!(Path::new(&call[0]).file_name().unwrap(), "sh.exe");
         }
         if profile.name.starts_with("Configure key") {
             assert!(all[0].last().unwrap().contains("ssh-ed25519 AAAATEST"));

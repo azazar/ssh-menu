@@ -195,6 +195,42 @@ fn optional_commands_execute_the_documented_scripts() {
 }
 
 #[test]
+fn windows_key_installation_preserves_existing_keys_and_is_idempotent() {
+    let env = Sandbox::new("windows-key-install");
+    for tool in ["mkdir", "touch", "chmod", "tr", "awk"] {
+        env.link(tool);
+    }
+    let config = Config::parse(&crate::config_defaults::defaults(true, false).unwrap()).unwrap();
+    let mut profile = config.configuration_scripts[0].clone();
+    profile.shell = crate::command::Shell::Sh;
+    profile.command = "sh -c %{install_key}".into();
+    profile.inputs.clear();
+    fs::create_dir_all(env.0.join(".ssh")).unwrap();
+    let file = env.0.join(".ssh/authorized_keys");
+    let previous = "restrict ssh-ed25519 BBBB previous";
+    fs::write(&file, previous).unwrap(); // Also exercise a file without a final newline.
+    for _ in 0..2 {
+        stdout(env.run_input(&profile, None, None, b"ssh-ed25519 AAAA new key\r\n"));
+        assert_eq!(
+            fs::read_to_string(&file).unwrap(),
+            format!("{previous}\nssh-ed25519 AAAA new key\n")
+        );
+    }
+    fs::rename(&file, env.0.join("other-keys")).unwrap();
+    symlink(env.0.join("other-keys"), &file).unwrap();
+    assert!(
+        !env.run_input(&profile, None, None, b"ssh-ed25519 CCCC rejected\n")
+            .status
+            .success()
+    );
+    assert!(
+        !fs::read_to_string(env.0.join("other-keys"))
+            .unwrap()
+            .contains("CCCC")
+    );
+}
+
+#[test]
 fn shipped_profiles_check_every_local_dependency_without_running_it() {
     let env = Sandbox::new("availability");
     for (name, tools) in [
