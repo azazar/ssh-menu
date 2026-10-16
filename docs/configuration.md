@@ -98,3 +98,11 @@ Each named-field substitution adds a shell-quoting layer. Fields without `%{...}
 ## Connection inputs
 
 Launch profiles may declare `inputs` using the same `promptString`, `pickString` and generator format as configuration scripts. Use `%{input:id}` to substitute a shell-escaped value. **Ctrl+Enter** opens a one-off connection dialog; Enter and profile shortcuts also open it when a profile declares inputs. Required values are validated before launch. Values are visible and are never saved to YAML or history. See [connection dialog reference](connection.md).
+
+## Windows
+
+Use **[Git for Windows](https://git-scm.com/downloads/win)** for the POSIX `sh` used by command templates. From PowerShell or Windows Terminal, add Git’s `bin` and `usr/bin` directories to `PATH`; Git Bash already provides it. Shui reads the native `USERPROFILE` and `USERNAME`, ignores a conflicting POSIX `HOME`, and defaults to Notepad for config editing. `VISUAL` / `EDITOR` use Windows command-line quoting (quote executable paths containing spaces). Configuration remains under `XDG_CONFIG_HOME/shui.yml`, falling back to `%USERPROFILE%/.config/shui.yml`; discovery reads `%USERPROFILE%/.ssh/config`. Read-only CLI commands do not require a shell. For WSL, install a Linux build inside WSL instead.
+
+## Upgrading
+
+If upgrading from an older configuration path, move your existing configuration to `$XDG_CONFIG_HOME/shui.yml` (default: `~/.config/shui.yml`) before the first launch to preserve custom settings. Older paths are not loaded or migrated automatically. When upgrading from the previous project name, update shell aliases and scripts to invoke `shui`.

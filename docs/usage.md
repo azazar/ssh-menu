@@ -104,3 +104,11 @@ Holding modifiers requires Kitty keyboard modifier press/release events. In othe
 ![Shift shortcuts in their own action bar](images/shift-shortcuts.png)
 
 Within a revealed group the modifier prefix is shown once; `S SSH` under Alt means Alt+S. Elsewhere compact key labels use `C-` for Ctrl, `A-` for Alt, `S-` for Shift and `↵` for Enter. Terminal keyboard and focus-reporting modes are restored before launching a connection or external editor.
+
+## Requirements
+
+Use a UTF-8 terminal with a monospace font. The action bar needs no Powerline or Nerd Font glyphs. Install the tools for the profiles you use: `ssh` for normal connections, `mosh` locally and `mosh-server` remotely for Mosh, or local `mc` for file browsing. SFTP uses local `sftp`; Tmux needs remote `tmux`; Monitor needs remote `btop` (GPU support depends on its build and the remote drivers). The terminal-definition recipe needs local `infocmp` and remote `tic`. Key-auth setup uses `ssh-copy-id` and offers `ssh-keygen` when no keypair exists; the dotfiles sample also uses `scp`.
+
+## Command-line options
+
+Run `shui` to open the menu, or `shui prod` to start with a search filter. Use `shui --dump` to list hosts without opening the UI. `shui --config-path` prints the configuration location, and `shui --check-config` validates the current configuration without running commands. Use `shui --check-config ./config.yml` for a draft file. `--help` and `--version` are also available.

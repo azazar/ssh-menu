@@ -1,5 +1,22 @@
 # Development
 
+## Build from source
+
+Install [Rust via rustup](https://rustup.rs/), then:
+
+```sh
+git clone https://github.com/azazar/shui.git
+cd shui
+cargo build --locked --release
+./target/release/shui
+```
+
+The repository pins its Rust toolchain. Check out the desired release tag before building a specific version. On Linux x86-64, add `--target x86_64-unknown-linux-musl` for a static build; the binary will be in `target/x86_64-unknown-linux-musl/release/`.
+
+For development builds, use the **Artifacts** section of a successful [Binaries workflow](https://github.com/azazar/shui/actions/workflows/binaries.yml) run. Downloading Actions artifacts requires signing in to GitHub. Each artifact ZIP contains a platform archive and its `.sha256` checksum file—extract that outer ZIP first.
+
+## Tests
+
 ```sh
 python3 -m pip install pyte==0.8.2
 cargo fmt --check
