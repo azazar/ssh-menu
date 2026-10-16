@@ -21,8 +21,27 @@ fn config_path_with_base(home: &Path, base: Option<&Path>) -> PathBuf {
     base.filter(|path| path.is_absolute())
         .map(Path::to_path_buf)
         .unwrap_or_else(|| home.join(".config"))
-        .join("shui/config.yml")
+        .join("shui")
+        .join("config.yml")
 }
+// Profiles deliberately use POSIX shell syntax on every supported platform.
+#[cfg(windows)]
+pub fn require_shell() -> io::Result<()> {
+    background::run(":", false, BACKGROUND_TIMEOUT)
+        .and_then(|output| {
+            if output.status.success() {
+                Ok(())
+            } else {
+                Err(io::Error::other("sh failed"))
+            }
+        })
+        .map_err(|error| {
+            io::Error::new(error.kind(), format!(
+                "POSIX sh unavailable; install Git for Windows or add its bin directory to PATH: {error}"
+            ))
+        })
+}
+
 pub const DEFAULT_CONFIG: &str = include_str!("../shui-config.example.yml");
 const HISTORY_TARGET: &str = " # shui-target=";
 const LEGACY_HISTORY_TARGET: &str = " # ssh-menu-target=";
@@ -68,9 +87,42 @@ mod background {
 
     const OUTPUT_LIMIT: usize = 64 * 1024;
 
+    #[cfg(windows)]
+    fn create_job() -> io::Result<std::os::windows::io::OwnedHandle> {
+        use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+        use windows_sys::Win32::System::JobObjects::{
+            CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+            SetInformationJobObject,
+        };
+        // SAFETY: default security, unnamed job; handle ownership transfers
+        // immediately. The limit structure is initialized and correctly sized.
+        unsafe {
+            let handle = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+            if handle.is_null() {
+                return Err(io::Error::last_os_error());
+            }
+            let job = OwnedHandle::from_raw_handle(handle);
+            let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            if SetInformationJobObject(
+                job.as_raw_handle(),
+                JobObjectExtendedLimitInformation,
+                (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                std::mem::size_of_val(&limits) as u32,
+            ) == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(job)
+        }
+    }
+
     struct Process {
         child: Child,
         stopped: bool,
+        #[cfg(windows)]
+        job: std::os::windows::io::OwnedHandle,
     }
 
     impl Process {
@@ -79,6 +131,17 @@ mod background {
                 return;
             }
             self.stopped = true;
+            #[cfg(windows)]
+            {
+                use std::os::windows::io::AsRawHandle;
+                // SAFETY: job is owned and live until Process is dropped.
+                unsafe {
+                    windows_sys::Win32::System::JobObjects::TerminateJobObject(
+                        self.job.as_raw_handle(),
+                        1,
+                    );
+                }
+            }
             #[cfg(unix)]
             {
                 use nix::{
@@ -182,7 +245,25 @@ mod background {
 
     pub(super) fn run(command: &str, capture: bool, timeout: Duration) -> io::Result<Output> {
         let mut command_builder = Command::new("sh");
+        #[cfg(not(windows))]
         command_builder.arg("-c").arg(command).stdin(Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            // Gate user code until the shell belongs to our job. Its read is a
+            // shell builtin, so no descendants can escape before assignment.
+            // Closing the pipe after the newline gives user code EOF on stdin.
+            command_builder
+                .args([
+                    "-c",
+                    "read -r gate && exec sh -c \"$1\"",
+                    "shui-background",
+                    command,
+                ])
+                .stdin(Stdio::piped())
+                // Background checks must not prompt through the UI's console.
+                .creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW);
+        }
         if capture {
             command_builder
                 .stdout(Stdio::piped())
@@ -202,9 +283,31 @@ mod background {
             }
         }
         let mut process = Process {
+            #[cfg(windows)]
+            job: create_job()?,
             child: command_builder.spawn()?,
             stopped: false,
         };
+        #[cfg(windows)]
+        {
+            use std::{io::Write, os::windows::io::AsRawHandle};
+            // SAFETY: both handles are owned by process and remain live.
+            if unsafe {
+                windows_sys::Win32::System::JobObjects::AssignProcessToJobObject(
+                    process.job.as_raw_handle(),
+                    process.child.as_raw_handle(),
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            process
+                .child
+                .stdin
+                .take()
+                .expect("piped stdin")
+                .write_all(b"\n")?;
+        }
         let mut stdout = process.child.stdout.take();
         let mut stderr = process.child.stderr.take();
         #[cfg(unix)]
@@ -1096,6 +1199,20 @@ mod tests {
     }
 
     #[test]
+    fn background_descendants_stop_after_shell_exit() {
+        let marker = std::env::temp_dir().join(format!("shui-descendant-{}", std::process::id()));
+        let command = format!(
+            "(sleep 0.3; printf escaped > {}) & printf done",
+            shell_words::quote(&marker.to_string_lossy().replace('\\', "/")),
+        );
+        let output = background::run(&command, true, Duration::from_secs(2)).unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"done");
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(!marker.exists(), "descendant survived shell exit");
+    }
+
+    #[test]
     fn unsafe_shell_contexts_reject_template_substitutions() {
         for command in [
             "cat <<EOF\n%{input:x}\nEOF",
@@ -1393,7 +1510,7 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
         let mut input = config.configuration_scripts[0].inputs[0].clone();
         input.command = Some(format!(
             "HOME={}; export HOME; {}",
-            shell_words::quote(home.to_str().unwrap()),
+            shell_words::quote(&home.to_str().unwrap().replace('\\', "/")),
             input.command.unwrap()
         ));
         assert_eq!(
@@ -1451,7 +1568,7 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
         let custom = home.join("custom-config");
         assert_eq!(
             config_path_with_base(&home, Some(&custom)),
-            custom.join("shui/config.yml")
+            custom.join("shui").join("config.yml")
         );
         for base in [
             None,

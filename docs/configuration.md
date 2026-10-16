@@ -62,7 +62,7 @@ Remote checks inside `command` follow the connection's normal lifecycle: declini
 
 An optional `available_command` checks whether a launch profile can be used. It runs once per profile when the configuration is loaded for an interactive session, before the TUI opens. Exit **0** keeps the profile; a nonzero status or failure to start hides it. Profiles without a check remain available.
 
-Checks time out after five seconds. Input generators have the same deadline and a 64 KiB limit for each output stream, enforced while reading. On Unix, checks and generators run without a controlling terminal, and their process group is stopped on completion, timeout, or output-limit failure. Interactive work belongs in preparation or connection commands.
+Checks time out after five seconds. Input generators have the same deadline and a 64 KiB limit for each output stream, enforced while reading. On Unix, checks and generators run without a controlling terminal, and their process group is stopped on completion, timeout, or output-limit failure. Windows uses a job object to stop the shell and its descendants on the same paths. Interactive work belongs in preparation or connection commands.
 
 Checks are literal local `sh -c` commands with stdin closed and output discarded. Use quick, noninteractive checks; placeholders are not expanded and no remote connection is made automatically. Checks do not run for `--dump`, `--help`, or `--version`.
 
@@ -93,7 +93,7 @@ Each named-field substitution adds a shell-quoting layer. Fields without `%{...}
 
 ## Menu behavior and editing
 
-`connect` hands off to a connection; `connect_and_return` reopens the menu afterward (Enter and Alt+Enter by default). Configure either action under `keybindings.menu` and `keybindings.dialog`. **F9** immediately edits this file using `$VISUAL` / `$EDITOR` / `vi`. If editing or validation fails, the recovery screen offers a retry and F1 for the format reference. Saving reloads only valid configurations. Checks include YAML structure, required fields, templates, input definitions, unique names and shortcut conflicts. This validates the configuration format, not arbitrary shell script behavior.
+`connect` hands off to a connection; `connect_and_return` reopens the menu afterward (Enter and Alt+Enter by default). Configure either action under `keybindings.menu` and `keybindings.dialog`. **F9** immediately edits this file using `$VISUAL` / `$EDITOR`, defaulting to `vi` on Unix or Notepad on Windows. If editing or validation fails, the recovery screen offers a retry and F1 for the format reference. Saving reloads only valid configurations. Checks include YAML structure, required fields, templates, input definitions, unique names and shortcut conflicts. This validates the configuration format, not arbitrary shell script behavior.
 
 ## Connection inputs
 

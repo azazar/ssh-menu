@@ -67,11 +67,11 @@ Install **v0.1.0-rc.5** with a verified download. These commands check the archi
 )
 ```
 
-**Windows x64 or ARM64** — use the [verified PowerShell installation](docs/installation.md#windows), then run Shui from Git Bash.
+**Windows x64 or ARM64** — use the [verified PowerShell installation](docs/installation.md#windows), then run Shui with Git for Windows installed.
 
 For manual installation, [choose your platform archive](docs/installation.md#get-a-binary) and download `SHA256SUMS` from the same release.
 
-Add `~/.local/bin` to your `PATH` (in Bash or Zsh: `export PATH="$HOME/.local/bin:$PATH"`). On Windows, run Shui from [Git Bash](https://git-scm.com/downloads/win); PowerShell is only used for installation. macOS binaries are unsigned. See the [installation guide](docs/installation.md) for checksum verification, platform requirements, and source builds, or browse [GitHub Releases](https://github.com/azazar/shui/releases).
+Add `~/.local/bin` to your `PATH` (in Bash or Zsh: `export PATH="$HOME/.local/bin:$PATH"`). On Windows, use [Git Bash](https://git-scm.com/downloads/win), or add Git’s `bin` and `usr/bin` directories to `PATH` when using PowerShell. macOS binaries are unsigned. See the [installation guide](docs/installation.md) for checksum verification, platform requirements, and source builds, or browse [GitHub Releases](https://github.com/azazar/shui/releases).
 
 Help is embedded in the executable. Only `shui` (or `shui.exe`) is needed; no documentation files are required for F1 help.
 

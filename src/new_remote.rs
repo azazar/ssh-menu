@@ -513,12 +513,8 @@ fn form(
                     focus = remote_field;
                     continue;
                 };
-                let target = if let Some(home) = env::var_os("HOME") {
-                    normalized_target(
-                        &target,
-                        Path::new(&home),
-                        &env::var("USER").unwrap_or_default(),
-                    )
+                let target = if let Some(home) = env::home_dir() {
+                    normalized_target(&target, Path::new(&home), &local_username())
                 } else {
                     target
                 };

@@ -7,6 +7,8 @@ Your existing hosts appear automatically in three aligned, borderless columns: l
 
 You can start with a filter directly: `shui production` or `shui "deploy database"`. With no saved hosts, the menu shows how to add one; an empty search result suggests clearing the filter or adding a remote.
 
+On Linux, if stdin or stdout is not a terminal and `DISPLAY` or `WAYLAND_DISPLAY` is nonempty, Shui opens a desktop terminal. It uses the first available launcher from `xdg-terminal-exec`, `sensible-terminal`, and `x-terminal-emulator`, preserving your arguments and working directory. Use `shui --no-terminal [QUERY]` to require an existing terminal instead. Read-only commands such as `--dump` never open a window. Headless Linux, macOS and Windows still require a terminal for interactive mode.
+
 Changing a profile affects only the selected host. Moving away or changing the filter preserves the choice while the menu is open.
 
 | Key | Action |

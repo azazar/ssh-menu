@@ -93,6 +93,18 @@ jobs:
           if [[ "$RUNNER_OS" == Windows ]]; then binary="$binary.exe"; fi
           "$binary" --version
           "$binary" --help
+          python tests/cli.py "$binary"
+      - name: Native unit tests
+        if: ${{ !matrix.cross }}
+        run: cargo test --locked --target "$TARGET"
+      - name: macOS lint and terminal integration tests
+        if: runner.os == 'macOS'
+        timeout-minutes: 10
+        run: |
+          cargo clippy --locked --target "$TARGET" --all-targets -- -D warnings
+          python -m pip install pyte==0.8.2
+          python tests/zellij.py
+          python tests/terminal.py "target/$TARGET/release/shui"
       - name: Package binary and documentation
         run: python scripts/package.py "$TARGET"
       - uses: actions/upload-artifact@v7.0.2

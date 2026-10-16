@@ -18,7 +18,7 @@ serde_yaml_ng = "0.10.0"
 nix = { version = "0.31.3", features = ["signal", "process", "fs"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Pipes"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Pipes", "Win32_UI_Shell", "Win32_System_JobObjects", "Win32_Security", "Win32_System_Threading"] }
 
 [profile.release]
 lto = true

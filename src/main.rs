@@ -15,10 +15,7 @@ mod ssh_config;
 
 use crossterm::{
     cursor::Show,
-    event::{
-        self, Event, KeyCode, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags,
-        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
-    },
+    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
     style::{Attribute, ResetColor, SetAttribute},
 };
@@ -32,7 +29,7 @@ use ratatui::{
 use std::{
     collections::{HashMap, HashSet},
     env, fs,
-    io::{self, IsTerminal, Write},
+    io::{self, Write},
     path::Path,
     process::Command,
 };
@@ -325,7 +322,7 @@ fn menu(
         direct_profile,
     } = state;
     let mut bar_state = bar::State::default();
-    let local_user = env::var("USER").unwrap_or_default();
+    let local_user = local_username();
     let ssh = ssh_config::load(home, &local_user);
     let mut host_config = ssh.hints;
     let mut configured_users = ssh.users;
@@ -615,7 +612,7 @@ fn menu(
                         .zip(profiles.iter())
                         .map(|(target, profile)| (target.label(), *profile))
                         .collect();
-                    let user = env::var("USER").unwrap_or_default();
+                    let user = local_username();
                     *targets = discover(home, &user);
                     *profiles = config.history_profiles_with_users(
                         targets,
@@ -829,27 +826,46 @@ fn menu(
 }
 fn init_terminal() -> io::Result<DefaultTerminal> {
     let terminal = ratatui::try_init()?;
-    if let Err(err) = execute!(
-        io::stdout(),
-        PushKeyboardEnhancementFlags(
-            KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
-                | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
-                | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
-        ),
-        event::EnableFocusChange
-    ) {
+    if let Err(err) = keyboard_enhancements(&mut io::stdout(), true)
+        .and_then(|()| execute!(io::stdout(), event::EnableFocusChange))
+    {
         let _ = suspend_terminal();
         return Err(err);
     }
     Ok(terminal)
 }
 
+fn keyboard_enhancements(output: &mut impl Write, enable: bool) -> io::Result<()> {
+    // Crossterm reads native Windows key events, and its Kitty protocol
+    // commands unconditionally return Unsupported on Windows.
+    #[cfg(windows)]
+    {
+        let _ = (output, enable);
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        use crossterm::event::{
+            KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+        };
+        if enable {
+            execute!(
+                output,
+                PushKeyboardEnhancementFlags(
+                    KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                        | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+                        | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+                )
+            )
+        } else {
+            execute!(output, PopKeyboardEnhancementFlags)
+        }
+    }
+}
+
 fn suspend_terminal() -> io::Result<()> {
-    let keyboard = execute!(
-        io::stdout(),
-        PopKeyboardEnhancementFlags,
-        event::DisableFocusChange
-    );
+    let keyboard = keyboard_enhancements(&mut io::stdout(), false);
+    let focus = execute!(io::stdout(), event::DisableFocusChange);
     let restore = ratatui::try_restore();
     let appearance = execute!(
         io::stdout(),
@@ -858,6 +874,7 @@ fn suspend_terminal() -> io::Result<()> {
         Show
     );
     keyboard
+        .and(focus)
         .and(restore)
         .and(appearance)
         .and(io::stdout().flush())
@@ -950,6 +967,10 @@ fn save_history(path: &Path, line: &str, create: bool) -> io::Result<()> {
     file.write_all(format!("{separator}{line}\n").as_bytes())
 }
 
+fn local_username() -> String {
+    env::var(if cfg!(windows) { "USERNAME" } else { "USER" }).unwrap_or_default()
+}
+
 fn run() -> io::Result<()> {
     let action = cli::parse(env::args_os().skip(1))?;
     match &action {
@@ -960,11 +981,9 @@ fn run() -> io::Result<()> {
         cli::Action::CheckConfig(Some(path)) => return check_config(path),
         _ => {}
     }
-    let home = env::var_os("HOME")
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| io::Error::other("HOME is not set"))?;
-    let home = Path::new(&home);
-    let user = env::var("USER").unwrap_or_default();
+    let home = env::home_dir().ok_or_else(|| io::Error::other("home directory is unavailable"))?;
+    let home = home.as_path();
+    let user = local_username();
     match &action {
         cli::Action::ConfigPath => {
             return writeln!(
@@ -983,14 +1002,16 @@ fn run() -> io::Result<()> {
         }
         _ => {}
     }
-    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
-        return Err(io::Error::other(
-            "interactive mode requires a terminal; use --dump to list hosts or --help for options",
-        ));
-    }
-    let cli::Action::Menu(query) = action else {
+    let cli::Action::Menu {
+        query,
+        auto_terminal,
+    } = action
+    else {
         unreachable!()
     };
+    cli::require_terminal(auto_terminal)?;
+    #[cfg(windows)]
+    launch::require_shell()?;
     let mut targets = discover(home, &user);
     let mut config = launch::Config::load(home)?;
     let history = read_history(&home.join(".bash_history")).unwrap_or_default();
@@ -1097,9 +1118,7 @@ fn run() -> io::Result<()> {
             #[cfg(not(unix))]
             {
                 let status = Command::new(program).args(args).status()?;
-                if !status.success() {
-                    return Err(io::Error::other("connection failed"));
-                }
+                std::process::exit(status.code().unwrap_or(1));
             }
         }
         return Ok(());
@@ -1118,6 +1137,18 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keyboard_protocol_matches_the_platform_backend() {
+        let mut output = Vec::new();
+        keyboard_enhancements(&mut output, true).unwrap();
+        keyboard_enhancements(&mut output, false).unwrap();
+        if cfg!(windows) {
+            assert!(output.is_empty());
+        } else {
+            assert_eq!(output, b"\x1b[>11u\x1b[<1u");
+        }
+    }
     #[test]
     fn edited_text_keeps_the_visible_tail_and_whole_graphemes() {
         for (text, width, expected) in [

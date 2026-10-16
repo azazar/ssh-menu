@@ -5,6 +5,16 @@ on:
 permissions:
   contents: read
 jobs:
+  wine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Build Wine test environment
+        run: docker build -t shui-wine-tests -f tests/wine.Dockerfile .
+      - name: Test Windows binary and shell execution under Wine
+        run: docker run --rm --mount "type=bind,src=$PWD,dst=/src,readonly" shui-wine-tests
+
   test-and-build:
     runs-on: ubuntu-latest
     steps:

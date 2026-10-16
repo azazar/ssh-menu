@@ -98,7 +98,7 @@ Run this in PowerShell to select x64 or ARM64, verify the download, and install 
 
 For a manual download, compare `Get-FileHash -Algorithm SHA256 .\shui-x86_64-pc-windows-msvc.zip` with the matching entry in `SHA256SUMS` before extracting the executable.
 
-Run it from **[Git Bash](https://git-scm.com/downloads/win)**, which supplies the `sh`, `HOME`, and `USER` environment used by command templates and host discovery. PowerShell alone does not supply that environment. For WSL, install a Linux build inside WSL instead.
+Use **[Git for Windows](https://git-scm.com/downloads/win)** for the POSIX `sh` used by command templates. From PowerShell or Windows Terminal, add Git’s `bin` and `usr/bin` directories to `PATH`; Git Bash already provides it. Shui reads the native `USERPROFILE` and `USERNAME`, ignores a conflicting POSIX `HOME`, and defaults to Notepad for config editing. `VISUAL` / `EDITOR` use Windows command-line quoting (quote executable paths containing spaces). Configuration remains under `XDG_CONFIG_HOME/shui/config.yml`, falling back to `%USERPROFILE%/.config/shui/config.yml`; discovery reads `%USERPROFILE%/.ssh/config`. Read-only CLI commands do not require a shell. For WSL, install a Linux build inside WSL instead.
 
 ## Build from source
 

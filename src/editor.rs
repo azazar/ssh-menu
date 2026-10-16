@@ -92,9 +92,8 @@ fn launch_editor(terminal: &mut DefaultTerminal, home: &Path) -> io::Result<laun
     let editor = ["VISUAL", "EDITOR"]
         .into_iter()
         .find_map(|name| env::var(name).ok().filter(|value| !value.trim().is_empty()))
-        .unwrap_or_else(|| "vi".into());
-    let words = shell_words::split(&editor)
-        .ok()
+        .unwrap_or_else(|| if cfg!(windows) { "notepad" } else { "vi" }.into());
+    let words = editor_words(&editor)
         .filter(|words| !words.is_empty())
         .ok_or_else(|| io::Error::other("Invalid VISUAL / EDITOR command."))?;
     suspend_terminal()?;
@@ -108,4 +107,47 @@ fn launch_editor(terminal: &mut DefaultTerminal, home: &Path) -> io::Result<laun
         return Err(io::Error::other(format!("Editor exited with {status}")));
     }
     launch::Config::load(home)
+}
+
+#[cfg(not(windows))]
+fn editor_words(editor: &str) -> Option<Vec<String>> {
+    shell_words::split(editor).ok()
+}
+
+#[cfg(windows)]
+fn editor_words(editor: &str) -> Option<Vec<String>> {
+    use windows_sys::Win32::{Foundation::LocalFree, UI::Shell::CommandLineToArgvW};
+    let wide: Vec<u16> = editor.encode_utf16().chain(Some(0)).collect();
+    let mut count = 0;
+    // SAFETY: wide is NUL-terminated; Windows returns count valid strings in
+    // one allocation, released with LocalFree after copying them.
+    unsafe {
+        let args = CommandLineToArgvW(wide.as_ptr(), &mut count);
+        if args.is_null() {
+            return None;
+        }
+        let words = std::slice::from_raw_parts(args, count as usize)
+            .iter()
+            .map(|&arg| {
+                let mut len = 0;
+                while *arg.add(len) != 0 {
+                    len += 1;
+                }
+                String::from_utf16_lossy(std::slice::from_raw_parts(arg, len))
+            })
+            .collect();
+        LocalFree(args.cast());
+        Some(words)
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    #[test]
+    fn editor_preserves_windows_paths_and_arguments() {
+        assert_eq!(
+            super::editor_words(r#""C:\Program Files\Editor\edit.exe" --wait"#).unwrap(),
+            [r"C:\Program Files\Editor\edit.exe", "--wait"]
+        );
+    }
 }
