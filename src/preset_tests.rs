@@ -129,6 +129,7 @@ fn shipped_profiles_check_every_local_dependency_without_running_it() {
         ("SOCKS", vec!["ssh"]),
         ("Dropbear", vec!["dbclient"]),
         ("PuTTY", vec!["putty.exe"]),
+        ("Plink", vec!["plink.exe"]),
     ] {
         let check = profile(name).available_command.unwrap();
         let available = |os| {
@@ -150,7 +151,7 @@ fn shipped_profiles_check_every_local_dependency_without_running_it() {
             env.stub(tool, "echo executed > unexpected; exit 99");
         }
         assert!(available("Windows_NT"), "{name} hidden with its clients");
-        assert_eq!(available("Linux"), name != "PuTTY");
+        assert_eq!(available("Linux"), !matches!(name, "PuTTY" | "Plink"));
         for missing in &tools {
             fs::remove_file(env.0.join("bin").join(missing)).unwrap();
             assert!(!available("Windows_NT"), "{name} did not check {missing}");

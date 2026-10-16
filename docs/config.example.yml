@@ -372,6 +372,10 @@ profiles:
     key: Alt+P
     available_command: test "${OS:-}" = Windows_NT && command -v putty.exe
     command: port=%p; exec putty.exe -ssh ${port:+-P "$port"} %h
+  - name: Plink
+    key: Alt+L
+    available_command: test "${OS:-}" = Windows_NT && command -v plink.exe
+    command: port=%p; exec plink.exe -ssh -t ${port:+-P "$port"} %h
 
 # F4 configures the selected host; Shift+F4 opens Add new to add and connect.
 # You can also switch between these modes using the Action field.

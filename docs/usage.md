@@ -19,7 +19,7 @@ Changing a profile affects only the selected host. Moving away or changing the f
 | Enter | Connect |
 | Alt+Enter | Connect and return to the menu afterward |
 | Ctrl+Enter | Adjust the remote, profile and inputs for one connection |
-| Alt+D / Alt+P | Connect with Dropbear / Windows PuTTY (when installed) |
+| Alt+D / Alt+P / Alt+L | Connect with Dropbear / Windows PuTTY / Windows Plink (when installed) |
 | Alt+S / Alt+M / Alt+C | Connect with SSH / Mosh / MC |
 | Alt+B / Alt+Z / Alt+T | Connect with remote Bash / Zellij / Tmux |
 | Alt+F / Alt+H | Open SFTP / remote monitor |

@@ -18,6 +18,7 @@ Profiles appear only when their local clients are available. Alongside SSH, Mosh
 | --- | --- |
 | Dropbear | Runs `dbclient` with an optional `-p` port. Requires local Dropbear client. |
 | PuTTY | Opens `putty.exe -ssh` on Windows, with an optional `-P` port. Requires PuTTY on PATH. |
+| Plink | Runs `plink.exe -ssh -t` in the current Windows terminal. Requires Plink on PATH. |
 | Tmux | Attaches to the remote `main` session or creates it. Requires remote tmux; edit `remote` to use another session name. Detach with tmux's Ctrl+B, then D. |
 | SFTP | Interactive OpenSSH file transfers; type `help` for commands and `bye` to exit. Requires local sftp and a remote SFTP subsystem. |
 | Monitor | Opens a compact btop health dashboard: CPU/load/temperature, memory/swap, mounted filesystem space, disk busy time, network traffic and supported GPU statistics. Requires remote btop. |
@@ -70,7 +71,7 @@ Checks are literal local `sh -c` commands with stdin closed and output discarded
 
 If the configured default is unavailable, the first available profile becomes the session default. History restoration and F8 only select available profiles. If none remain, Shui reports an error before opening the TUI. Filtering does not rewrite your config; restart after installing a missing tool.
 
-Every shipped launch profile has an `available_command` for its local clients: SSH-based profiles require `ssh`, Mosh requires `ssh` and `mosh`, MC requires `ssh` and `mc`, SFTP requires `sftp`, Dropbear requires `dbclient`, and PuTTY requires Windows (`OS=Windows_NT`) and `putty.exe`. Remote tools are checked after connecting. Remove a local availability check if you want the existing preparation helper to offer installation instead. Existing config files are preserved; copy the new checks and profiles from the [commented config](config.example.yml).
+Every shipped launch profile has an `available_command` for its local clients: SSH-based profiles require `ssh`, Mosh requires `ssh` and `mosh`, MC requires `ssh` and `mc`, SFTP requires `sftp`, Dropbear requires `dbclient`, and PuTTY/Plink require Windows (`OS=Windows_NT`) and their respective executables. Remote tools are checked after connecting. Remove a local availability check if you want the existing preparation helper to offer installation instead. Existing config files are preserved; copy the new checks and profiles from the [commented config](config.example.yml).
 
 ## Placeholders and ports
 
@@ -111,6 +112,6 @@ If upgrading from an older configuration path, move your existing configuration 
 
 ## Alternative SSH clients
 
-**Dropbear** (Alt+D) uses [dbclient](https://github.com/mkj/dropbear/blob/master/manpages/dbclient.1). **PuTTY** (Alt+P) opens a [PuTTY window](https://the.earth.li/~sgtatham/putty/latest/htmldoc/Chapter3.html#using-cmdline) on Windows. Both accept explicit `user@host:port` targets; each client's normal host-key verification remains enabled.
+**Dropbear** (Alt+D) uses [dbclient](https://github.com/mkj/dropbear/blob/master/manpages/dbclient.1). **PuTTY** (Alt+P) opens a [PuTTY window](https://the.earth.li/~sgtatham/putty/latest/htmldoc/Chapter3.html#using-cmdline) on Windows. **Plink** (Alt+L) uses [Plink](https://the.earth.li/~sgtatham/putty/latest/htmldoc/Chapter7.html) in the current Windows terminal with a remote PTY. All three accept explicit `user@host:port` targets; each client's normal host-key verification remains enabled.
 
-These clients do not read OpenSSH's `~/.ssh/config`. Use a real hostname/address, or a PuTTY saved session, and configure keys and proxies in the chosen client. OpenSSH aliases, `User`, `IdentityFile`, and `ProxyJump` settings are not translated. Explicit usernames are retained in these clients' commands, even when they match an OpenSSH `User` directive. PuTTY opens its own window; Plink is not used.
+These clients do not read OpenSSH's `~/.ssh/config`. Use a real hostname/address, or a PuTTY saved session, and configure keys and proxies in the chosen client. OpenSSH aliases, `User`, `IdentityFile`, and `ProxyJump` settings are not translated. Explicit usernames are retained in these clients' commands, even when they match an OpenSSH `User` directive. PuTTY opens its own window; Plink stays in the current terminal. PuTTY is preferable for full-screen remote applications; Plink’s terminal behavior depends on the Windows console.

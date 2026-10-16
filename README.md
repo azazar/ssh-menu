@@ -17,6 +17,7 @@ Find a machine, choose how to connect, and press Enter. Shui brings your SSH hos
 | **SSH** | Alt+S | Your usual remote shell, using existing SSH settings |
 | **Dropbear** | Alt+D | A lightweight SSH session using `dbclient` |
 | **PuTTY** | Alt+P | A PuTTY SSH window on Windows |
+| **Plink** | Alt+L | A PuTTY SSH connection in the current Windows terminal |
 | **Mosh** | Alt+M | A Mosh session for connections that need to survive network changes |
 | **MC** | Alt+C | Midnight Commander browsing the remote filesystem |
 | **Bash** | Alt+B | An interactive remote Bash login shell |

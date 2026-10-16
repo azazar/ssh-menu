@@ -730,7 +730,10 @@ impl Profile {
     pub fn normalize_target(&self, target: &Target, users: &HashMap<String, String>) -> Target {
         // These clients do not apply OpenSSH's User directives. An explicit
         // username must not be dropped based on another client's configuration.
-        if matches!(self.program().as_str(), "dbclient" | "putty" | "putty.exe") {
+        if matches!(
+            self.program().as_str(),
+            "dbclient" | "putty" | "putty.exe" | "plink" | "plink.exe"
+        ) {
             target.clone()
         } else {
             crate::ssh_config::normalize_target(target, users)
@@ -1397,6 +1400,7 @@ mod tests {
         for (name, prefix, port_flag, separator) in [
             ("Dropbear", "", "-p", "--\n"),
             ("PuTTY", "-ssh\n", "-P", ""),
+            ("Plink", "-ssh\n-t\n", "-P", ""),
         ] {
             let mut profile = config
                 .profiles
@@ -1425,7 +1429,7 @@ mod tests {
         let config = Config::parse(DEFAULT_CONFIG).unwrap();
         let target = target(Some("2222"));
         let users = HashMap::from([("host".into(), "alice".into())]);
-        for name in ["SSH", "Dropbear", "PuTTY"] {
+        for name in ["SSH", "Dropbear", "PuTTY", "Plink"] {
             let profile = config.profiles.iter().find(|p| p.name == name).unwrap();
             let normalized = profile.normalize_target(&target, &users);
             assert_eq!(
