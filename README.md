@@ -48,7 +48,7 @@ Both installers detect your platform, verify the download, and install to `~/.lo
 
 Windows needs [Git for Windows](https://git-scm.com/downloads/win); use Git Bash or add Git's `bin` and `usr/bin` directories to `PATH`. macOS binaries are unsigned.
 
-[Manual downloads: v0.1.0-rc.8](https://github.com/azazar/shui/releases/tag/v0.1.0-rc.8) · [Build from source](docs/development.md#build-from-source)
+[Manual downloads: v0.1.0-rc.9](https://github.com/azazar/shui/releases/tag/v0.1.0-rc.9) · [Build from source](docs/development.md#build-from-source)
 
 ## Get started
 
