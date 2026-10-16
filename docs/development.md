@@ -6,6 +6,7 @@ cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 python3 tests/zellij.py
+python3 tests/install.py
 cargo build --locked --release --target x86_64-unknown-linux-musl
 python3 tests/cli.py target/x86_64-unknown-linux-musl/release/shui
 python3 tests/terminal.py target/x86_64-unknown-linux-musl/release/shui
@@ -21,7 +22,9 @@ The [Docker integration suite](https://github.com/azazar/shui/blob/master/tests/
 
 The [Binaries workflow](https://github.com/azazar/shui/blob/master/.github/workflows/binaries.yml) runs on pull requests, branch pushes, version tags, and manual dispatch. It runs the [Linux checks](https://github.com/azazar/shui/blob/master/.github/workflows/ci.yml), builds the platform matrix, runs native CLI and unit tests, verifies static Linux linkage, and uploads packaged artifacts. Both Intel and Apple Silicon macOS runners also run Clippy, the Zellij tests, and the full PTY suite using the same test sources as Linux. Linux-only desktop-terminal checks remain Linux-only. macOS testing uses GitHub-hosted hardware; no local Darling setup is required. All three Linux targets also execute the shared action, binding, modifier, help and dialog-rendering tests through `cross test` (QEMU for ARM). Native Windows and macOS unit tests and the Wine job run the same tests. The in-memory suite tests decoded keyboard events and application outcomes; the PTY suite additionally checks Unix terminal byte decoding, rendering and process handoff.
 
-Before publishing, update the version in `Cargo.toml` and `Cargo.lock`, update the README download URLs, and refresh screenshots if the UI changed. Commit those changes and push a matching `v*` tag to publish. After all builds and checks pass, the workflow uploads the archives and `SHA256SUMS` to a draft, then publishes it. Uploading before publication supports immutable releases. Tags containing a hyphen, such as `v0.1.0-rc.1`, are marked as prereleases. To publish an existing draft, run the **Publish existing release** workflow with its tag; it verifies all seven archives and their checksums first. Windows builds statically link the MSVC runtime; macOS archives are not signed or notarized.
+Before publishing, update the version in `Cargo.toml` and `Cargo.lock`, update the README download URLs and the versions in `scripts/install.sh` and `scripts/install.ps1`, and refresh screenshots if the UI changed. Commit those changes and push a matching `v*` tag to publish. After all builds and checks pass, the workflow uploads the archives and `SHA256SUMS` to a draft, then publishes it. Uploading before publication supports immutable releases. Tags containing a hyphen, such as `v0.1.0-rc.1`, are marked as prereleases. To publish an existing draft, run the **Publish existing release** workflow with its tag; it verifies all seven archives and their checksums first. Windows builds statically link the MSVC runtime; macOS archives are not signed or notarized.
+
+The shared installer tests use local release fixtures and exercise the shell installer on Linux/macOS and PowerShell on Windows. They check platform selection, installation, checksums, failure preservation and temporary cleanup without network access. The one-line installers are served from `scripts/` by GitHub Pages.
 
 ## Documentation and help
 

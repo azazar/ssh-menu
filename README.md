@@ -43,76 +43,21 @@ F1 help is embedded in the executable and works offline. You only need to instal
 
 ### Linux and macOS
 
-This command detects Linux (including WSL) or macOS on x86-64, ARM64, or Linux ARMv7, verifies the archive's SHA-256 checksum, and installs into `~/.local/bin` without sudo:
-
 ```sh
-(
-  set -eu
-  version=v0.1.0-rc.8
-  case "$(uname -s):$(uname -m)" in
-    Linux:x86_64) target=x86_64-unknown-linux-musl ;;
-    Linux:aarch64|Linux:arm64) target=aarch64-unknown-linux-musl ;;
-    Linux:armv7l) target=armv7-unknown-linux-musleabihf ;;
-    Darwin:arm64) target=aarch64-apple-darwin ;;
-    Darwin:x86_64) target=x86_64-apple-darwin ;;
-    *) echo 'Unsupported platform; see supported platforms below.' >&2; exit 1 ;;
-  esac
-  archive="shui-$target.tar.gz"
-  base="https://github.com/azazar/shui/releases/download/$version"
-  temporary=$(mktemp -d)
-  trap 'rm -rf "$temporary"' EXIT
-  trap 'exit 1' HUP INT TERM
-  cd "$temporary"
-  curl --fail --location --proto '=https' --output "$archive" "$base/$archive"
-  curl --fail --location --proto '=https' --output SHA256SUMS "$base/SHA256SUMS"
-  awk -v name="$archive" '$2 == name { print; count++ } END { if (count != 1) exit 1 }' SHA256SUMS > checksum
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum -c checksum
-  else
-    shasum -a 256 -c checksum
-  fi
-  tar -xzf "$archive" shui
-  mkdir -p "$HOME/.local/bin"
-  install -m 755 shui "$HOME/.local/bin/shui"
-)
+curl -fsSL https://azazar.github.io/shui/scripts/install.sh | sh
 ```
+
+Detects your platform, verifies the download, and installs to `~/.local/bin` without sudo.
 
 Add `~/.local/bin` to your `PATH` (in Bash or Zsh: `export PATH="$HOME/.local/bin:$PATH"`). Add that line to your shell's startup file to keep it across sessions. Linux builds have no dynamic libc dependency. macOS builds use system libraries and are not signed or notarized.
 
 ### Windows
 
-Run this in PowerShell to select x64 or ARM64, verify the download, and install `shui.exe` into `~/.local/bin`:
-
 ```powershell
-& {
-    $ErrorActionPreference = "Stop"
-    $version = "v0.1.0-rc.8"
-    $target = switch ($env:PROCESSOR_ARCHITECTURE) {
-        "AMD64" { "x86_64-pc-windows-msvc" }
-        "ARM64" { "aarch64-pc-windows-msvc" }
-        default { throw "Use a 64-bit PowerShell on Windows x64 or ARM64." }
-    }
-    $archive = "shui-$target.zip"
-    $base = "https://github.com/azazar/shui/releases/download/$version"
-    $temporary = Join-Path ([IO.Path]::GetTempPath()) ("shui-" + [guid]::NewGuid())
-    New-Item -ItemType Directory $temporary | Out-Null
-    try {
-        Invoke-WebRequest "$base/$archive" -OutFile "$temporary/$archive"
-        Invoke-WebRequest "$base/SHA256SUMS" -OutFile "$temporary/SHA256SUMS"
-        $pattern = "^[0-9a-f]{64}  " + [regex]::Escape($archive) + "$"
-        $matching = @(Get-Content "$temporary/SHA256SUMS" | Where-Object { $_ -cmatch $pattern })
-        if ($matching.Count -ne 1) { throw "Expected exactly one checksum for $archive." }
-        $expected = $matching[0].Split(' ')[0]
-        $actual = (Get-FileHash -Algorithm SHA256 "$temporary/$archive").Hash
-        if ($actual -ne $expected) { throw "Checksum verification failed; nothing installed." }
-        Expand-Archive "$temporary/$archive" "$temporary/unpacked"
-        New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null
-        Copy-Item "$temporary/unpacked/shui.exe" "$HOME/.local/bin/shui.exe" -Force
-    } finally {
-        Remove-Item -Recurse -Force $temporary
-    }
-}
+irm https://azazar.github.io/shui/scripts/install.ps1 | iex
 ```
+
+Selects x64 or ARM64, verifies the download, and installs to `~/.local/bin`. Add that directory to your `PATH` if needed. Set `SHUI_INSTALL_DIR` to choose a different install directory on either platform.
 
 For a manual download, compare `Get-FileHash -Algorithm SHA256 .\shui-x86_64-pc-windows-msvc.zip` with the matching entry in `SHA256SUMS` before extracting the executable.
 
