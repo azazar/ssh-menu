@@ -1702,7 +1702,16 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
         let home = std::env::temp_dir().join(format!("shui-template-test-{}", std::process::id()));
         fs::create_dir_all(&home).unwrap();
         let path = config_path_with_base(&home, None);
-        Config::load_path(&path).unwrap();
+        // Creating the defaults must work even on a client-free machine (Wine).
+        // Availability may then reject opening the menu, without losing the file.
+        if let Err(error) = Config::load_path(&path) {
+            assert!(
+                error
+                    .to_string()
+                    .contains("no launch profiles are available"),
+                "{error}"
+            );
+        }
         assert!(!home.join(".ssh").exists());
         assert!(!home.join(".config/shui").exists());
         assert_eq!(fs::read_to_string(&path).unwrap(), DEFAULT_CONFIG);
