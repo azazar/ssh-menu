@@ -309,7 +309,7 @@ def interaction_checks(binary):
     print("terminal screen interactions passed")
 
 
-faulthandler.dump_traceback_later(120)
+faulthandler.dump_traceback_later(60, repeat=True)
 source_binary = Path(sys.argv[1]).resolve()
 interaction_checks(source_binary)
 if sys.argv[2:] == ["--interaction-only"]:
@@ -355,6 +355,7 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
             os.close(slave)
 
     def session(keys, rows=24, cols=100, expected_status=0, args=()):
+        faulthandler.dump_traceback_later(30, repeat=True)
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
         before = termios.tcgetattr(slave)
@@ -501,7 +502,7 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
     zellij = root / "bin/zellij"
     zellij.write_text('#!/bin/sh\ncase "$1" in\nlist-sessions) printf "existing session\\n" ;;\nattach) printf "%s\\n" "$@" > "$SHUI_TEST_LOG.zellij"; read -r line; [ "$line" = terminal-input ] ;;\nesac\n')
     zellij.chmod(0o755)
-    remote = subprocess.run(["sh", "-c", remote_command], env=child_env, input="terminal-input\n", text=True, capture_output=True)
+    remote = subprocess.run(["sh", "-c", remote_command], env=child_env, input="terminal-input\n", text=True, capture_output=True, timeout=10)
     assert remote.returncode == 0, remote.stderr
     assert (root / "command.zellij").read_text().splitlines() == ["attach", "--create", "existing session"]
     session([b"beta:2222", b"\r"])  # Zellij is restored from the single-line history entry.
@@ -1051,13 +1052,23 @@ profiles:
     available_command: if (printf probe > /dev/tty) 2>/dev/null; then touch "$HOME/tty-leak"; fi; true
     command: ssh -- %h
 """)
-    pid, master = pty.fork()
-    if pid == 0:
-        fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
-        # Prove that the app starts with a controlling TTY before it detaches checks.
-        with open('/dev/tty', 'wb', buffering=0):
-            pass
-        os.execve(binary, [binary], child_env)
+    print("Checking controlling-terminal isolation", flush=True)
+    faulthandler.dump_traceback_later(30, repeat=True)
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
+    # A fresh interpreter acquires the controlling terminal after setsid.
+    # Avoid Python work after pty.fork(): on macOS it can be unsafe when
+    # higher-level system APIs have been used in the parent process.
+    launcher = """
+import fcntl, os, sys, termios
+fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+with open('/dev/tty', 'wb', buffering=0):
+    pass
+os.execv(sys.argv[1], [sys.argv[1]])
+"""
+    process = subprocess.Popen([sys.executable, "-c", launcher, str(binary)],
+                               stdin=slave, stdout=slave, stderr=slave,
+                               env=child_env, start_new_session=True)
     try:
         output = bytearray()
         deadline = time.monotonic() + 5
@@ -1070,18 +1081,12 @@ profiles:
         assert b'SHUI' in output, output
         assert not (root / 'tty-leak').exists(), 'background check accessed the controlling terminal'
         os.write(master, b'\x03')
-        while time.monotonic() < deadline:
-            waited, status = os.waitpid(pid, os.WNOHANG)
-            if waited:
-                assert os.waitstatus_to_exitcode(status) == 0
-                pid = None
-                break
-            time.sleep(0.02)
-        assert pid is None, 'TTY probe did not exit'
+        assert process.wait(timeout=3) == 0, 'TTY probe did not exit successfully'
     finally:
-        if pid is not None:
-            import signal
-            os.kill(pid, signal.SIGKILL)
-            os.waitpid(pid, 0)
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=3)
         os.close(master)
+        os.close(slave)
+    faulthandler.cancel_dump_traceback_later()
     print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, adding/configuring remotes and setup recipes, embedded help, terminal restoration")
