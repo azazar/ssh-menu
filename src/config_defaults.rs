@@ -53,10 +53,50 @@ pub fn defaults(windows: bool, optional: bool) -> Result<String, serde_yaml_ng::
     compose(&parts)
 }
 
+pub fn user_config(windows: bool) -> Result<String, serde_yaml_ng::Error> {
+    let mut config = format!(
+        "# Shui config: F9 edits and reloads. Existing files are preserved on upgrade.\n# Reference: https://github.com/azazar/shui/blob/master/docs/configuration.md\n{}\n# Optional examples: uncomment desired entries and merge into the sections above.\n# Do not add a second profiles or configuration_scripts section.\n",
+        defaults(windows, false)?
+    );
+    for line in OPTIONAL.lines() {
+        config.push_str("# ");
+        config.push_str(line);
+        config.push('\n');
+    }
+    Ok(config)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{Target, launch::Config};
+
+    #[test]
+    fn user_config_preserves_tested_examples_as_inactive_comments() {
+        for windows in [false, true] {
+            let text = user_config(windows).unwrap();
+            let active: Value = serde_yaml_ng::from_str(&text).unwrap();
+            let expected: Value =
+                serde_yaml_ng::from_str(&defaults(windows, false).unwrap()).unwrap();
+            assert_eq!(active, expected);
+            let commented = OPTIONAL
+                .lines()
+                .map(|line| format!("# {line}\n"))
+                .collect::<String>();
+            assert!(text.ends_with(&commented));
+            let restored = text[text.len() - commented.len()..]
+                .lines()
+                .map(|line| format!("{}\n", line.strip_prefix("# ").unwrap()))
+                .collect::<String>();
+            assert_eq!(restored, OPTIONAL);
+            Config::parse(&compose(&[&defaults(windows, false).unwrap(), &restored]).unwrap())
+                .unwrap();
+        }
+        assert_eq!(
+            crate::launch::DEFAULT_CONFIG,
+            user_config(cfg!(windows)).unwrap()
+        );
+    }
 
     #[test]
     fn every_platform_and_optional_composition_validates_and_renders() {

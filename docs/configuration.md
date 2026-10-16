@@ -114,7 +114,7 @@ If upgrading from an older configuration path, move your existing configuration 
 
 Builds merge [shared defaults](config.example.yml) with [Windows additions](config.windows.yml) for Windows targets. Linux and macOS defaults omit PuTTY and Plink. Each binary embeds one complete config; there are no runtime includes. Existing user configs are preserved.
 
-[Optional examples](config.optional.yml) contain editable keybindings, custom commands, setup recipes, and generated inputs as active YAML. Tests merge these examples with both platform variants and validate their commands and bindings. They are not enabled in new user configs.
+[Optional examples](config.optional.yml) contain editable keybindings, custom commands, setup recipes, and generated inputs as active YAML. Tests merge these examples with both platform variants and validate their commands and bindings. Builds append these tested examples as comments in new user configs, so they are available through F9 without being enabled. Uncomment desired entries and merge them into the existing sections.
 
 Build-time merging combines mappings recursively and matches `profiles` and `configuration_scripts` by `name`, preserving unspecified fields and entry order. Other lists, including keybindings and inputs, are replaced. To customize a live config, copy the desired entries or fields into it; the live file does not use this build-time merge mechanism.
 
