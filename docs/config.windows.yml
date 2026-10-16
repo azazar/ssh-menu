@@ -23,9 +23,17 @@ profiles:
           '"' + [regex]::Replace([regex]::Replace($_, '(\\*)"', '$1$1\"'), '(\\+)$', '$1$1') + '"'
         }) -join ' '
         $start.RedirectStandardInput = $null -ne $InputText
-          $start.RedirectStandardOutput = $Capture
+        $start.RedirectStandardOutput = $Capture
         if ($Capture) { $start.StandardOutputEncoding = [System.Text.UTF8Encoding]::new($false) }
-        $process = [System.Diagnostics.Process]::Start($start)
+        # .NET Framework creates its stdin writer from Console.InputEncoding.
+        # Set UTF-8 without a BOM before Start, or it prepends a BOM to SSH input.
+        $previousEncoding = [Console]::InputEncoding
+        try {
+          if ($start.RedirectStandardInput) { [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false) }
+          $process = [System.Diagnostics.Process]::Start($start)
+        } finally {
+          if ($start.RedirectStandardInput) { [Console]::InputEncoding = $previousEncoding }
+        }
         try {
           if ($start.RedirectStandardInput) { $bytes = [System.Text.Encoding]::UTF8.GetBytes($InputText); $process.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length); $process.StandardInput.Close() }
           if ($Capture) { $output = $process.StandardOutput.ReadToEnd() }
@@ -152,13 +160,18 @@ configuration_scripts:
         required: true
         shell: powershell
         command: |
-          $ErrorActionPreference = 'Stop'
-          $directory = Join-Path $env:USERPROFILE '.ssh'
-          $keys = @(Get-ChildItem -LiteralPath $directory -Filter 'id_*.pub' -File -ErrorAction SilentlyContinue | Where-Object {
-            Test-Path -LiteralPath $_.FullName.Substring(0, $_.FullName.Length - 4) -PathType Leaf
-          } | ForEach-Object { $_.Name })
-          if (!$keys.Count) { $keys = @('Generate new Ed25519 key') }
-          @{ options = $keys } | ConvertTo-Json -Compress
+          $directory = [IO.Path]::Combine($env:USERPROFILE, '.ssh')
+          $files = @()
+          if ([IO.Directory]::Exists($directory)) { $files = [IO.Directory]::GetFiles($directory, 'id_*.pub'); [Array]::Sort($files) }
+          [Console]::WriteLine('options:')
+          $found = $false
+          foreach ($public in $files) {
+            if (![IO.File]::Exists($public.Substring(0, $public.Length - 4))) { continue }
+            $name = [IO.Path]::GetFileName($public).Replace("'", "''")
+            [Console]::WriteLine("  - '" + $name + "'")
+            $found = $true
+          }
+          if (!$found) { [Console]::WriteLine("  - 'Generate new Ed25519 key'") }
       - &windows_expiry
         id: expiry
         type: pickString

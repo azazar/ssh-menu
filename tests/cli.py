@@ -37,6 +37,15 @@ with tempfile.TemporaryDirectory(prefix="shui cli ü-") as directory:
         assert "shui" in result.stdout.lower()
     assert run("--unknown").returncode != 0
 
+    defaults = run("--default-config")
+    assert defaults.returncode == 0, defaults.stderr
+    assert "Optional examples:" in defaults.stdout
+    assert ("putty.exe" in defaults.stdout) == windows
+    defaults_file = root / "defaults.yml"
+    defaults_file.write_text(defaults.stdout, encoding="utf-8")
+    assert run("--check-config", target_path(defaults_file)).returncode == 0
+    assert not (root / "settings").exists()
+
     marker = root / "executed"
     config = root / "custom.yml"
     config.write_text(f"""default: SSH

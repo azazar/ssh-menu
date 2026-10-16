@@ -29,7 +29,7 @@ impl Shell {
             Self::Powershell => {
                 use base64::Engine;
                 let code = format!(
-                    "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); {code}"
+                    "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; $shuiOutputEncoding = [Console]::OutputEncoding; try {{ [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); {code} }} finally {{ [Console]::OutputEncoding = $shuiOutputEncoding }}"
                 );
                 let bytes: Vec<_> = code.encode_utf16().flat_map(u16::to_le_bytes).collect();
                 Ok((
@@ -129,6 +129,6 @@ mod tests {
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
         let code = String::from_utf16(&units).unwrap();
-        assert!(code.ends_with("Write-Output 'a''b $() ü'"), "{code}");
+        assert!(code.contains("Write-Output 'a''b $() ü'"), "{code}");
     }
 }

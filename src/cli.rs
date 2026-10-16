@@ -10,12 +10,14 @@ Usage: shui [--no-terminal] [QUERY]
        shui --dump
        shui --check-config [FILE]
        shui --config-path
+       shui --default-config
 
   QUERY                 Start with a host or search phrase (quote multiple words)
   --no-terminal         Require an existing terminal; never open a desktop terminal
   --dump                List discovered hosts without running configuration commands
   --check-config [FILE] Validate configuration without executing its commands
   --config-path         Print the active configuration path
+  --default-config      Print this build's default config without changing files
   -h, --help            Show this help
   -V, --version         Show the version
 
@@ -30,6 +32,7 @@ pub enum Action {
     Version,
     Dump,
     ConfigPath,
+    DefaultConfig,
     CheckConfig(Option<PathBuf>),
     Menu { query: String, auto_terminal: bool },
 }
@@ -52,6 +55,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> io::Result<Action> {
         [arg] if arg == "--version" || arg == "-V" => Ok(Action::Version),
         [arg] if arg == "--dump" => Ok(Action::Dump),
         [arg] if arg == "--config-path" => Ok(Action::ConfigPath),
+        [arg] if arg == "--default-config" => Ok(Action::DefaultConfig),
         [arg] if arg == "--check-config" => Ok(Action::CheckConfig(None)),
         [arg, path] if arg == "--check-config" => Ok(Action::CheckConfig(Some(path.into()))),
         [arg, query] if arg == "--" => query

@@ -112,7 +112,7 @@ Launch profiles may declare `inputs` using the same `promptString`, `pickString`
 
 ## Windows
 
-Windows defaults launch connection clients directly, with built-in Windows PowerShell for setup and input generators. No Git installation or local POSIX shell is required. Install the desired client and make it available on PATH. Existing custom configs using POSIX commands still need their chosen shell; adopt the [Windows overrides](config.windows.yml) to remove that dependency. Shui reads the native `USERPROFILE` and `USERNAME`, ignores a conflicting POSIX `HOME`, and defaults to Notepad for config editing. `VISUAL` / `EDITOR` use Windows command-line quoting (quote executable paths containing spaces). Configuration remains under `XDG_CONFIG_HOME/shui.yml`, falling back to `%USERPROFILE%/.config/shui.yml`; discovery reads `%USERPROFILE%/.ssh/config`. Read-only CLI commands do not require a shell. For WSL, install a Linux build inside WSL instead.
+Windows defaults launch connection clients directly, with built-in Windows PowerShell for setup and input generators. No Git installation or local POSIX shell is required. Install the desired client and make it available on PATH. Existing custom configs using POSIX commands still need their chosen shell; use `shui --default-config` to view this build’s complete defaults and copy desired profiles into your config to remove that dependency. The [Windows overrides](config.windows.yml) are build-time fragments, not a standalone user config. Shui reads the native `USERPROFILE` and `USERNAME`, ignores a conflicting POSIX `HOME`, and defaults to Notepad for config editing. `VISUAL` / `EDITOR` use Windows command-line quoting (quote executable paths containing spaces). Configuration remains under `XDG_CONFIG_HOME/shui.yml`, falling back to `%USERPROFILE%/.config/shui.yml`; discovery reads `%USERPROFILE%/.ssh/config`. Read-only CLI commands do not require a shell. For WSL, install a Linux build inside WSL instead.
 
 ## Upgrading
 
@@ -120,7 +120,7 @@ If upgrading from an older configuration path, move your existing configuration 
 
 ## Default config parts
 
-Builds merge [shared defaults](config.example.yml) with [Windows overrides](config.windows.yml) for Windows targets. Linux and macOS defaults omit PuTTY and Plink. Each binary embeds one complete config; there are no runtime includes. Existing user configs are preserved.
+Builds merge [shared defaults](config.example.yml) with [Windows overrides](config.windows.yml) for Windows targets. Linux and macOS defaults omit PuTTY and Plink. Each binary embeds one complete config; `shui --default-config` prints it without changing files. There are no runtime includes. Existing user configs are preserved.
 
 [Optional examples](config.optional.yml) contain editable keybindings, custom commands, setup recipes, and generated inputs as active YAML, with [native Windows variants](config.optional.windows.yml). Tests merge these examples with both platform variants and validate their commands and bindings. Builds append these tested examples as comments in new user configs, so they are available through F9 without being enabled. Uncomment desired entries and merge them into the existing sections.
 

@@ -980,6 +980,9 @@ fn local_username() -> String {
 fn run() -> io::Result<()> {
     let action = cli::parse(env::args_os().skip(1))?;
     match &action {
+        cli::Action::DefaultConfig => {
+            return write!(io::stdout().lock(), "{}", launch::DEFAULT_CONFIG);
+        }
         cli::Action::Help => return writeln!(io::stdout().lock(), "{}", cli::HELP),
         cli::Action::Version => {
             return writeln!(io::stdout().lock(), "shui {}", env!("CARGO_PKG_VERSION"));
