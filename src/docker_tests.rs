@@ -24,7 +24,7 @@ fn export_docker_fixtures() {
         ("Monitor", "monitor"),
     ];
     // These need client-side transport/GUI behavior, not just remote script execution.
-    let excluded = ["Mosh", "MC", "SFTP", "Tunnel", "SOCKS"];
+    let excluded = ["Mosh", "MC", "SFTP", "Tunnel", "SOCKS", "Dropbear", "PuTTY"];
     let known: HashSet<_> = covered
         .iter()
         .map(|(name, _)| *name)
@@ -107,5 +107,5 @@ fn export_docker_fixtures() {
             );
         }
     }
-    fs::write(directory.join("coverage.txt"), "Profiles: SSH, Bash, Tmux, Zellij, Monitor\nRecipes: key auth (existing and generated), key auth + dotfiles, terminal definition\nExcluded: Mosh (UDP client), MC (VFS client), SFTP (client), Tunnel/SOCKS (client forwarding)\n").unwrap();
+    fs::write(directory.join("coverage.txt"), "Profiles: SSH, Bash, Tmux, Zellij, Monitor\nRecipes: key auth (existing and generated), key auth + dotfiles, terminal definition\nExcluded: Mosh (UDP client), MC (VFS client), SFTP (client), Tunnel/SOCKS (client forwarding), Dropbear/PuTTY (alternative clients)\n").unwrap();
 }

@@ -419,8 +419,11 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
                         break
                     output.extend(chunk)
         try:
-            read_for(0.3)
-            assert b"SHUI" in output, output
+            deadline = time.monotonic() + 5
+            while b"SHUI" not in output:
+                assert process.poll() is None, output
+                assert time.monotonic() < deadline, output
+                read_for(0.05)
             last_key_start = len(output)
             for key in keys:
                 if isinstance(key, tuple):
