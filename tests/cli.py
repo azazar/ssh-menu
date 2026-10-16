@@ -45,13 +45,13 @@ profiles:
     available_command: touch '{marker}'
     prepare_command: touch '{marker}'
     command: ssh %h
-""")
+""", encoding="utf-8")
     result = run("--check-config", target_path(config))
     assert result.returncode == 0, result.stderr
     assert "configuration is valid" in result.stdout
     assert not marker.exists(), "validation executed trusted shell code"
-    valid_source = config.read_text()
-    config.write_text("profiles: [")
+    valid_source = config.read_text(encoding="utf-8")
+    config.write_text("profiles: [", encoding="utf-8")
     assert run("--check-config", target_path(config)).returncode != 0
     assert run("--check-config", target_path(root / "missing.yml")).returncode != 0
 
@@ -70,8 +70,8 @@ profiles:
     assert not (root / "settings").exists(), "failed TUI startup created config"
 
     (root / ".ssh/conf.d").mkdir(parents=True)
-    (root / ".ssh/config").write_text('Include conf.d/*\nHost="local"\n User="deploy"\n')
-    (root / ".ssh/conf.d/servers").write_text("Host included\n User other\n")
+    (root / ".ssh/config").write_text('Include conf.d/*\nHost="local"\n User="deploy"\n', encoding="utf-8")
+    (root / ".ssh/conf.d/servers").write_text("Host included\n User other\n", encoding="utf-8")
     result = run("--dump")
     assert result.returncode == 0, result.stderr
     assert set(result.stdout.splitlines()) == {"local", "included"}, result.stdout
@@ -79,10 +79,10 @@ profiles:
     assert not (root / "settings").exists()
     default_config = root / "settings/shui/config.yml"
     default_config.parent.mkdir(parents=True)
-    default_config.write_text(valid_source)
+    default_config.write_text(valid_source, encoding="utf-8")
     assert run("--check-config").returncode == 0
     assert not marker.exists(), "default config validation executed a command"
-    assert default_config.read_text() == valid_source
+    assert default_config.read_text(encoding="utf-8") == valid_source
 
     env["XDG_CONFIG_HOME"] = "relative/settings"
     assert run("--config-path").stdout.strip() == target_path(root / ".config/shui/config.yml")
@@ -143,11 +143,11 @@ if mode == "pty":
 '''
         for name in names:
             path = launchers / name
-            path.write_text(launcher_source)
+            path.write_text(launcher_source, encoding="utf-8")
             path.chmod(0o755)
 
         def launches():
-            entries = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+            entries = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()] if log.exists() else []
             log.unlink(missing_ok=True)
             return entries
 
@@ -215,13 +215,13 @@ if mode == "pty":
 
         # End-to-end handoff to a real PTY, preserving cwd and literal arguments.
         path = launchers / names[0]
-        path.write_text(launcher_source)
+        path.write_text(launcher_source, encoding="utf-8")
         path.chmod(0o755)
         workdir = root / "working dir ' $(touch injected)"
         workdir.mkdir()
         default_config.write_text(json.dumps({"default": "SSH", "profiles": [{
             "name": "SSH", "command": "/bin/true %h",
-            "available_command": 'test "$PWD" = ' + shlex.quote(str(workdir))}]}))
+            "available_command": 'test "$PWD" = ' + shlex.quote(str(workdir))}]}), encoding="utf-8")
         env["SHUI_TEST_TERMINAL_MODE"] = "pty"
         for unguarded in ("", "1"):
             env["SHUI_TEST_UNGUARDED"] = unguarded

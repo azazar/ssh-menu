@@ -31,6 +31,20 @@ impl Sandbox {
             .output()
             .unwrap();
         assert!(found.status.success());
+        if name == "awk" {
+            let program = String::from_utf8(found.stdout).unwrap();
+            self.stub(
+                name,
+                &format!(
+                    r#"{} "$@"
+status=$?
+if [ "$status" -ne 0 ]; then printf '\nawk argument: <%s>\n' "$@" >&2; fi
+exit "$status""#,
+                    shell_words::quote(program.trim())
+                ),
+            );
+            return;
+        }
         symlink(
             String::from_utf8(found.stdout).unwrap().trim(),
             self.0.join("bin").join(name),
