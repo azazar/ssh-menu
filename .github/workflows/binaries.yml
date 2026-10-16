@@ -70,10 +70,13 @@ jobs:
       - name: Build static Linux executable
         if: matrix.cross
         run: cross build --locked --release --target "$TARGET"
-      - name: Run shared action tests on Linux target
+      - name: Run shared keyboard and UI tests on Linux target
         if: matrix.cross
         timeout-minutes: 10
-        run: cross test --locked --target "$TARGET" action_tests -- --test-threads=1
+        run: |
+          for suite in action_tests bar::tests bindings::tests help::tests new_remote::tests shortcut::tests; do
+            cross test --locked --target "$TARGET" "$suite" -- --test-threads=1
+          done
       - name: Build native executable
         if: ${{ !matrix.cross }}
         run: cargo build --locked --release --target "$TARGET"
