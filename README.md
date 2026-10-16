@@ -63,7 +63,7 @@ Hold **Alt**, **Shift**, or **Ctrl** to reveal the relevant shortcuts.
 
 ## Customize
 
-Edit `$XDG_CONFIG_HOME/shui.yml` (default `~/.config/shui.yml`) to change profiles, setup recipes, and keybindings. The [commented config](docs/config.example.yml) shows the defaults. Validate changes with `shui --check-config`.
+Edit `$XDG_CONFIG_HOME/shui.yml` (default `~/.config/shui.yml`) to change profiles, setup recipes, and keybindings. See [defaults and optional examples](docs/configuration.md#default-config-parts). Validate changes with `shui --check-config`.
 
 [User guide](docs/usage.md) · [Configuration](docs/configuration.md) · [Keybindings](docs/keybindings.md) · [Setup recipes](docs/setup.md) · [Development](docs/development.md)
 

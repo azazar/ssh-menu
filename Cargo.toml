@@ -2,8 +2,12 @@
 name = "shui"
 version = "0.1.0-rc.8"
 edition = "2024"
+build = "scripts/build.rs"
 license = "GPL-3.0-only"
 description = "Shui (Shell UI): a fast SSH and Mosh connection picker built with Ratatui"
+
+[build-dependencies]
+serde_yaml_ng = "0.10.0"
 
 [dependencies]
 glob = "0.3"

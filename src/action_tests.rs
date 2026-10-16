@@ -152,7 +152,14 @@ fn every_binding_and_alias_has_an_outcome_in_its_real_event_loop() {
                 .chain([(key("F12"), true)])
             {
                 eprintln!("{scope}.{action}: {event:?}, remapped={remap}");
-                let config = configuration(scope, &action, remap);
+                let mut config = configuration(scope, &action, remap);
+                if !remap {
+                    config.keybindings = launch::Config::parse(
+                        &crate::config_defaults::defaults(false, true).unwrap(),
+                    )
+                    .unwrap()
+                    .keybindings;
+                }
                 match scope {
                     "menu" => menu_action(&action, event, config),
                     "dialog" => dialog_action(&action, event, config),
@@ -384,7 +391,8 @@ fn command_args(command: (String, Vec<String>)) -> Vec<String> {
 
 #[test]
 fn shipped_and_custom_profile_shortcuts_select_the_right_command() {
-    for source in [launch::DEFAULT_CONFIG, CONFIG] {
+    let examples = crate::config_defaults::defaults(true, true).unwrap();
+    for source in [launch::DEFAULT_CONFIG, examples.as_str(), CONFIG] {
         let count = launch::Config::parse(source).unwrap().profiles.len();
         for index in 0..count {
             for direct in [false, true] {

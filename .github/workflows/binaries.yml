@@ -77,7 +77,7 @@ jobs:
         if: matrix.cross
         timeout-minutes: 10
         run: |
-          for suite in action_tests bar::tests bindings::tests help::tests new_remote::tests shortcut::tests alternate_clients; do
+          for suite in action_tests bar::tests bindings::tests help::tests new_remote::tests shortcut::tests config_defaults::tests alternate_clients; do
             cross test --locked --target "$TARGET" "$suite" -- --test-threads=1
           done
       - name: Build native executable

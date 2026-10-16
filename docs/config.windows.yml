@@ -1,0 +1,11 @@
+# Windows additions, merged into the shared defaults at build time.
+profiles:
+  - name: PuTTY
+    key: Alt+P
+    available_command: test "${OS:-}" = Windows_NT && command -v putty.exe
+    command: port=%p; exec putty.exe -ssh ${port:+-P "$port"} %h
+  - name: Plink
+    key: Alt+L
+    available_command: test "${OS:-}" = Windows_NT && command -v plink.exe
+    command: port=%p; exec plink.exe -ssh -t ${port:+-P "$port"} %h
+

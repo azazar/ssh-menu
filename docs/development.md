@@ -47,7 +47,7 @@ The shared installer tests use local release fixtures and exercise the shell ins
 
 The user guide, launch profiles, and setup recipes in `docs/` are also the built-in help source, selected by the active screen: Guide, Profiles and Bindings for the host list, Setup for the remote setup dialog, Connection for one-off settings, and Profiles/Bindings/Setup for the configuration editor. Each context also adds a generated Keys topic describing the currently configured bindings. `src/help.rs` embeds them with `include_str!`; rebuilding updates F1 help. Installation instructions in the README, development, and the documentation index remain repository-only content. Add new pages to the documentation index, and include them in help only when useful while running the app. Release archives include the Markdown files as well as the compiled help.
 
-Configuration examples belong in comments in `docs/config.example.yml`. Keep Markdown help focused on usage and field semantics so examples have one maintained home. Screenshots live in `docs/images/`; the screenshot generator writes there, and release archives preserve the same documentation and config paths.
+Shared defaults live in `docs/config.example.yml`, Windows additions in `docs/config.windows.yml`, and optional examples in `docs/config.optional.yml` as active YAML. `scripts/build.rs` uses the shared merger in `src/config_defaults.rs` to embed the target-specific config; tests compose both platforms with optional examples. Keep Markdown help focused on usage and field semantics so examples have one maintained home. Screenshots live in `docs/images/`; the screenshot generator writes there, and release archives preserve the same documentation and config paths.
 
 ## Windows tests under Wine
 

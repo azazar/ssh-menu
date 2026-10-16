@@ -1,7 +1,7 @@
 //! Execute shipped shell recipes with isolated PATHs; never contact a server.
 use crate::{
     Target,
-    launch::{Config, DEFAULT_CONFIG, Profile},
+    launch::{Config, Profile},
 };
 use std::{
     fs,
@@ -96,7 +96,7 @@ impl Drop for Sandbox {
     }
 }
 fn profile(name: &str) -> Profile {
-    let config = Config::parse(DEFAULT_CONFIG).unwrap();
+    let config = Config::parse(&crate::config_defaults::defaults(true, true).unwrap()).unwrap();
     config
         .profiles
         .into_iter()
@@ -111,6 +111,87 @@ fn stdout(out: Output) -> String {
         String::from_utf8_lossy(&out.stderr)
     );
     String::from_utf8(out.stdout).unwrap()
+}
+
+#[test]
+fn optional_generators_escape_values_and_propagate_failures() {
+    let env = Sandbox::new("optional-generators");
+    env.link("sed");
+    env.stub(
+        "git",
+        "[ \"$*\" = 'config --global user.email' ] || exit 99; printf \"o'hara@example.org\\n\"",
+    );
+    let generated = profile("Generated inputs");
+    let run = |index: usize| {
+        Command::new("/bin/sh")
+            .args(["-c", generated.inputs[index].command.as_ref().unwrap()])
+            .env("PATH", env.0.join("bin"))
+            .env("HOME", &env.0)
+            .output()
+            .unwrap()
+    };
+    let email: serde_yaml_ng::Value = serde_yaml_ng::from_str(&stdout(run(0))).unwrap();
+    assert_eq!(email["default"].as_str(), Some("o'hara@example.org"));
+    let mode: serde_yaml_ng::Value = serde_yaml_ng::from_str(&stdout(run(1))).unwrap();
+    assert_eq!(mode["default"].as_str(), Some("full"));
+    assert_eq!(mode["options"].as_sequence().unwrap().len(), 2);
+    env.stub("git", "exit 42");
+    let output = run(0);
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
+fn optional_commands_execute_the_documented_scripts() {
+    let env = Sandbox::new("optional-commands");
+    env.stub("work-session.sh", "printf 'work\\n'");
+    env.stub(
+        "bash",
+        "if [ \"$1\" = -l ]; then printf 'login\\n'; else exec sh \"$@\"; fi",
+    );
+    env.stub("install-tools.sh", "printf '<%s>\\n' \"$@\"");
+    let mut work = profile("Work");
+    work.command = "sh -c %{remote}".into();
+    assert_eq!(stdout(env.run(&work, None, None)), "work\nlogin\n");
+    for name in ["Install tools", "Generated inputs"] {
+        let mut recipe = profile(name);
+        recipe.command = "sh -c %{remote}".into();
+        for input in &mut recipe.inputs {
+            if input.command.is_some() && input.kind == crate::launch::InputType::PickString {
+                *input = input.resolve().unwrap();
+            }
+        }
+        let email = "o'hara; $(touch injected)";
+        let mode = if name == "Install tools" {
+            "minimal"
+        } else {
+            "full"
+        };
+        assert_eq!(
+            stdout(env.run(&recipe, None, Some(("email", email)))),
+            format!("<--email>\n<{email}>\n<--mode>\n<{mode}>\n")
+        );
+        assert!(!env.0.join("injected").exists());
+    }
+    env.stub("ssh", "printf '<%s>\\n' \"$@\"");
+    assert_eq!(
+        stdout(env.run(&profile("Remote command"), None, None)),
+        "<user@host>\n<uptime>\n"
+    );
+    let custom = profile("Install custom tools");
+    let check = |profile: &Profile| {
+        Command::new("/bin/sh")
+            .args(["-c", profile.available_command.as_ref().unwrap()])
+            .env("PATH", env.0.join("bin"))
+            .output()
+            .unwrap()
+            .status
+            .success()
+    };
+    assert!(!check(&custom));
+    env.stub("my-setup-tool", "printf '<%s>\\n' \"$@\"");
+    assert!(check(&custom));
+    assert_eq!(stdout(env.run(&custom, None, None)), "<user@host>\n");
 }
 
 #[test]

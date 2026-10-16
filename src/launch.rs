@@ -41,7 +41,7 @@ pub fn require_shell() -> io::Result<()> {
         })
 }
 
-pub const DEFAULT_CONFIG: &str = include_str!("../docs/config.example.yml");
+pub const DEFAULT_CONFIG: &str = include_str!(concat!(env!("OUT_DIR"), "/config.yml"));
 const HISTORY_TARGET: &str = " # shui-target=";
 const LEGACY_HISTORY_TARGET: &str = " # ssh-menu-target=";
 const SCRIPT_PREFIX: &str = "exec sh -c \"$(printf '%b' ";
@@ -1396,7 +1396,8 @@ mod tests {
     }
     #[test]
     fn alternate_clients_preserve_port_and_user_arguments() {
-        let config = Config::parse(DEFAULT_CONFIG).unwrap();
+        let config =
+            Config::parse(&crate::config_defaults::defaults(true, false).unwrap()).unwrap();
         for (name, prefix, port_flag, separator) in [
             ("Dropbear", "", "-p", "--\n"),
             ("PuTTY", "-ssh\n", "-P", ""),
@@ -1426,7 +1427,8 @@ mod tests {
     }
     #[test]
     fn alternate_clients_keep_users_that_only_openssh_would_supply() {
-        let config = Config::parse(DEFAULT_CONFIG).unwrap();
+        let config =
+            Config::parse(&crate::config_defaults::defaults(true, false).unwrap()).unwrap();
         let target = target(Some("2222"));
         let users = HashMap::from([("host".into(), "alice".into())]);
         for name in ["SSH", "Dropbear", "PuTTY", "Plink"] {
@@ -1477,37 +1479,33 @@ mod tests {
     }
     #[test]
     fn inputs_are_literal_across_nested_shell_layers() {
-        let config = Config::parse(
-            r#"
-default: SSH
-profiles: [{name: SSH, command: 'ssh %h'}]
-configuration_scripts:
-  - name: Install
-    command: sh -c %{remote}
-    remote: sh -c %{script} -- %{input:argument} %{input:mode}
-    script: printf '%s\n' "$1" "$2"
-    inputs:
-      - id: argument
-        type: promptString
-        required: true
-      - id: mode
-        type: pickString
-        options: [minimal, full]
-"#,
-        )
-        .unwrap();
-        let profile = &config.configuration_scripts[0];
+        let config =
+            Config::parse(&crate::config_defaults::defaults(false, true).unwrap()).unwrap();
+        let mut profile = config
+            .configuration_scripts
+            .iter()
+            .find(|p| p.name == "Install tools")
+            .unwrap()
+            .clone();
+        // Execute the documented quoting layers, replacing only transport and
+        // the user-owned installation executable with an argument recorder.
+        profile.command = "sh -c %{remote}".into();
+        profile
+            .fields
+            .get_mut("script")
+            .unwrap()
+            .replace_range(.., "printf '%s\\n' --email \"$1\" --mode \"$2\"");
         let mut values = profile.input_defaults();
         assert!(profile.command_with_inputs(&target(None), &values).is_err());
         let literal = "spaces ' \" ; $(printf INJECTED) %{input:mode} %h";
-        values.insert("argument".into(), literal.into());
+        values.insert("email".into(), literal.into());
         values.insert("mode".into(), "full".into());
         let (program, args) = profile.command_with_inputs(&target(None), &values).unwrap();
         let output = Command::new(program).args(args).output().unwrap();
         assert!(output.status.success());
         assert_eq!(
             String::from_utf8(output.stdout).unwrap(),
-            format!("{literal}\nfull\n")
+            format!("--email\n{literal}\n--mode\nfull\n")
         );
         values.insert("mode".into(), "not-an-option".into());
         assert!(profile.command_with_inputs(&target(None), &values).is_err());

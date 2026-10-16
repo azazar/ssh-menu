@@ -1,0 +1,109 @@
+# Optional examples: merge desired entries into your config; not enabled by default.
+# Fields display plain text, not passwords. Inputs are never saved in history.
+# Maps merge recursively; profiles/recipes merge by name; other lists replace.
+# All bindings below match the built-in defaults. Swap connect/connect_and_return
+# in menu and dialog to return to Shui by default.
+keybindings:
+  menu:
+    reveal_alt: [Alt+?]
+    reveal_ctrl_alt: [Ctrl+Alt+?]
+    reveal_ctrl: [Ctrl+?]
+    reveal_shift: [Shift+F1]
+    connect: [Enter]
+    connect_and_return: [Alt+Enter]
+    connection_settings: [Ctrl+Enter]
+    help: [F1]
+    configure_remote: [F4]
+    new_remote: [Shift+F4]
+    edit_config: [F9]
+    refresh: [F5]
+    clear_search: [Ctrl+U]
+    home: [Home]
+    end: [End]
+    toggle_transport: [F8]
+    quit: [Esc, Ctrl+C]
+    up: [Up]
+    down: [Down]
+    page_up: [PgUp]
+    page_down: [PgDn]
+    left: [Left]
+    right: [Right]
+    erase_character: [Backspace, Delete]
+    erase_word: [Ctrl+Backspace, Ctrl+Delete]
+  dialog:
+    connect: [Enter]
+    connect_and_return: [Alt+Enter]
+    help: [F1]
+    cancel: [Esc, Ctrl+C]
+    next_field: [Tab, Down]
+    previous_field: [Shift+Tab, Up]
+    left: [Left]
+    right: [Right]
+    erase_character: [Backspace, Delete]
+    erase_word: [Ctrl+Backspace, Ctrl+Delete]
+  help:
+    help: [F1] # Toggle help closed
+    close: [Esc, Ctrl+C, Q]
+    next_topic: [Right, Tab]
+    previous_topic: [Left, Shift+Tab]
+    up: [Up]
+    down: [Down]
+    page_up: [PgUp]
+    page_down: [PgDn, Space]
+    home: [Home]
+    end: [End]
+  editor:
+    help: [F1]
+    edit: [Enter, F9]
+    cancel: [Esc, Ctrl+C]
+
+profiles:
+  - name: Work
+    command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
+    remote: bash -c %{script}
+    script: |
+      ~/bin/work-session.sh
+      exec bash -l
+  - name: Remote command
+    command: ssh %h %{input:remote}
+    inputs:
+      - id: remote
+        type: promptString
+        description: Remote command
+        default: uptime
+        required: true
+
+configuration_scripts:
+  - name: Install tools
+    inputs:
+      - id: email
+        type: promptString
+        description: Git email
+        required: true
+      - id: mode
+        type: pickString
+        description: Install mode
+        options: [minimal, full]
+        default: minimal
+    command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
+    remote: sh -c %{script} -- %{input:email} %{input:mode}
+    script: |
+      exec ~/bin/install-tools.sh --email "$1" --mode "$2"
+  - name: Generated inputs
+    inputs:
+      - id: email
+        type: promptString
+        command: |
+          email=$(git config --global user.email) || exit 1
+          escaped=$(printf '%s' "$email" | sed "s/'/''/g")
+          printf "default: '%s'\n" "$escaped"
+      - id: mode
+        type: pickString
+        command: printf '%s' '{"options":["minimal","full"],"default":"full"}'
+    command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
+    remote: sh -c %{script} -- %{input:email} %{input:mode}
+    script: |
+      exec ~/bin/install-tools.sh --email "$1" --mode "$2"
+  - name: Install custom tools
+    available_command: command -v my-setup-tool
+    command: my-setup-tool %h

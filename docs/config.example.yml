@@ -40,64 +40,8 @@ default: SSH
 # always: show known usernames; never: hide the username column.
 # This affects display only. Matching configured usernames are omitted in commands.
 username_display: auto
-# Binding reference: omitted actions keep defaults; [] disables an action.
-# Uncomment entries to override them; merge within each scope, not a second map.
-# Reveal actions are also available in dialog/help/editor with the same defaults.
-# connect hands off; connect_and_return reopens the menu after command exit.
-# Swap these actions' keys in menu and dialog to make returning the default.
-keybindings:
-  menu:
-    # reveal_alt: [Alt+?]
-    # reveal_ctrl_alt: [Ctrl+Alt+?]
-    # reveal_ctrl: [Ctrl+?]
-    # reveal_shift: [Shift+F1]
-    connect: [Enter]
-    connect_and_return: [Alt+Enter]
-    connection_settings: [Ctrl+Enter]
-    # help: [F1]
-    # configure_remote: [F4]
-    # new_remote: [Shift+F4]
-    # edit_config: [F9]
-    # refresh: [F5]
-    # clear_search: [Ctrl+U]
-    # home: [Home]
-    # end: [End]
-    # toggle_transport: [F8]
-    # quit: [Esc, Ctrl+C]
-    # up: [Up]
-    # down: [Down]
-    # page_up: [PgUp]
-    # page_down: [PgDn]
-    # left: [Left]
-    # right: [Right]
-    # erase_character: [Backspace, Delete]
-    # erase_word: [Ctrl+Backspace, Ctrl+Delete]
-  dialog:
-    connect: [Enter]
-    connect_and_return: [Alt+Enter]
-    # help: [F1]
-    # cancel: [Esc, Ctrl+C]
-    # next_field: [Tab, Down]
-    # previous_field: [Shift+Tab, Up]
-    # left: [Left]
-    # right: [Right]
-    # erase_character: [Backspace, Delete]
-    # erase_word: [Ctrl+Backspace, Ctrl+Delete]
-  # help:
-    # help: [F1] # Toggle help closed
-    # close: [Esc, Ctrl+C, Q]
-    # next_topic: [Right, Tab]
-    # previous_topic: [Left, Shift+Tab]
-    # up: [Up]
-    # down: [Down]
-    # page_up: [PgUp]
-    # page_down: [PgDn, Space]
-    # home: [Home]
-    # end: [End]
-  # editor:
-    # help: [F1]
-    # edit: [Enter, F9]
-    # cancel: [Esc, Ctrl+C]
+# Omitted keybindings use the built-in defaults. See config.optional.yml for
+# editable bindings and custom profiles/recipes, all tested as active YAML.
 
 profiles:
   - name: SSH
@@ -368,14 +312,6 @@ profiles:
     key: Alt+D
     available_command: command -v dbclient
     command: port=%p; exec dbclient ${port:+-p "$port"} -- %h
-  - name: PuTTY
-    key: Alt+P
-    available_command: test "${OS:-}" = Windows_NT && command -v putty.exe
-    command: port=%p; exec putty.exe -ssh ${port:+-P "$port"} %h
-  - name: Plink
-    key: Alt+L
-    available_command: test "${OS:-}" = Windows_NT && command -v plink.exe
-    command: port=%p; exec plink.exe -ssh -t ${port:+-P "$port"} %h
 
 # F4 configures the selected host; Shift+F4 opens Add new to add and connect.
 # You can also switch between these modes using the Action field.
@@ -584,72 +520,3 @@ configuration_scripts:
       cat > "$source"
       mkdir -p "$HOME/.terminfo"
       tic -x -o "$HOME/.terminfo" "$source"
-
-# Custom profiles and recipes (merge into the named sections above; these
-# commented fragments are not active). Fields display plain text, not passwords.
-# Inputs: id (unique letters/digits/_/-), type (promptString or pickString),
-# description, default, required, options (pickString only), command (generator).
-# promptString defaults to empty; pickString defaults to its first option.
-# Generators emit a YAML/JSON mapping of default/options/description (max 64 KiB).
-# Successful values are cached while a dialog is open; errors block submission.
-# Generators run locally with stdin closed and no placeholder substitution.
-# Pass remote inputs as positional arguments through remote/script quoting layers.
-# Input values are temporary and never saved to YAML or history.
-
-# Under profiles (remote script):
-#   - name: Work
-#     command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
-#     remote: bash -c %{script}
-#     script: |
-#       ~/bin/work-session.sh
-#       exec bash -l
-
-# Custom setup recipe with text and dropdown inputs:
-# configuration_scripts:
-#   - name: Install tools
-#     inputs:
-#       - id: email
-#         type: promptString
-#         description: Git email
-#         required: true
-#       - id: mode
-#         type: pickString
-#         description: Install mode
-#         options: [minimal, full]
-#         default: minimal
-#     command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
-#     remote: sh -c %{script} -- %{input:email} %{input:mode}
-#     script: |
-#       exec ~/bin/install-tools.sh --email "$1" --mode "$2"
-
-# Generated input defaults/choices (under a profile or recipe):
-# inputs:
-#   - id: email
-#     type: promptString
-#     command: |
-#       email=$(git config --global user.email) || exit 1
-#       escaped=$(printf '%s' "$email" | sed "s/'/''/g")
-#       printf "default: '%s'\n" "$escaped"
-#   - id: mode
-#     type: pickString
-#     command: printf '%s' '{"options":["minimal","full"],"default":"full"}'
-
-# Conditional setup availability:
-# configuration_scripts:
-#   - name: Install custom tools
-#     available_command: command -v my-setup-tool
-#     command: my-setup-tool %h
-
-# Custom profile with a one-off command input:
-# default: SSH
-# profiles:
-#   - name: SSH
-#     command: ssh %h
-#   - name: Remote command
-#     command: ssh %h %{input:remote}
-#     inputs:
-#       - id: remote
-#         type: promptString
-#         description: Remote command
-#         default: uptime
-#         required: true

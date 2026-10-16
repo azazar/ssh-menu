@@ -1,6 +1,6 @@
 # Launch profiles
 
-Edit **`$XDG_CONFIG_HOME/shui.yml`** using the config editor (F9 by default) for validated live reload, or restart after editing externally. The file is created from the [commented example](config.example.yml) on the first interactive launch, creating missing directories. Existing configs are preserved. If `XDG_CONFIG_HOME` is unset, empty, or relative, Shui uses `~/.config/shui.yml`.
+Edit **`$XDG_CONFIG_HOME/shui.yml`** using the config editor (F9 by default) for validated live reload, or restart after editing externally. The file is created from shared defaults plus the build’s platform additions on the first interactive launch, creating missing directories. Existing configs are preserved. If `XDG_CONFIG_HOME` is unset, empty, or relative, Shui uses `~/.config/shui.yml`.
 
 Run `shui --config-path` to print the active path. Use `shui --check-config` (or `shui --check-config path/to/config.yml`) to validate YAML, templates and keybindings without running availability checks, generators or other commands. Validation never creates a configuration file.
 
@@ -33,7 +33,7 @@ The profile's `dashboard` field holds editable btop settings. Mounted filesystem
 
 Both forwarding profiles bind only to `127.0.0.1`, remain in the foreground, and stop with Ctrl+C. They request no remote shell, fail if the listening socket cannot be created, and use SSH keepalives to detect a lost connection. A successful listener does not guarantee the destination service is reachable; the SSH server must allow forwarding. Use Alt+Enter in the dialog to return to the menu when the tunnel stops. Explicit SSH ports and alias settings work as in the other profiles.
 
-Existing configs are not migrated. Copy the desired entries from the [example config](config.example.yml), choosing unused shortcuts if yours differ.
+Existing configs are not migrated. Copy the desired entries from the [shared defaults](config.example.yml), [Windows additions](config.windows.yml), or [optional examples](config.optional.yml), choosing unused shortcuts if yours differ.
 
 These presets follow the upstream [tmux manual](https://github.com/tmux/tmux/blob/master/tmux.1), [OpenSSH ssh manual](https://github.com/openssh/openssh-portable/blob/master/ssh.1), [SFTP manual](https://github.com/openssh/openssh-portable/blob/master/sftp.1), and the [btop project](https://github.com/aristocratos/btop).
 
@@ -57,7 +57,7 @@ Package installs use Homebrew, apt-get, dnf, yum, pacman, zypper or apk, retaini
 
 `prepare_command` is an optional local shell command run with the terminal restored before host setup, connection launch, or history writes. It supports target placeholders and named fields, but not dialog inputs. Exit 0 continues; cancellation, failure or failure to start returns to the menu without launching or recording a connection. It runs only for launch profiles, including shortcuts and one-off connections; it does not run when opening the menu or configuring a host.
 
-Remote checks inside `command` follow the connection's normal lifecycle: declining stops the remote command; use Alt+Enter to return to the menu afterward. The remote launch may already be recorded in history. The shipped `ensure` and `install` helpers are ordinary named fields shared through YAML anchors, not application-specific config types. Their implementation and customization examples are in the config comments. When copying a profile into an existing config, include its referenced helper anchors as well.
+Remote checks inside `command` follow the connection's normal lifecycle: declining stops the remote command; use Alt+Enter to return to the menu afterward. The remote launch may already be recorded in history. The shipped `ensure` and `install` helpers are ordinary named fields shared through YAML anchors, not application-specific config types. The source defaults use YAML anchors; build-time merging expands them in the generated config. When copying a profile from the source defaults, include its referenced helper anchors as well. Customization examples live in [optional examples](config.optional.yml).
 
 ![A launch profile offering its missing local dependency](images/install-prompt.png)
 
@@ -71,7 +71,7 @@ Checks are literal local `sh -c` commands with stdin closed and output discarded
 
 If the configured default is unavailable, the first available profile becomes the session default. History restoration and F8 only select available profiles. If none remain, Shui reports an error before opening the TUI. Filtering does not rewrite your config; restart after installing a missing tool.
 
-Every shipped launch profile has an `available_command` for its local clients: SSH-based profiles require `ssh`, Mosh requires `ssh` and `mosh`, MC requires `ssh` and `mc`, SFTP requires `sftp`, Dropbear requires `dbclient`, and PuTTY/Plink require Windows (`OS=Windows_NT`) and their respective executables. Remote tools are checked after connecting. Remove a local availability check if you want the existing preparation helper to offer installation instead. Existing config files are preserved; copy the new checks and profiles from the [commented config](config.example.yml).
+Every shipped launch profile has an `available_command` for its local clients: SSH-based profiles require `ssh`, Mosh requires `ssh` and `mosh`, MC requires `ssh` and `mc`, SFTP requires `sftp`, Dropbear requires `dbclient`, and PuTTY/Plink require Windows (`OS=Windows_NT`) and their respective executables. Remote tools are checked after connecting. Remove a local availability check if you want the existing preparation helper to offer installation instead. Existing config files are preserved; copy the new checks and profiles from the [shared defaults](config.example.yml) and [Windows additions](config.windows.yml).
 
 ## Placeholders and ports
 
@@ -109,6 +109,14 @@ Use **[Git for Windows](https://git-scm.com/downloads/win)** for the POSIX `sh` 
 ## Upgrading
 
 If upgrading from an older configuration path, move your existing configuration to `$XDG_CONFIG_HOME/shui.yml` (default: `~/.config/shui.yml`) before the first launch to preserve custom settings. Older paths are not loaded or migrated automatically. When upgrading from the previous project name, update shell aliases and scripts to invoke `shui`.
+
+## Default config parts
+
+Builds merge [shared defaults](config.example.yml) with [Windows additions](config.windows.yml) for Windows targets. Linux and macOS defaults omit PuTTY and Plink. Each binary embeds one complete config; there are no runtime includes. Existing user configs are preserved.
+
+[Optional examples](config.optional.yml) contain editable keybindings, custom commands, setup recipes, and generated inputs as active YAML. Tests merge these examples with both platform variants and validate their commands and bindings. They are not enabled in new user configs.
+
+Build-time merging combines mappings recursively and matches `profiles` and `configuration_scripts` by `name`, preserving unspecified fields and entry order. Other lists, including keybindings and inputs, are replaced. To customize a live config, copy the desired entries or fields into it; the live file does not use this build-time merge mechanism.
 
 ## Alternative SSH clients
 

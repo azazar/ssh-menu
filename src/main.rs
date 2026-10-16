@@ -3,6 +3,8 @@ mod action_tests;
 mod bar;
 mod bindings;
 mod cli;
+#[cfg(test)]
+mod config_defaults;
 #[cfg(all(test, unix))]
 mod docker_tests;
 mod editor;

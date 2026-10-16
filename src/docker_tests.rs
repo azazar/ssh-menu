@@ -24,9 +24,7 @@ fn export_docker_fixtures() {
         ("Monitor", "monitor"),
     ];
     // These need client-side transport/GUI behavior, not just remote script execution.
-    let excluded = [
-        "Mosh", "MC", "SFTP", "Tunnel", "SOCKS", "Dropbear", "PuTTY", "Plink",
-    ];
+    let excluded = ["Mosh", "MC", "SFTP", "Tunnel", "SOCKS", "Dropbear"];
     let known: HashSet<_> = covered
         .iter()
         .map(|(name, _)| *name)
