@@ -7,7 +7,7 @@ Press **F1** in Shui to open help for the current screen: Guide, Profiles and Bi
 - [Launch profiles](configuration.md): profile behavior, placeholders, ports, and remote scripts.
 - [One-off connection settings](connection.md): remote overrides and profile inputs.
 - [Setting up a remote](setup.md): setup recipes, custom inputs, generated choices, and availability checks.
-- [Installation](installation.md): release downloads, supported platforms, and source builds.
+- [Installation](../README.md#installation): release downloads, supported platforms, and source builds.
 - [Development](development.md): testing, screenshots, and release workflows.
 
 In help, use **Left/Right** or **Tab** to switch topics, **Up/Down** or **PgUp/PgDn** to scroll, and **Esc** or **F1** to return. **Home/End** jumps to the start or end of a topic.
