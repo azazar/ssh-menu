@@ -651,7 +651,8 @@ profiles:
     assert (root / ".bash_history").read_text() == before
     # Configured setup receives escaped target/port and a restored terminal before connect.
     stub = root / "bin/setup-test"
-    stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SHUI_TEST_LOG.setup"\nstty -g > "$SHUI_TEST_LOG.setup-tty"\nexit "${SETUP_EXIT:-0}"\n')
+    # Force setup to outlast the inter-key delay, on success and failure.
+    stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SHUI_TEST_LOG.setup"\nstty -g > "$SHUI_TEST_LOG.setup-tty"\nsleep 0.3\nexit "${SETUP_EXIT:-0}"\n')
     stub.chmod(0o755)
     config_file.write_text("""default: SSH
 profiles: [{name: SSH, command: 'ssh -- %h'}]
@@ -673,14 +674,14 @@ configuration_scripts:
     before = (root / ".bash_history").read_text()
     config_before = (root / ".ssh/config").read_text()
     (root / "command").unlink(missing_ok=True)
-    output = session([b"added:2222", b"\x1bOS", b"\x1b[C", b"\r", b"\x03"])
+    output = session([b"added:2222", b"\x1bOS", b"\x1b[C", b"\r", RETURNED, b"\x03"])
     assert b"Configure host" in output and b"completed" in output
     assert (root / "command.setup").read_text().splitlines() == ["added", "2222", "literal ; $HOME"]
     assert not (root / "command").exists(), "configure-only launched a connection"
     assert (root / ".bash_history").read_text() == before
     assert (root / ".ssh/config").read_text() == config_before
     child_env["SETUP_EXIT"] = "7"
-    output = session([b"added:2222", b"\x1bOS", b"\x1b[C", b"\r", b"\x03"])
+    output = session([b"added:2222", b"\x1bOS", b"\x1b[C", b"\r", RETURNED, b"\x03"])
     assert b"failed" in output and not (root / "command").exists()
     assert (root / ".bash_history").read_text() == before
     del child_env["SETUP_EXIT"]
@@ -689,7 +690,7 @@ configuration_scripts:
     output = session([b"added:2222", b"\x1bOS", b"\r", b"\x1b", b"\x03"])
     assert b"Choose a setup recipe" in output
     assert not (root / "command.setup").exists()
-    session([b"added:2222", b"\x1bOS", b"\x1b[Z", b"\x1b[Z", b"\x1b[C", b"\t", b"draft", b"\x1b[Z", b"\x1b[D", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
+    session([b"added:2222", b"\x1bOS", b"\x1b[Z", b"\x1b[Z", b"\x1b[C", b"\t", b"draft", b"\x1b[Z", b"\x1b[D", b"\t", b"\t", b"\x1b[C", b"\r", RETURNED, b"\x03"])
     assert (root / "command.setup").read_text().splitlines()[:2] == ["added", "2222"]
     # F4 carries a typed address into Add new; Shift+F4 always starts blank.
     session([b"no-such-host", b"\x1bOS", b"\r"])
@@ -723,7 +724,7 @@ configuration_scripts:
     inputs: [{id: launch, type: promptString, required: true}]"""))
     (root / "command").unlink()
     output = session([b"added:2222", b"\x1bOS", b"\x1b[C", b"\r",
-                      b"configure-value", b"\t", b"\x1b[C", b"\x1b\r", b"\x03"], rows=9, cols=90)
+                      b"configure-value", b"\t", b"\x1b[C", b"\x1b\r", RETURNED, b"\x03"], rows=9, cols=90)
     assert b"is required" in output and b"completed" in output
     assert (root / "command.setup").read_text().splitlines() == ["added", "configure-value", "full"]
     assert not (root / "command").exists()
@@ -829,11 +830,11 @@ configuration_scripts:
     config_file.write_text("default: SSH\nprofiles: [{name: SSH, command: 'ssh -- %h', prepare_command: 'prepare-test %h %p %{literal}', literal: 'a ; $HOME'}]\n")
     before = (root / ".bash_history").read_text()
     (root / "command").unlink(missing_ok=True)
-    output = session([b"help-host:2222", b"\r", b"n\n", b"\x03"])
+    output = session([b"help-host:2222", b"\r", (b"Install test dependency? [y/N] ",), b"n\n", (b"\x1b[?1049h",), b"\x03"])
     assert b"preparation cancelled or failed" in output
     assert not (root / "command").exists() and (root / ".bash_history").read_text() == before
     assert (root / "command.prepare").read_text().splitlines() == ["help-host", "2222", "a ; $HOME"]
-    session([b"help-host:2222", b"\r", b"y\n"])
+    session([b"help-host:2222", b"\r", (b"Install test dependency? [y/N] ",), b"y\n"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "help-host"]
     assert "prepare-test" not in (root / ".bash_history").read_text()
     # Launch availability is evaluated once at load, before history and navigation.
@@ -1035,7 +1036,7 @@ keybindings:
     assert (root / "command").read_text().splitlines()[1:] == ["--", "new-rebound"]
     config_file.write_text(config_file.read_text() + "\nconfiguration_scripts: [{name: Rebound setup, command: 'setup-test %h'}]\n")
     (root / "command").unlink()
-    output = session([b"alpha", b"\x1b[20~", b"\x1b[C", b"\x1bOR", b"\x11"])
+    output = session([b"alpha", b"\x1b[20~", b"\x1b[C", b"\x1bOR", RETURNED, b"\x11"])
     assert b"completed" in output and b"Apply" in output
     assert (root / "command.setup").read_text().splitlines() == ["alpha"]
     assert not (root / "command").exists()
