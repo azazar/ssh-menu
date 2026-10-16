@@ -177,7 +177,7 @@ impl Help {
 }
 
 pub(super) fn show(
-    terminal: &mut DefaultTerminal,
+    terminal: &mut impl ui::Terminal,
     context: Context,
     config: &launch::Config,
 ) -> io::Result<()> {
@@ -197,7 +197,7 @@ pub(super) fn show(
     }
     loop {
         terminal.draw(|frame| help.draw(frame, Some(config)))?;
-        let event = event::read()?;
+        let event = terminal.read()?;
         if matches!(event, Event::FocusLost) {
             help.bar_state.reset();
         }

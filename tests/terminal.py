@@ -1,4 +1,6 @@
 """Exercise the real TUI and command handoff without making network connections."""
+import errno
+import faulthandler
 import fcntl
 import os
 from pathlib import Path
@@ -15,6 +17,16 @@ import time
 
 # Shift+F4 opens Add new directly, focused on its blank remote.
 ADD_REMOTE = b"\x1b[1;2S"
+
+
+def read_pty(master):
+    """PTY closure is EOF on macOS and EIO on Linux."""
+    try:
+        return os.read(master, 65536)
+    except OSError as error:
+        if error.errno == errno.EIO:
+            return b""
+        raise
 
 
 def interaction_checks(binary):
@@ -102,7 +114,10 @@ def interaction_checks(binary):
                 while time.monotonic() < deadline:
                     if not select.select([self.master], [], [], 0.08)[0]:
                         return
-                    self.stream.feed(os.read(self.master, 65536))
+                    chunk = read_pty(self.master)
+                    if not chunk:
+                        return
+                    self.stream.feed(chunk)
 
             def send(self, key):
                 os.write(self.master, key)
@@ -294,6 +309,7 @@ def interaction_checks(binary):
     print("terminal screen interactions passed")
 
 
+faulthandler.dump_traceback_later(120)
 source_binary = Path(sys.argv[1]).resolve()
 interaction_checks(source_binary)
 if sys.argv[2:] == ["--interaction-only"]:
@@ -328,7 +344,10 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
                                     env=child_env, timeout=5)
             output = bytearray()
             while select.select([master], [], [], 0)[0]:
-                output.extend(os.read(master, 65536))
+                chunk = read_pty(master)
+                if not chunk:
+                    break
+                output.extend(chunk)
             result.stdout = bytes(output)
             return result
         finally:
@@ -348,7 +367,10 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
             end = time.monotonic() + seconds
             while time.monotonic() < end:
                 if select.select([master], [], [], 0.05)[0]:
-                    output.extend(os.read(master, 65536))
+                    chunk = read_pty(master)
+                    if not chunk:
+                        break
+                    output.extend(chunk)
         try:
             read_for(0.3)
             assert b"SHUI" in output, output
@@ -1041,7 +1063,10 @@ profiles:
         deadline = time.monotonic() + 5
         while b'SHUI' not in output and time.monotonic() < deadline:
             if select.select([master], [], [], 0.05)[0]:
-                output.extend(os.read(master, 65536))
+                chunk = read_pty(master)
+                if not chunk:
+                    break
+                output.extend(chunk)
         assert b'SHUI' in output, output
         assert not (root / 'tty-leak').exists(), 'background check accessed the controlling terminal'
         os.write(master, b'\x03')

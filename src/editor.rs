@@ -2,7 +2,7 @@ use crate::*;
 use ratatui::widgets::Wrap;
 
 pub(super) fn edit(
-    terminal: &mut DefaultTerminal,
+    terminal: &mut impl ui::Terminal,
     home: &Path,
     config: &mut launch::Config,
     profiles: &mut [usize],
@@ -14,7 +14,7 @@ pub(super) fn edit(
         if edit_requested {
             edit_requested = false;
             bar_state.reset();
-            match launch_editor(terminal, home) {
+            match terminal.edit_config(home) {
                 Ok(updated) => {
                     for index in profiles.iter_mut() {
                         let name = &config.profiles[*index].name;
@@ -59,7 +59,7 @@ pub(super) fn edit(
                 ],
             );
         })?;
-        let event = event::read()?;
+        let event = terminal.read()?;
         if matches!(event, Event::FocusLost) {
             bar_state.reset();
         }
@@ -88,7 +88,10 @@ pub(super) fn edit(
     }
 }
 
-fn launch_editor(terminal: &mut DefaultTerminal, home: &Path) -> io::Result<launch::Config> {
+pub(super) fn launch_editor(
+    terminal: &mut DefaultTerminal,
+    home: &Path,
+) -> io::Result<launch::Config> {
     let editor = ["VISUAL", "EDITOR"]
         .into_iter()
         .find_map(|name| env::var(name).ok().filter(|value| !value.trim().is_empty()))

@@ -44,7 +44,7 @@ jobs:
       - run: python3 tests/cli.py target/x86_64-unknown-linux-musl/release/shui
       - name: Install terminal screen test dependency
         run: python3 -m pip install pyte==0.8.2
-      - run: python3 tests/terminal.py target/x86_64-unknown-linux-musl/release/shui
+      - run: python3 -u tests/terminal.py target/x86_64-unknown-linux-musl/release/shui
       - name: Verify static executable
         run: |
           file target/x86_64-unknown-linux-musl/release/shui

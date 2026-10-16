@@ -30,7 +30,7 @@ pub(super) fn parse_remote(text: &str) -> Option<Target> {
 }
 
 pub(super) fn dialog(
-    terminal: &mut DefaultTerminal,
+    terminal: &mut impl ui::Terminal,
     config: &launch::Config,
     selected: Option<&Target>,
     draft: Option<&Target>,
@@ -39,7 +39,7 @@ pub(super) fn dialog(
 }
 
 pub(super) fn connect(
-    terminal: &mut DefaultTerminal,
+    terminal: &mut impl ui::Terminal,
     config: &launch::Config,
     target: &Target,
     profile: usize,
@@ -321,7 +321,7 @@ impl Dialog {
 }
 
 fn form(
-    terminal: &mut DefaultTerminal,
+    terminal: &mut impl ui::Terminal,
     config: &launch::Config,
     connection: Option<(&Target, usize)>,
     fixed_remote: bool,
@@ -413,7 +413,7 @@ fn form(
                 },
             );
         })?;
-        let event = event::read()?;
+        let event = terminal.read()?;
         if matches!(event, Event::FocusLost) {
             bar_state.reset();
         }

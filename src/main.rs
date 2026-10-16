@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod action_tests;
 mod bar;
 mod bindings;
 mod cli;
@@ -12,6 +14,7 @@ mod preset_tests;
 mod search;
 mod shortcut;
 mod ssh_config;
+mod ui;
 
 use crossterm::{
     cursor::Show,
@@ -307,7 +310,7 @@ struct MenuState {
 }
 
 fn menu(
-    terminal: &mut DefaultTerminal,
+    terminal: &mut impl ui::Terminal,
     targets: &mut Vec<Target>,
     config: &mut launch::Config,
     state: &mut MenuState,
@@ -531,7 +534,7 @@ fn menu(
                 );
             }
         })?;
-        let event = event::read()?;
+        let event = terminal.read()?;
         if matches!(event, Event::FocusLost) {
             bar_state.reset();
         }

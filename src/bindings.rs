@@ -219,6 +219,22 @@ fn defaults(scope: &str) -> Vec<(&'static str, &'static str, Vec<&'static str>)>
     result
 }
 impl Bindings {
+    #[cfg(test)]
+    pub(crate) fn test_actions(&self, scope: &str) -> Vec<(String, Vec<KeyEvent>)> {
+        defaults(scope)
+            .into_iter()
+            .map(|(action, _, keys)| {
+                (
+                    action.to_owned(),
+                    self.keys(scope, action, &keys)
+                        .iter()
+                        .map(Key::event)
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+
     fn keys(&self, scope: &str, action: &str, fallback: &[&str]) -> Vec<Key> {
         self.0
             .get(scope)
