@@ -2,7 +2,7 @@
 
 ## Get a binary
 
-Download **[v0.1.0-rc.5](https://github.com/azazar/shui/releases/tag/v0.1.0-rc.5)** from GitHub Releases. Release publication requires all platform builds and checks to pass. Choose the archive for your system and download `SHA256SUMS` to verify it.
+Download **[v0.1.0-rc.6](https://github.com/azazar/shui/releases/tag/v0.1.0-rc.6)** from GitHub Releases. Release publication requires all platform builds and checks to pass. Choose the archive for your system and download `SHA256SUMS` to verify it.
 
 F1 help is embedded in the executable and works offline. You only need to install `shui` (or `shui.exe`); the documentation files in the archive are optional.
 
@@ -10,17 +10,17 @@ For development builds, use the **Artifacts** section of a successful [Binaries 
 
 | System | Archive to choose |
 | --- | --- |
-| Linux x86-64 | [shui-x86_64-unknown-linux-musl.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-x86_64-unknown-linux-musl.tar.gz) |
-| Linux ARM64 | [shui-aarch64-unknown-linux-musl.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-aarch64-unknown-linux-musl.tar.gz) |
-| Linux ARMv7, hard-float | [shui-armv7-unknown-linux-musleabihf.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-armv7-unknown-linux-musleabihf.tar.gz) |
-| macOS Intel | [shui-x86_64-apple-darwin.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-x86_64-apple-darwin.tar.gz) |
-| macOS Apple Silicon | [shui-aarch64-apple-darwin.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-aarch64-apple-darwin.tar.gz) |
-| Windows x64 | [shui-x86_64-pc-windows-msvc.zip](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-x86_64-pc-windows-msvc.zip) |
-| Windows ARM64 | [shui-aarch64-pc-windows-msvc.zip](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-aarch64-pc-windows-msvc.zip) |
+| Linux x86-64 | [shui-x86_64-unknown-linux-musl.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.6/shui-x86_64-unknown-linux-musl.tar.gz) |
+| Linux ARM64 | [shui-aarch64-unknown-linux-musl.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.6/shui-aarch64-unknown-linux-musl.tar.gz) |
+| Linux ARMv7, hard-float | [shui-armv7-unknown-linux-musleabihf.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.6/shui-armv7-unknown-linux-musleabihf.tar.gz) |
+| macOS Intel | [shui-x86_64-apple-darwin.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.6/shui-x86_64-apple-darwin.tar.gz) |
+| macOS Apple Silicon | [shui-aarch64-apple-darwin.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.6/shui-aarch64-apple-darwin.tar.gz) |
+| Windows x64 | [shui-x86_64-pc-windows-msvc.zip](https://github.com/azazar/shui/releases/download/v0.1.0-rc.6/shui-x86_64-pc-windows-msvc.zip) |
+| Windows ARM64 | [shui-aarch64-pc-windows-msvc.zip](https://github.com/azazar/shui/releases/download/v0.1.0-rc.6/shui-aarch64-pc-windows-msvc.zip) |
 
 ### Linux and macOS
 
-After downloading your archive and the release's [SHA256SUMS](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/SHA256SUMS), select exactly one matching checksum:
+After downloading your archive and the release's [SHA256SUMS](https://github.com/azazar/shui/releases/download/v0.1.0-rc.6/SHA256SUMS), select exactly one matching checksum:
 
 ```sh
 archive=shui-x86_64-unknown-linux-musl.tar.gz  # Change for your platform.
@@ -50,7 +50,7 @@ Add the `PATH` line to your shell's startup file to keep it across sessions. Lin
 Use an explicit version for release candidates; GitHub's `latest` download URL excludes prereleases. For example:
 
 ```sh
-version=v0.1.0-rc.5
+version=v0.1.0-rc.6
 archive=shui-x86_64-unknown-linux-musl.tar.gz
 base="https://github.com/azazar/shui/releases/download/$version"
 curl --fail --location --proto '=https' --output "$archive" "$base/$archive" &&
@@ -68,7 +68,7 @@ Run this in PowerShell to select x64 or ARM64, verify the download, and install 
 ```powershell
 & {
     $ErrorActionPreference = "Stop"
-    $version = "v0.1.0-rc.5"
+    $version = "v0.1.0-rc.6"
     $target = switch ($env:PROCESSOR_ARCHITECTURE) {
         "AMD64" { "x86_64-pc-windows-msvc" }
         "ARM64" { "aarch64-pc-windows-msvc" }
@@ -111,7 +111,7 @@ cargo build --locked --release
 ./target/release/shui
 ```
 
-The repository pins its Rust toolchain. To build the RC source specifically, run `git checkout v0.1.0-rc.5` before building. On Linux x86-64, add `--target x86_64-unknown-linux-musl` for a static build; the binary will be in `target/x86_64-unknown-linux-musl/release/`.
+The repository pins its Rust toolchain. To build the RC source specifically, run `git checkout v0.1.0-rc.6` before building. On Linux x86-64, add `--target x86_64-unknown-linux-musl` for a static build; the binary will be in `target/x86_64-unknown-linux-musl/release/`.
 
 ## Requirements
 
@@ -123,7 +123,7 @@ Run `shui` to open the menu, or `shui prod` to start with a search filter. Use `
 
 ## Upgrading
 
-Re-run the install command for your platform to replace the executable. Check `shui --version` afterward; this release is **0.1.0-rc.5**. Help remains embedded, so no separate documentation installation is needed.
+Re-run the install command for your platform to replace the executable. Check `shui --version` afterward; this release is **0.1.0-rc.6**. Help remains embedded, so no separate documentation installation is needed.
 
 When upgrading from the previous project name, copy your existing configuration to `$XDG_CONFIG_HOME/shui/config.yml` (default: `~/.config/shui/config.yml`) before the first launch to preserve custom settings. Update shell aliases and scripts to invoke `shui`.
 
