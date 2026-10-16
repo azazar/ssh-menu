@@ -87,7 +87,7 @@ def interaction_checks(binary):
             f"Host {host}\n User tester\n HostName 192.0.2.{index + 1}\n"
             " IdentityFile ~/.ssh/a-long-private-key-name\n ProxyJump jump.example.org\n"
             for index, host in enumerate(hosts)))
-        config = root / "settings/shui/config.yml"
+        config = root / "settings/shui.yml"
         config.parent.mkdir(parents=True)
         # The harmless commands are deliberate: a regression must never use real SSH.
         profiles = """  - {name: Zero, key: Alt+Z, command: 'true %h'}
@@ -452,7 +452,7 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
         else:
             child_env["XDG_CONFIG_HOME"] = xdg
         session([b"\x03"])
-        assert (fresh_home / ".config/shui/config.yml").is_file()
+        assert (fresh_home / ".config/shui.yml").is_file()
         assert not (fresh_home / ".ssh").exists()
     child_env["HOME"] = str(root)
     child_env["XDG_CONFIG_HOME"] = str(root / "settings")
@@ -520,7 +520,7 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
     assert command[0].endswith("/mosh") and command[-1] == "alpha", command
     (root / ".ssh/config").write_text("Host alpha beta\n User tester\n")
     (root / ".bash_history").write_text("ssh alpha\nssh -p 2222 beta\n")
-    config_file = root / "settings/shui/config.yml"
+    config_file = root / "settings/shui.yml"
     original_config = config_file.read_text()
     session([b"beta:2222", b"\x1b[C", b"\x1b[C", b"\r"])
     command = (root / "command").read_text().splitlines()
@@ -581,7 +581,7 @@ profiles:
     config_file.write_text("profiles: [")
     invalid = startup_failure()
     assert invalid.returncode != 0
-    assert b"config.yml" in invalid.stderr
+    assert config_file.name.encode() in invalid.stderr
     assert b"\x1b[?1049h" not in invalid.stdout, "invalid config opened the TUI"
     config_file.write_text(original_config)
     (root / "command").unlink()

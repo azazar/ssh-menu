@@ -17,7 +17,6 @@ def package(target):
         executable: root / "target" / target / "release" / executable,
         "README.md": root / "README.md",
         "LICENSE": root / "LICENSE",
-        "config/default.yml": root / "config/default.yml",
     }
     files.update({
         path.relative_to(root).as_posix(): path

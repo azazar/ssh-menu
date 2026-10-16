@@ -1,6 +1,6 @@
 # Launch profiles
 
-Edit **`$XDG_CONFIG_HOME/shui/config.yml`** using the config editor (F9 by default) for validated live reload, or restart after editing externally. The file is created from the [commented example](../config/default.yml) on the first interactive launch, creating missing directories. Existing configs are preserved. If `XDG_CONFIG_HOME` is unset, empty, or relative, Shui uses `~/.config/shui/config.yml`.
+Edit **`$XDG_CONFIG_HOME/shui.yml`** using the config editor (F9 by default) for validated live reload, or restart after editing externally. The file is created from the [commented example](config.example.yml) on the first interactive launch, creating missing directories. Existing configs are preserved. If `XDG_CONFIG_HOME` is unset, empty, or relative, Shui uses `~/.config/shui.yml`.
 
 Run `shui --config-path` to print the active path. Use `shui --check-config` (or `shui --check-config path/to/config.yml`) to validate YAML, templates and keybindings without running availability checks, generators or other commands. Validation never creates a configuration file.
 
@@ -30,7 +30,7 @@ The profile's `dashboard` field holds editable btop settings. Mounted filesystem
 
 Both forwarding profiles bind only to `127.0.0.1`, remain in the foreground, and stop with Ctrl+C. They request no remote shell, fail if the listening socket cannot be created, and use SSH keepalives to detect a lost connection. A successful listener does not guarantee the destination service is reachable; the SSH server must allow forwarding. Use Alt+Enter in the dialog to return to the menu when the tunnel stops. Explicit SSH ports and alias settings work as in the other profiles.
 
-Existing configs are not migrated. Copy the desired entries from the [example config](../config/default.yml), choosing unused shortcuts if yours differ.
+Existing configs are not migrated. Copy the desired entries from the [example config](config.example.yml), choosing unused shortcuts if yours differ.
 
 These presets follow the upstream [tmux manual](https://github.com/tmux/tmux/blob/master/tmux.1), [OpenSSH ssh manual](https://github.com/openssh/openssh-portable/blob/master/ssh.1), [SFTP manual](https://github.com/openssh/openssh-portable/blob/master/sftp.1), and the [btop project](https://github.com/aristocratos/btop).
 

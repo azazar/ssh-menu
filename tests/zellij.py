@@ -11,7 +11,7 @@ import textwrap
 
 repo = Path(__file__).resolve().parents[1]
 # Read the literal script field from the shipped recipe (no extra YAML dependency).
-config = (repo / 'config/default.yml').read_text()
+config = (repo / 'docs/config.example.yml').read_text()
 block = config.split('  - name: Zellij\n', 1)[1].split('    script: |\n', 1)[1]
 source = textwrap.dedent(''.join(itertools.takewhile(
     lambda line: line.startswith('      ') or not line.strip(), block.splitlines(keepends=True)

@@ -31,14 +31,14 @@ Written in Rust with [Ratatui](https://ratatui.rs/), Shui uses a compact, border
 
 ## Get started
 
-Install **v0.1.0-rc.6** with a verified download. These commands check the archive against the release's SHA-256 checksums before installing it into `~/.local/bin`, without sudo.
+Install **v0.1.0-rc.7** with a verified download. These commands check the archive against the release's SHA-256 checksums before installing it into `~/.local/bin`, without sudo.
 
 **Linux (including WSL) and macOS** — detects x86-64, ARM64, or Linux ARMv7:
 
 ```sh
 (
   set -eu
-  version=v0.1.0-rc.6
+  version=v0.1.0-rc.7
   case "$(uname -s):$(uname -m)" in
     Linux:x86_64) target=x86_64-unknown-linux-musl ;;
     Linux:aarch64|Linux:arm64) target=aarch64-unknown-linux-musl ;;
@@ -83,7 +83,7 @@ The [documentation index](docs/README.md) covers daily use, installation, config
 
 ![Built-in documentation viewer](docs/images/help.png)
 
-Edit `$XDG_CONFIG_HOME/shui/config.yml` (default: `~/.config/shui/config.yml`) to customize launch profiles, setup recipes and all app keybindings. Default profiles offer installation of missing dependencies before continuing; profile shortcuts launch the selected host directly. The [commented example](config/default.yml) contains the shipped defaults, editing guidance and configuration examples. Existing configs are preserved; see [upgrading](docs/installation.md#upgrading) when merging new defaults.
+Edit `$XDG_CONFIG_HOME/shui.yml` (default: `~/.config/shui.yml`) to customize launch profiles, setup recipes and all app keybindings. Default profiles offer installation of missing dependencies before continuing; profile shortcuts launch the selected host directly. The [commented example](docs/config.example.yml) contains the shipped defaults, editing guidance and configuration examples. Existing configs are preserved; see [upgrading](docs/installation.md#upgrading) when merging new defaults.
 
 Use `shui --config-path` to find your configuration and `shui --check-config` to validate it without launching commands or opening the UI. Pass a filename to validate a draft: `shui --check-config ./config.yml`.
 

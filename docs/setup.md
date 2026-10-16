@@ -29,7 +29,7 @@ Both key-auth recipes offer **Key expiry**: never (default), 8 hours, day, week,
 
 The updater expects a regular remote `~/.ssh/authorized_keys` file and an OpenSSH server supporting `expiry-time`. Custom authorized-key locations require adapting the recipe. If the post-copy update fails, setup reports failure, but the copied key remains installed.
 
-Existing configuration files are preserved. To adopt these samples in an existing installation, copy the desired entries under `configuration_scripts` from the [updated example](../config/default.yml); keep your custom recipes.
+Existing configuration files are preserved. To adopt these samples in an existing installation, copy the desired entries under `configuration_scripts` from the [updated example](config.example.yml); keep your custom recipes.
 
 Older bundled setup recipes combine placeholders with `$(...)` command substitution. These templates are now rejected because shell word escaping cannot safely handle nested quoting. Replace the two key-auth entries and **Copy terminal definition** with their current versions, including their helper fields and YAML anchors, then run `shui --check-config`. For custom recipes, move command substitution into a literal script field and pass placeholder values as positional arguments. Placeholders inside `${...}` parameter expansions are also rejected; ordinary expressions such as `${port:+-p "$port"}` remain supported beside placeholders.
 

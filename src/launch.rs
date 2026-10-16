@@ -21,8 +21,7 @@ fn config_path_with_base(home: &Path, base: Option<&Path>) -> PathBuf {
     base.filter(|path| path.is_absolute())
         .map(Path::to_path_buf)
         .unwrap_or_else(|| home.join(".config"))
-        .join("shui")
-        .join("config.yml")
+        .join("shui.yml")
 }
 // Profiles deliberately use POSIX shell syntax on every supported platform.
 #[cfg(windows)]
@@ -42,7 +41,7 @@ pub fn require_shell() -> io::Result<()> {
         })
 }
 
-pub const DEFAULT_CONFIG: &str = include_str!("../config/default.yml");
+pub const DEFAULT_CONFIG: &str = include_str!("../docs/config.example.yml");
 const HISTORY_TARGET: &str = " # shui-target=";
 const LEGACY_HISTORY_TARGET: &str = " # ssh-menu-target=";
 const SCRIPT_PREFIX: &str = "exec sh -c \"$(printf '%b' ";
@@ -1601,7 +1600,7 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
         let custom = home.join("custom-config");
         assert_eq!(
             config_path_with_base(&home, Some(&custom)),
-            custom.join("shui").join("config.yml")
+            custom.join("shui.yml")
         );
         for base in [
             None,
@@ -1610,7 +1609,7 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
         ] {
             assert_eq!(
                 config_path_with_base(&home, base),
-                home.join(".config/shui/config.yml")
+                home.join(".config/shui.yml")
             );
         }
     }
@@ -1622,6 +1621,7 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
         let path = config_path_with_base(&home, None);
         Config::load_path(&path).unwrap();
         assert!(!home.join(".ssh").exists());
+        assert!(!home.join(".config/shui").exists());
         assert_eq!(fs::read_to_string(&path).unwrap(), DEFAULT_CONFIG);
         let custom = "default: Custom\nprofiles: [{name: Custom, command: 'ssh %h'}]\n";
         fs::write(&path, custom).unwrap();

@@ -57,7 +57,7 @@ Launching appends its command to an existing `.bash_history`; adding a remote cr
 
 The recipe attaches to an existing remote session, or creates one if none exists. It reuses an installed Zellij; otherwise it offers to install pinned **0.45.1** into remote `~/.local/bin` and verifies the executable's SHA-256 against the published checksum. It uses no sudo and leaves existing installations in place.
 
-Automatic installation supports Linux x86-64 and ARM64 and requires `tar`, `curl` or `wget`, and `sha256sum` or `shasum`. See the [Zellij recipe in the config](../config/default.yml) for the complete recipe.
+Automatic installation supports Linux x86-64 and ARM64 and requires `tar`, `curl` or `wget`, and `sha256sum` or `shasum`. See the [Zellij recipe in the config](config.example.yml) for the complete recipe.
 
 ## Built-in help
 
@@ -89,7 +89,7 @@ Use **Alt+Enter** (`connect_and_return`) to reopen the menu after the launched c
 
 **Ctrl+Enter** opens a connection dialog; profiles with inputs also open it on Enter or their shortcut. Changes are temporary and are not written to history. The terminal must support distinct modified Enter events. Press F1 in the dialog for input help; configuration examples are in the config comments.
 
-**F9** immediately launches `$VISUAL`, then `$EDITOR`, or `vi` as fallback, skipping empty values. Editor arguments are supported. If the editor fails or validation rejects the file, a recovery screen offers Edit to retry, F1 for the format reference, and Esc to keep the active configuration. After a successful editor exit, YAML, templates, inputs and shortcut conflicts are validated and profile availability is refreshed. Valid changes take effect immediately; invalid changes remain on disk for correction while the current configuration stays active. Configuration is stored in `$XDG_CONFIG_HOME/shui/config.yml`, defaulting to `~/.config/shui/config.yml`; missing directories are created automatically.
+**F9** immediately launches `$VISUAL`, then `$EDITOR`, or `vi` as fallback, skipping empty values. Editor arguments are supported. If the editor fails or validation rejects the file, a recovery screen offers Edit to retry, F1 for the format reference, and Esc to keep the active configuration. After a successful editor exit, YAML, templates, inputs and shortcut conflicts are validated and profile availability is refreshed. Valid changes take effect immediately; invalid changes remain on disk for correction while the current configuration stays active. Configuration is stored in `$XDG_CONFIG_HOME/shui.yml`, defaulting to `~/.config/shui.yml`; missing directories are created automatically.
 
 ## One-row action bar
 

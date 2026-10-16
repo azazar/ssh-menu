@@ -60,7 +60,7 @@ profiles:
     if windows:
         env["HOME"] = "/wrong-posix-home"  # Native Windows must ignore Git Bash HOME.
     env["XDG_CONFIG_HOME"] = target_path(root / "settings")
-    assert run("--config-path").stdout.strip() == target_path(root / "settings/shui/config.yml")
+    assert run("--config-path").stdout.strip() == target_path(root / "settings/shui.yml")
     assert not (root / "settings").exists(), "read-only CLI created config"
     assert run("--check-config").returncode != 0
     assert not (root / "settings").exists(), "validation created a missing config"
@@ -77,7 +77,7 @@ profiles:
     assert set(result.stdout.splitlines()) == {"local", "included"}, result.stdout
     assert not marker.exists()
     assert not (root / "settings").exists()
-    default_config = root / "settings/shui/config.yml"
+    default_config = root / "settings/shui.yml"
     default_config.parent.mkdir(parents=True)
     default_config.write_text(valid_source, encoding="utf-8")
     assert run("--check-config").returncode == 0
@@ -85,7 +85,7 @@ profiles:
     assert default_config.read_text(encoding="utf-8") == valid_source
 
     env["XDG_CONFIG_HOME"] = "relative/settings"
-    assert run("--config-path").stdout.strip() == target_path(root / ".config/shui/config.yml")
+    assert run("--config-path").stdout.strip() == target_path(root / ".config/shui.yml")
     env["XDG_CONFIG_HOME"] = target_path(root / "settings")
 
     if sys.platform.startswith("linux") and not wine:

@@ -27,7 +27,7 @@ Before publishing, update the version in `Cargo.toml` and `Cargo.lock`, update t
 
 The user guide, launch profiles, and setup recipes in `docs/` are also the built-in help source, selected by the active screen: Guide, Profiles and Bindings for the host list, Setup for the remote setup dialog, Connection for one-off settings, and Profiles/Bindings/Setup for the configuration editor. Each context also adds a generated Keys topic describing the currently configured bindings. `src/help.rs` embeds them with `include_str!`; rebuilding updates F1 help. Installation, development, and the documentation index remain repository-only pages. Add new pages to the documentation index, and include them in help only when useful while running the app. Release archives include the Markdown files as well as the compiled help.
 
-Configuration examples belong in comments in `config/default.yml`. Keep Markdown help focused on usage and field semantics so examples have one maintained home. Screenshots live in `docs/images/`; the screenshot generator writes there, and release archives preserve the same documentation and config paths.
+Configuration examples belong in comments in `docs/config.example.yml`. Keep Markdown help focused on usage and field semantics so examples have one maintained home. Screenshots live in `docs/images/`; the screenshot generator writes there, and release archives preserve the same documentation and config paths.
 
 ## Windows tests under Wine
 

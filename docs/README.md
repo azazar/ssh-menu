@@ -12,4 +12,4 @@ Press **F1** in Shui to open help for the current screen: Guide, Profiles and Bi
 
 In help, use **Left/Right** or **Tab** to switch topics, **Up/Down** or **PgUp/PgDn** to scroll, and **Esc** or **F1** to return. **Home/End** jumps to the start or end of a topic.
 
-Configuration examples and the default action map are maintained in [config comments](../config/default.yml), also installed in new configurations and available through F9.
+Configuration examples and the default action map are maintained in [config comments](config.example.yml), also installed in new configurations and available through F9.

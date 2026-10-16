@@ -78,12 +78,12 @@ with tempfile.TemporaryDirectory(prefix='shui-screenshot-') as directory:
         # Run the profile's real remote script locally; never contact a server.
         (home / "bin/ssh").write_text('#!/bin/sh\nwhile [ "$#" -gt 1 ]; do shift; done\nexec sh -c "$1"\n')
     (home / ".ssh").mkdir()
-    (home / ".config/shui").mkdir(parents=True)
+    (home / ".config").mkdir(parents=True)
     if args.monitor:
         # Keep this machine's container-specific mounts out of the demo capture.
-        config = (repo / 'config/default.yml').read_text()
+        config = (repo / 'docs/config.example.yml').read_text()
         config = re.sub(r'(?m)^      disks_filter = .*$', '      disks_filter = "/"', config)
-        (home / '.config/shui/config.yml').write_text(config)
+        (home / '.config/shui.yml').write_text(config)
     (home / ".ssh/config").write_text("# Production · deploy window 02:00 UTC\nHost production.example.org\n User deploy\n HostName 192.0.2.10\n Port 2222\n # Check backups before maintenance\n")
     (home / ".ssh/id_ed25519").write_text("demo fixture")
     (home / ".ssh/id_ed25519.pub").write_text("demo fixture")
@@ -96,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix='shui-screenshot-') as directory:
         'ssh production.example.org\n'
     )
     if args.connection:
-        (home / '.config/shui/config.yml').write_text("""default: Remote command
+        (home / '.config/shui.yml').write_text("""default: Remote command
 profiles:
   - name: Remote command
     command: ssh %h %{input:remote}

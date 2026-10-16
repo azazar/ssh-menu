@@ -1,4 +1,4 @@
-# $XDG_CONFIG_HOME/shui/config.yml (default: ~/.config/shui/config.yml)
+# $XDG_CONFIG_HOME/shui.yml (default: ~/.config/shui.yml)
 # F9 edits this file and validates/reloads it after saving. Existing files are
 # never overwritten on upgrade; merge desired profiles/recipes from the defaults.
 # Commands and scripts are trusted shell code. Checks and generators run locally.

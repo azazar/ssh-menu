@@ -19,7 +19,7 @@ Usage: shui [--no-terminal] [QUERY]
   -h, --help            Show this help
   -V, --version         Show the version
 
-Config: $XDG_CONFIG_HOME/shui/config.yml (default: ~/.config/shui/config.yml)
+Config: $XDG_CONFIG_HOME/shui.yml (default: ~/.config/shui.yml)
 Hosts: ~/.ssh/config and included files, ~/.bash_history, and MC hotlist
 In the menu: Enter connects; Alt+Enter returns afterward; F1 shows help.
 Use -- before a query that starts with a dash.";
