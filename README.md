@@ -31,14 +31,14 @@ Written in Rust with [Ratatui](https://ratatui.rs/), Shui uses a compact, border
 
 ## Get started
 
-Install **v0.1.0-rc.7** with a verified download. These commands check the archive against the release's SHA-256 checksums before installing it into `~/.local/bin`, without sudo.
+Install **v0.1.0-rc.8** with a verified download. These commands check the archive against the release's SHA-256 checksums before installing it into `~/.local/bin`, without sudo.
 
 **Linux (including WSL) and macOS** — detects x86-64, ARM64, or Linux ARMv7:
 
 ```sh
 (
   set -eu
-  version=v0.1.0-rc.7
+  version=v0.1.0-rc.8
   case "$(uname -s):$(uname -m)" in
     Linux:x86_64) target=x86_64-unknown-linux-musl ;;
     Linux:aarch64|Linux:arm64) target=aarch64-unknown-linux-musl ;;

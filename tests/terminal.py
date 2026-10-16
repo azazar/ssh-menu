@@ -17,6 +17,8 @@ import time
 
 # Shift+F4 opens Add new directly, focused on its blank remote.
 ADD_REMOTE = b"\x1b[1;2S"
+# Wait for the external command to relinquish the terminal and the UI to resume.
+RETURNED = (b"\x1b[?1049l", b"\x1b[?1049h")
 
 
 def read_pty(master):
@@ -372,6 +374,7 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
     for name in ("ssh", "mosh", "mc", "sftp", "custom-connect"):
         stub = root / "bin" / name
         stub.write_text('#!/bin/sh\nprintf "%s\\n" "$0" "$@" > "$SHUI_TEST_LOG"\n')
+        stub.write_text(stub.read_text() + '[ -z "${SHUI_TEST_DELAY:-}" ] || sleep "$SHUI_TEST_DELAY"\n')
         stub.write_text(stub.read_text() + 'stty -g > "$SHUI_TEST_LOG.tty"\nprintf "SHUI_HANDOFF\\n"\n')
         stub.chmod(0o755)
     child_env = dict(os.environ, HOME=str(root), USER="tester", TERM="xterm",
@@ -418,10 +421,22 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
         try:
             read_for(0.3)
             assert b"SHUI" in output, output
+            last_key_start = len(output)
             for key in keys:
+                if isinstance(key, tuple):
+                    deadline = time.monotonic() + 5
+                    cursor = last_key_start
+                    for marker in key:
+                        while (position := output.find(marker, cursor)) < 0:
+                            assert process.poll() is None, output
+                            assert time.monotonic() < deadline, (marker, bytes(output[last_key_start:]))
+                            read_for(0.05)
+                        cursor = position + len(marker)
+                    continue
                 if callable(key):
                     key()
                     continue
+                last_key_start = len(output)
                 os.write(master, key)
                 read_for(0.1)
             wait_pty(process, master, 3, output.extend)
@@ -920,7 +935,9 @@ profiles:
 
     # Return mode restores the child tty and then preserves the filter.
     config_file.write_text("default: SSH\nprofiles: [{name: SSH, command: 'ssh -- %h'}]\n")
-    output = session([b"alpha", b"\x1b\r", b"\x1b\r", b"\x03"])
+    child_env["SHUI_TEST_DELAY"] = "0.3"  # Exceed the old fixed inter-key delay.
+    output = session([b"alpha", b"\x1b\r", RETURNED, b"\x1b\r", RETURNED, b"\x03"])
+    del child_env["SHUI_TEST_DELAY"]
     assert output.count(b"SHUI_HANDOFF") == 2
 
     # Editor handoff, valid reload, and invalid edits retaining the active config.
@@ -929,22 +946,22 @@ profiles:
     editor.chmod(0o755)
     child_env["VISUAL"] = str(editor)
     (root / "edited.yml").write_text("default: Custom\nprofiles: [{name: Custom, command: 'custom-connect %h'}]\n")
-    output = session([b"alpha", b"\x1b[20~", b"\r"])
+    output = session([b"alpha", b"\x1b[20~", RETURNED, b"\r"])
     assert output.count(b"SHUI_EDITOR") == 1
     assert b"CONFIGURATION" not in output
     assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
     # Empty environment values fall through to EDITOR, then vi.
     child_env["VISUAL"] = " "
     child_env["EDITOR"] = str(editor)
-    output = session([b"\x1b[20~", b"\x03"])
+    output = session([b"\x1b[20~", RETURNED, b"\x03"])
     assert output.count(b"SHUI_EDITOR") == 1
     shutil.copy2(editor, root / "bin/vi")
     child_env["EDITOR"] = ""
-    output = session([b"\x1b[20~", b"\x03"])
+    output = session([b"\x1b[20~", RETURNED, b"\x03"])
     assert output.count(b"SHUI_EDITOR") == 1
     child_env["VISUAL"] = str(editor)
     (root / "edited.yml").write_text("profiles: [broken\n")
-    output = session([b"alpha", b"\x1b[20~", b"\x1bOP", b"\x1bOP", b"\r", b"\x1b", b"\r"])
+    output = session([b"alpha", b"\x1b[20~", RETURNED, b"\x1bOP", b"\x1bOP", b"\r", RETURNED, b"\x1b", b"\r"])
     assert output.count(b"SHUI_EDITOR") == 2
     assert b"Configuration not reloaded" in output
     assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
@@ -979,12 +996,12 @@ keybindings:
     output = session([b"alpha", b"\r", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     assert b"F3" in output
-    output = session([b"alpha", b"\x12", b"\x12", b"\x11"])
+    output = session([b"alpha", b"\x12", RETURNED, b"\x12", RETURNED, b"\x11"])
     assert output.count(b"SHUI_HANDOFF") == 2
     # Former help-close keys must no longer close help; plain X may close only there.
     session([b"alpha", b"\x1b[17~", b"\x1bOP", b"q", b"x", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
-    output = session([b"alpha", b"\x1b[15~", b"\r", b"\x1b[15~", b"\x11"])
+    output = session([b"alpha", b"\x1b[15~", b"\r", b"\x1b[15~", RETURNED, b"\x11"])
     assert output.count(b"SHUI_HANDOFF") == 1
     session([b"\x1bOQ", b"new-rebound", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "new-rebound"]
@@ -995,7 +1012,7 @@ keybindings:
     assert (root / "command.setup").read_text().splitlines() == ["alpha"]
     assert not (root / "command").exists()
     # Editor error actions use their own bindings and help returns to the error screen.
-    session([b"alpha", b"\x1b[21~", b"\x1b[17~", b"x", b"\x1b[18~", b"\x1bOR"])
+    session([b"alpha", b"\x1b[21~", RETURNED, b"\x1b[17~", b"x", b"\x1b[18~", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     config_file.write_text("""default: SSH
 profiles: [{name: SSH, key: Ctrl+C, command: 'ssh -- %h'}]
@@ -1010,10 +1027,10 @@ profiles:
     command: custom-connect %h %{input:value}
     inputs: [{id: value, type: promptString, default: test}]
 """)
-    output = session([b"alpha", b"\x1b\r", b"\r", b"\x03"])
+    output = session([b"alpha", b"\x1b\r", b"\r", RETURNED, b"\x03"])
     assert output.count(b"SHUI_HANDOFF") == 1
     config_file.write_text("default: Fail\nprofiles: [{name: Fail, command: 'exit 7'}]\n")
-    session([b"alpha", b"\x1b\r", b"\x03"])
+    session([b"alpha", b"\x1b\r", RETURNED, b"\x03"])
     config_file.write_text(original_config)
     # Enhanced keyboard repeat events still edit the filter.
     session([b"alphx", b"\x1b[127;1:2u", b"a", b"\r"])
