@@ -734,10 +734,13 @@ impl Profile {
     fn shell_command(command: String) -> (String, Vec<String>) {
         // Keep scripts on one history line without sending the script through terminal stdin.
         let code = if command.contains(['\n', '\r']) {
-            let escaped = command
-                .replace('\\', "\\\\")
-                .replace('\n', "\\n")
-                .replace('\r', "\\r");
+            // Older /bin/sh implementations can reparse quotes and braces in
+            // nested command substitutions. An octal payload has no shell
+            // syntax and preserves every UTF-8 byte through printf %b.
+            let escaped: String = command
+                .bytes()
+                .map(|byte| format!("\\0{byte:03o}"))
+                .collect();
             format!(
                 "{SCRIPT_PREFIX}{}{SCRIPT_SUFFIX}",
                 shell_words::quote(&escaped)
@@ -788,20 +791,28 @@ pub fn history_words(line: &str) -> Option<Vec<String>> {
                     return None;
                 }
                 let mut chars = pieces[0].chars();
-                let mut decoded = String::new();
+                let mut decoded = Vec::new();
                 while let Some(c) = chars.next() {
                     if c != '\\' {
-                        decoded.push(c);
+                        let mut buffer = [0; 4];
+                        decoded.extend_from_slice(c.encode_utf8(&mut buffer).as_bytes());
                         continue;
                     }
                     decoded.push(match chars.next()? {
-                        'n' => '\n',
-                        'r' => '\r',
-                        '\\' => '\\',
+                        'n' => b'\n',
+                        'r' => b'\r',
+                        '\\' => b'\\',
+                        '0' => {
+                            let digits: String = chars.by_ref().take(3).collect();
+                            if digits.len() != 3 {
+                                return None;
+                            }
+                            u8::from_str_radix(&digits, 8).ok()?
+                        }
                         _ => return None,
                     });
                 }
-                code = decoded;
+                code = String::from_utf8(decoded).ok()?;
             }
         } else {
             return Some(words);
@@ -1313,6 +1324,28 @@ mod tests {
         let line = config.profiles[0].history_line(&target(None)).unwrap();
         assert!(!line.contains('\n'));
         assert_eq!(config.history_profiles(&[target(None)], &line, "me"), [0]);
+    }
+    #[test]
+    fn multiline_transport_preserves_braces_unicode_and_legacy_history() {
+        let script = "printf '%s\\n' 'café {one,two}'\nprintf '%s\\n' '\"quotes\" and \\slashes'\n";
+        let (program, args) = Profile::shell_command(script.into());
+        let output = Command::new(&program).args(&args).output().unwrap();
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            "café {one,two}\n\"quotes\" and \\slashes\n"
+        );
+        let line = shell_words::join(std::iter::once(program).chain(args));
+        assert!(!line.contains('\n'));
+        assert_eq!(
+            history_words(&line),
+            Some(shell_words::split(script).unwrap())
+        );
+        let legacy = format!("{SCRIPT_PREFIX}'printf old\\n'{SCRIPT_SUFFIX}");
+        assert_eq!(
+            history_words(&shell_words::join(["sh", "-c", &legacy])),
+            Some(vec!["printf".into(), "old".into()])
+        );
     }
     #[test]
     fn optional_ports_use_ordinary_shell_syntax() {
