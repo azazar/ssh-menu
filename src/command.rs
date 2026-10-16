@@ -29,7 +29,7 @@ impl Shell {
             Self::Powershell => {
                 use base64::Engine;
                 let code = format!(
-                    "$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); {code}"
+                    "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); {code}"
                 );
                 let bytes: Vec<_> = code.encode_utf16().flat_map(u16::to_le_bytes).collect();
                 Ok((
@@ -37,6 +37,8 @@ impl Shell {
                     vec![
                         "-NoLogo".into(),
                         "-NoProfile".into(),
+                        "-OutputFormat".into(),
+                        "Text".into(),
                         "-EncodedCommand".into(),
                         base64::engine::general_purpose::STANDARD.encode(bytes),
                     ],
@@ -116,9 +118,9 @@ mod tests {
             })
             .unwrap();
         assert_eq!(program, "powershell.exe");
-        assert_eq!(args[2], "-EncodedCommand");
+        assert_eq!(args[args.len() - 2], "-EncodedCommand");
         let bytes = base64::engine::general_purpose::STANDARD
-            .decode(&args[3])
+            .decode(args.last().unwrap())
             .unwrap();
         let units: Vec<_> = bytes
             .as_chunks::<2>()

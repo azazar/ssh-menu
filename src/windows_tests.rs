@@ -45,6 +45,16 @@ fn run(command: (String, Vec<String>), log: &Path) {
     );
 }
 
+fn remote_field(profile: &crate::launch::Profile, name: &str, target: &Target) -> String {
+    let mut profile = profile.clone();
+    profile.shell = Shell::Direct;
+    profile.command = format!("%{{{name}}}");
+    profile.port_args.clear();
+    let (value, args) = profile.command(target).unwrap();
+    assert!(args.is_empty());
+    value
+}
+
 #[test]
 fn windows_defaults_work_without_posix_tools() {
     if let Some(root) = std::env::var_os("SHUI_NATIVE_CHILD") {
@@ -178,7 +188,7 @@ fn child(root: &Path) {
     let key = "id_o'hara ü.pub";
     fs::write(
         root.join(".ssh").join(key),
-        "ssh-ed25519 AAAATEST example\n",
+        "ssh-ed25519 AAAATEST example ü\n",
     )
     .unwrap();
     fs::write(
@@ -209,9 +219,62 @@ fn child(root: &Path) {
             assert_ne!(Path::new(&call[0]).file_name().unwrap(), "sh.exe");
         }
         if profile.name.starts_with("Configure key") {
-            assert!(all[0].last().unwrap().contains("ssh-ed25519 AAAATEST"));
+            assert_eq!(all[0].last().unwrap(), "ssh-ed25519 AAAATEST example ü\n");
             assert!(all[1].iter().any(|arg| arg.ends_with("id_o'hara ü")));
-            assert!(all[1].last().unwrap().contains("ssh-ed25519 AAAATEST"));
+            assert_eq!(all[1].last().unwrap(), "ssh-ed25519 AAAATEST example ü\n");
+            assert_eq!(
+                all[0][all[0].len() - 2],
+                remote_field(&profile, "install_key_remote", &target)
+            );
+            assert_eq!(
+                all[1][all[1].len() - 2],
+                remote_field(&profile, "expiry_remote", &target)
+            );
+        } else {
+            assert_eq!(
+                all.last().unwrap().last().unwrap(),
+                "test-terminal|fixture,\n\tcols#80,\n"
+            );
         }
+        // A failed client must stop the recipe before later steps can run.
+        fs::remove_file(&log).unwrap();
+        let (program, args) = profile.command_with_inputs(&target, &values).unwrap();
+        let output = Command::new(program)
+            .args(args)
+            .env("SHUI_NATIVE_LOG", &log)
+            .env("SHUI_NATIVE_EXIT", "23")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert_eq!(
+            records(&log).len(),
+            1,
+            "{} continued after failure",
+            profile.name
+        );
     }
+    fs::remove_file(root.join(".ssh").join(key)).unwrap();
+    fs::remove_file(root.join(".ssh").join(key.trim_end_matches(".pub"))).unwrap();
+    let mut profile = config.configuration_scripts[0].clone();
+    profile.inputs[0] = profile.inputs[0].resolve().unwrap();
+    assert_eq!(profile.inputs[0].initial(), "Generate new Ed25519 key");
+    fs::remove_file(&log).unwrap();
+    run(profile.command(&target).unwrap(), &log);
+    assert_eq!(records(&log).len(), 3); // keygen, install, expiry
+    let public = fs::read(root.join(".ssh/id_ed25519.pub")).unwrap();
+    fs::remove_file(&log).unwrap();
+    let (program, args) = profile.command(&target).unwrap();
+    assert!(
+        !Command::new(program)
+            .args(args)
+            .env("SHUI_NATIVE_LOG", &log)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    assert!(!log.exists(), "existing key triggered a client command");
+    assert_eq!(fs::read(root.join(".ssh/id_ed25519.pub")).unwrap(), public);
 }

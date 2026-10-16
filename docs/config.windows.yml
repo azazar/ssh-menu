@@ -15,7 +15,7 @@ profiles:
       $ErrorActionPreference = 'Stop'
       function Invoke-Native {
         param([string]$Program, [string[]]$Arguments, [AllowNull()]$InputText = $null, [switch]$Capture)
-        $start = New-Object System.Diagnostics.ProcessStartInfo
+        $start = [System.Diagnostics.ProcessStartInfo]::new()
         $start.FileName = $Program
         $start.UseShellExecute = $false
         # Windows argv quoting: preserve empty arguments, quotes and trailing backslashes.
@@ -23,12 +23,11 @@ profiles:
           '"' + [regex]::Replace([regex]::Replace($_, '(\\*)"', '$1$1\"'), '(\\+)$', '$1$1') + '"'
         }) -join ' '
         $start.RedirectStandardInput = $null -ne $InputText
-        if ($start.RedirectStandardInput) { $start.StandardInputEncoding = New-Object System.Text.UTF8Encoding($false) }
-        $start.RedirectStandardOutput = $Capture
-        if ($Capture) { $start.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false) }
+          $start.RedirectStandardOutput = $Capture
+        if ($Capture) { $start.StandardOutputEncoding = [System.Text.UTF8Encoding]::new($false) }
         $process = [System.Diagnostics.Process]::Start($start)
         try {
-          if ($start.RedirectStandardInput) { $process.StandardInput.Write($InputText); $process.StandardInput.Close() }
+          if ($start.RedirectStandardInput) { $bytes = [System.Text.Encoding]::UTF8.GetBytes($InputText); $process.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length); $process.StandardInput.Close() }
           if ($Capture) { $output = $process.StandardOutput.ReadToEnd() }
           $process.WaitForExit()
           if ($process.ExitCode -ne 0) { throw "$Program exited with status $($process.ExitCode)" }
