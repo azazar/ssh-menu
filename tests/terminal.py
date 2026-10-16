@@ -945,20 +945,45 @@ profiles:
     editor.write_text('#!/bin/sh\nstty -g > "$SHUI_TEST_LOG.editor-tty"\ncp "$HOME/edited.yml" "$1"\nprintf "SHUI_EDITOR\\n"\n')
     editor.chmod(0o755)
     child_env["VISUAL"] = str(editor)
+    child_env["EDITOR"] = str(root / "missing-editor")
     (root / "edited.yml").write_text("default: Custom\nprofiles: [{name: Custom, command: 'custom-connect %h'}]\n")
     output = session([b"alpha", b"\x1b[20~", RETURNED, b"\r"])
     assert output.count(b"SHUI_EDITOR") == 1
     assert b"CONFIGURATION" not in output
     assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
-    # Empty environment values fall through to EDITOR, then vi.
+    # Explicit EDITOR wins; empty values defer to the system editor selector.
     child_env["VISUAL"] = " "
     child_env["EDITOR"] = str(editor)
     output = session([b"\x1b[20~", RETURNED, b"\x03"])
     assert output.count(b"SHUI_EDITOR") == 1
-    shutil.copy2(editor, root / "bin/vi")
+    # Isolate PATH so these cases never open a real system editor.
+    for tool in ("cp", "stty"):
+        (root / "bin" / tool).symlink_to(shutil.which(tool))
+    previous_path = child_env["PATH"]
+    child_env["PATH"] = str(root / "bin")
     child_env["EDITOR"] = ""
-    output = session([b"\x1b[20~", RETURNED, b"\x03"])
-    assert output.count(b"SHUI_EDITOR") == 1
+    shutil.copy2(editor, root / "bin/mcedit")
+    selector = root / "bin/sensible-editor"
+    selector.write_text('#!/bin/sh\n[ -z "${VISUAL:-}" ] && [ -z "${EDITOR:-}" ] || exit 9\nprintf "SYSTEM_EDITOR\\n"\nexec mcedit "$@"\n')
+    selector.chmod(0o755)
+    shutil.copy2(editor, root / "bin/editor")
+    shutil.copy2(editor, root / "bin/vi")
+    # Never replace an explicit missing editor or an editor that ran and failed.
+    child_env["VISUAL"] = str(root / "missing-editor")
+    output = session([b"\x1b[20~", RETURNED, b"\x1b", b"\x03"])
+    assert b"Configuration not reloaded" in output and b"SHUI_EDITOR" not in output
+    child_env["VISUAL"] = " "
+    selector_source = selector.read_text()
+    selector.write_text('#!/bin/sh\nexit 7\n')
+    output = session([b"\x1b[20~", RETURNED, b"\x1b", b"\x03"])
+    assert b"Editor exited" in output and b"SHUI_EDITOR" not in output
+    selector.write_text(selector_source)
+    for fallback in ("sensible-editor", "editor", "vi"):
+        output = session([b"\x1b[20~", RETURNED, b"\x03"])
+        assert output.count(b"SHUI_EDITOR") == 1
+        assert (b"SYSTEM_EDITOR" in output) == (fallback == "sensible-editor")
+        (root / "bin" / fallback).unlink()
+    child_env["PATH"] = previous_path
     child_env["VISUAL"] = str(editor)
     (root / "edited.yml").write_text("profiles: [broken\n")
     output = session([b"alpha", b"\x1b[20~", RETURNED, b"\x1bOP", b"\x1bOP", b"\r", RETURNED, b"\x1b", b"\r"])

@@ -93,7 +93,7 @@ Each named-field substitution adds a shell-quoting layer. Fields without `%{...}
 
 ## Menu behavior and editing
 
-`connect` hands off to a connection; `connect_and_return` reopens the menu afterward (Enter and Alt+Enter by default). Configure either action under `keybindings.menu` and `keybindings.dialog`. **F9** immediately edits this file using `$VISUAL` / `$EDITOR`, defaulting to `vi` on Unix or Notepad on Windows. If editing or validation fails, the recovery screen offers a retry and F1 for the format reference. Saving reloads only valid configurations. Checks include YAML structure, required fields, templates, input definitions, unique names and shortcut conflicts. This validates the configuration format, not arbitrary shell script behavior.
+`connect` hands off to a connection; `connect_and_return` reopens the menu afterward (Enter and Alt+Enter by default). Configure either action under `keybindings.menu` and `keybindings.dialog`. **F9** immediately edits this file using `$VISUAL` / `$EDITOR`, falling back to `sensible-editor`, `editor`, then `vi` on Unix, or Notepad on Windows. If editing or validation fails, the recovery screen offers a retry and F1 for the format reference. Saving reloads only valid configurations. Checks include YAML structure, required fields, templates, input definitions, unique names and shortcut conflicts. This validates the configuration format, not arbitrary shell script behavior.
 
 ## Connection inputs
 

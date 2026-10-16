@@ -94,16 +94,37 @@ pub(super) fn launch_editor(
 ) -> io::Result<launch::Config> {
     let editor = ["VISUAL", "EDITOR"]
         .into_iter()
-        .find_map(|name| env::var(name).ok().filter(|value| !value.trim().is_empty()))
-        .unwrap_or_else(|| if cfg!(windows) { "notepad" } else { "vi" }.into());
-    let words = editor_words(&editor)
-        .filter(|words| !words.is_empty())
-        .ok_or_else(|| io::Error::other("Invalid VISUAL / EDITOR command."))?;
+        .find_map(|name| env::var(name).ok().filter(|value| !value.trim().is_empty()));
+    let commands = if let Some(editor) = editor {
+        vec![
+            editor_words(&editor)
+                .filter(|words| !words.is_empty())
+                .ok_or_else(|| io::Error::other("Invalid VISUAL / EDITOR command."))?,
+        ]
+    } else {
+        #[cfg(windows)]
+        let defaults = ["notepad"];
+        #[cfg(not(windows))]
+        let defaults = ["sensible-editor", "editor", "vi"];
+        defaults.map(|name| vec![name.to_owned()]).to_vec()
+    };
     suspend_terminal()?;
-    let status = Command::new(&words[0])
-        .args(&words[1..])
-        .arg(launch::config_path(home))
-        .status();
+    let mut status = Err(io::Error::new(io::ErrorKind::NotFound, "No editor found."));
+    for words in commands {
+        let mut command = Command::new(&words[0]);
+        command.args(&words[1..]).arg(launch::config_path(home));
+        // Editor selectors also inspect these variables. Whitespace-only values
+        // must be treated as unset by both Shui and the selected helper.
+        for name in ["VISUAL", "EDITOR"] {
+            if env::var(name).is_ok_and(|value| value.trim().is_empty()) {
+                command.env_remove(name);
+            }
+        }
+        status = command.status();
+        if !matches!(&status, Err(error) if error.kind() == io::ErrorKind::NotFound) {
+            break;
+        }
+    }
     *terminal = init_terminal()?;
     let status = status?;
     if !status.success() {
