@@ -1,6 +1,6 @@
 # Launch profiles
 
-Edit **`~/.ssh/ssh-menu-config.yml`** using the config editor (F9 by default) for validated live reload, or restart after editing externally. The file is created from the [commented example](../ssh-menu-config.example.yml) on the first interactive launch if `~/.ssh` already exists. Existing configs are preserved. With no `~/.ssh` directory, built-in defaults are used.
+Edit **`$XDG_CONFIG_HOME/shui/config.yml`** using the config editor (F9 by default) for validated live reload, or restart after editing externally. The file is created from the [commented example](../shui-config.example.yml) on the first interactive launch, creating missing directories. Existing configs are preserved. If `XDG_CONFIG_HOME` is unset, empty, or relative, Shui uses `~/.config/shui/config.yml`.
 
 Configuration examples and editing guidance live in the comments of the shipped config, available through F9.
 
@@ -26,7 +26,7 @@ The profile's `dashboard` field holds editable btop settings. Mounted filesystem
 
 Both forwarding profiles bind only to `127.0.0.1`, remain in the foreground, and stop with Ctrl+C. They request no remote shell, fail if the listening socket cannot be created, and use SSH keepalives to detect a lost connection. A successful listener does not guarantee the destination service is reachable; the SSH server must allow forwarding. Use Alt+Enter in the dialog to return to the menu when the tunnel stops. Explicit SSH ports and alias settings work as in the other profiles.
 
-Existing configs are not migrated. Copy the desired entries from the [example config](../ssh-menu-config.example.yml), choosing unused shortcuts if yours differ.
+Existing configs are not migrated. Copy the desired entries from the [example config](../shui-config.example.yml), choosing unused shortcuts if yours differ.
 
 These presets follow the upstream [tmux manual](https://github.com/tmux/tmux/blob/master/tmux.1), [OpenSSH ssh manual](https://github.com/openssh/openssh-portable/blob/master/ssh.1), [SFTP manual](https://github.com/openssh/openssh-portable/blob/master/sftp.1), and the [btop project](https://github.com/aristocratos/btop).
 
@@ -60,7 +60,7 @@ An optional `available_command` checks whether a launch profile can be used. It 
 
 Checks are literal local `sh -c` commands with stdin closed and output discarded. Use quick, noninteractive checks; placeholders are not expanded and no remote connection is made automatically. Checks do not run for `--dump`, `--help`, or `--version`.
 
-If the configured default is unavailable, the first available profile becomes the session default. History restoration and F8 only select available profiles. If none remain, SSH Menu reports an error before opening the TUI. Filtering does not rewrite your config; restart after installing a missing tool.
+If the configured default is unavailable, the first available profile becomes the session default. History restoration and F8 only select available profiles. If none remain, Shui reports an error before opening the TUI. Filtering does not rewrite your config; restart after installing a missing tool.
 
 The shipped launch profiles use preparation and remote checks instead of `available_command`, so a missing tool can be offered for installation. Custom availability checks still hide profiles before launch; omit such a check if you want its preparation to offer installation. Existing config files are preserved.
 
@@ -75,7 +75,7 @@ The shipped launch profiles use preparation and remote checks instead of `availa
 | `%{input:id}` | A setup recipe's dialog input |
 | `%%` | A literal percent in a command template |
 
-**Leave placeholders unquoted.** SSH Menu shell-escapes their values. Input values remain literal even when they contain shell syntax or placeholder text.
+**Leave placeholders unquoted.** Shui shell-escapes their values. Input values remain literal even when they contain shell syntax or placeholder text.
 
 An absent explicit port leaves SSH alias settings in effect. The shipped templates handle both explicit ports and aliases.
 

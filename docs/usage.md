@@ -1,4 +1,4 @@
-# Using SSH Menu
+# Using Shui
 
 Your existing hosts appear automatically in three aligned, borderless columns: launch profile (left), username (right, highlighted), and host (left). The selection marker sits beside the row. An unspecified username leaves its column blank; explicit ports stay with the host.
 
@@ -34,7 +34,7 @@ Editing happens at the end of the text. Ctrl-Backspace also accepts the legacy C
 
 ## Where hosts and remembered profiles come from
 
-SSH Menu reads `~/.ssh/config`, `~/.bash_history`, and `~/.config/mc/hotlist`. Duplicate targets are merged; recently encountered connections appear first. The SSH config reader handles explicit `Host` and `User` sections and skips wildcard aliases. It does not expand `Include` or `Match`; SSH itself resolves connection settings at launch.
+Shui reads `~/.ssh/config`, `~/.bash_history`, and `~/.config/mc/hotlist`. Duplicate targets are merged; recently encountered connections appear first. The SSH config reader handles explicit `Host` and `User` sections and skips wildcard aliases. It does not expand `Include` or `Match`; SSH itself resolves connection settings at launch.
 
 On startup, history entries are matched against configured profiles. Host, username, and explicit port distinguish entries. Unknown or ambiguous commands fall back to the default profile. History is parsed as data, never executed.
 
@@ -44,11 +44,11 @@ Launching appends its command to an existing `.bash_history`; adding a remote cr
 
 The recipe attaches to an existing remote session, or creates one if none exists. It reuses an installed Zellij; otherwise it offers to install pinned **0.45.1** into remote `~/.local/bin` and verifies the executable's SHA-256 against the published checksum. It uses no sudo and leaves existing installations in place.
 
-Automatic installation supports Linux x86-64 and ARM64 and requires `tar`, `curl` or `wget`, and `sha256sum` or `shasum`. See the [Zellij recipe in the config](../ssh-menu-config.example.yml) for the complete recipe.
+Automatic installation supports Linux x86-64 and ARM64 and requires `tar`, `curl` or `wget`, and `sha256sum` or `shasum`. See the [Zellij recipe in the config](../shui-config.example.yml) for the complete recipe.
 
 ## Built-in help
 
-Press **F1** from the host list or remote setup dialog to read these docs without leaving SSH Menu. The host list shows Guide, Profiles and Bindings; dialogs show relevant connection/setup documentation. Every screen includes a Keys topic with its active shortcuts.
+Press **F1** from the host list or remote setup dialog to read these docs without leaving Shui. The host list shows Guide, Profiles and Bindings; dialogs show relevant connection/setup documentation. Every screen includes a Keys topic with its active shortcuts.
 
 - **Left/Right or Tab/Shift-Tab:** switch topics.
 - **Up/Down:** scroll one line.
@@ -76,7 +76,7 @@ Use **Alt+Enter** (`connect_and_return`) to reopen the menu after the launched c
 
 **Ctrl+Enter** opens a connection dialog; profiles with inputs also open it on Enter or their shortcut. Changes are temporary and are not written to history. The terminal must support distinct modified Enter events. Press F1 in the dialog for input help; configuration examples are in the config comments.
 
-**F9** immediately launches `$VISUAL`, then `$EDITOR`, or `vi` as fallback, skipping empty values. Editor arguments are supported. If the editor fails or validation rejects the file, a recovery screen offers Edit to retry, F1 for the format reference, and Esc to keep the active configuration. After a successful editor exit, YAML, templates, inputs and shortcut conflicts are validated and profile availability is refreshed. Valid changes take effect immediately; invalid changes remain on disk for correction while the current configuration stays active. Configuration files are created only when `~/.ssh` already exists.
+**F9** immediately launches `$VISUAL`, then `$EDITOR`, or `vi` as fallback, skipping empty values. Editor arguments are supported. If the editor fails or validation rejects the file, a recovery screen offers Edit to retry, F1 for the format reference, and Esc to keep the active configuration. After a successful editor exit, YAML, templates, inputs and shortcut conflicts are validated and profile availability is refreshed. Valid changes take effect immediately; invalid changes remain on disk for correction while the current configuration stays active. Configuration is stored in `$XDG_CONFIG_HOME/shui/config.yml`, defaulting to `~/.config/shui/config.yml`; missing directories are created automatically.
 
 ## One-row action bar
 

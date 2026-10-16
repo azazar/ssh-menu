@@ -12,12 +12,12 @@ def package(target):
         raise ValueError("expected a Rust target triple")
     root = Path(__file__).resolve().parents[1]
     windows = "windows" in target
-    executable = "ssh-menu.exe" if windows else "ssh-menu"
+    executable = "shui.exe" if windows else "shui"
     files = {
         executable: root / "target" / target / "release" / executable,
         "README.md": root / "README.md",
         "LICENSE": root / "LICENSE",
-        "ssh-menu-config.example.yml": root / "ssh-menu-config.example.yml",
+        "shui-config.example.yml": root / "shui-config.example.yml",
     }
     files.update({path.name: path for path in sorted(root.glob("screenshot*.png"))})
     files.update({path.relative_to(root).as_posix(): path for path in sorted((root / "docs").glob("*.md"))})
@@ -26,7 +26,7 @@ def package(target):
             raise FileNotFoundError(source)
     output = root / "dist"
     output.mkdir(exist_ok=True)
-    archive = output / f"ssh-menu-{target}.{'zip' if windows else 'tar.gz'}"
+    archive = output / f"shui-{target}.{'zip' if windows else 'tar.gz'}"
     if windows:
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
             for name, source in files.items():

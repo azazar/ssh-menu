@@ -1,10 +1,10 @@
-# SSH Menu
+# Shui (Shell UI)
 
 **Your remotes, one terminal menu.**
 
-Find a machine, choose how to connect, and press Enter. SSH Menu brings your SSH hosts, recent connections, remote file browser, and session launcher into one searchable list. Each host can use its own launch profile, and new machines can run a setup recipe before the first connection.
+Find a machine, choose how to connect, and press Enter. Shui brings your SSH hosts, recent connections, remote file browser, and session launcher into one searchable list. Each host can use its own launch profile, and new machines can run a setup recipe before the first connection.
 
-![SSH Menu showing a different launch profile for each remote](screenshot.png)
+![Shui showing a different launch profile for each remote](screenshot.png)
 
 **Type to fuzzy-search · ↑↓ to select · ←→ to choose a profile · Enter to connect**
 
@@ -27,7 +27,7 @@ Find a machine, choose how to connect, and press Enter. SSH Menu brings your SSH
 
 Hosts come from SSH config, Bash history, and Midnight Commander bookmarks. Launch choices are remembered through history, so you can return to the same machine with the same tool. Press **F4** to configure the selected host or **Shift+F4** to add a new remote, choose an SSH keypair (or generate one when none exists), and optionally install dotfiles. Setup can also copy your terminal definition. Launch profiles offer to install their missing tools when you use them.
 
-Written in Rust with [Ratatui](https://ratatui.rs/), SSH Menu uses a compact, borderless [Catppuccin Mocha](https://catppuccin.com/palette/) interface. Linux builds are static executables. SSH, Mosh, and other connection tools run as separate programs, with your terminal restored before handoff.
+Written in Rust with [Ratatui](https://ratatui.rs/), Shui uses a compact, borderless [Catppuccin Mocha](https://catppuccin.com/palette/) interface. Linux builds are static executables. SSH, Mosh, and other connection tools run as separate programs, with your terminal restored before handoff.
 
 ## Get started
 
@@ -36,50 +36,50 @@ Install the published **v0.1.0-rc.4** release with the command for your system. 
 **Linux x86-64 (including WSL)**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.4/ssh-menu-x86_64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-x86_64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" shui
 ```
 
 **Linux ARM64**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.4/ssh-menu-aarch64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-aarch64-unknown-linux-musl.tar.gz | tar -xz -C "$HOME/.local/bin" shui
 ```
 
 **Linux ARMv7 (hard-float)**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.4/ssh-menu-armv7-unknown-linux-musleabihf.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-armv7-unknown-linux-musleabihf.tar.gz | tar -xz -C "$HOME/.local/bin" shui
 ```
 
 **macOS Apple Silicon**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.4/ssh-menu-aarch64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-aarch64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" shui
 ```
 
 **macOS Intel**
 
 ```sh
-mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.4/ssh-menu-x86_64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" ssh-menu
+mkdir -p "$HOME/.local/bin" && curl -fL https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-x86_64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" shui
 ```
 
 **Windows x64 — PowerShell**
 
 ```powershell
-& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.4/ssh-menu-x86_64-pc-windows-msvc.zip -OutFile "$env:TEMP/ssh-menu.zip"; New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null; tar.exe -xf "$env:TEMP/ssh-menu.zip" -C "$HOME/.local/bin" ssh-menu.exe }
+& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-x86_64-pc-windows-msvc.zip -OutFile "$env:TEMP/shui.zip"; New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null; tar.exe -xf "$env:TEMP/shui.zip" -C "$HOME/.local/bin" shui.exe }
 ```
 
 **Windows ARM64 — PowerShell**
 
 ```powershell
-& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/ssh-menu/releases/download/v0.1.0-rc.4/ssh-menu-aarch64-pc-windows-msvc.zip -OutFile "$env:TEMP/ssh-menu.zip"; New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null; tar.exe -xf "$env:TEMP/ssh-menu.zip" -C "$HOME/.local/bin" ssh-menu.exe }
+& { $ErrorActionPreference = "Stop"; Invoke-WebRequest https://github.com/azazar/shui/releases/download/v0.1.0-rc.4/shui-aarch64-pc-windows-msvc.zip -OutFile "$env:TEMP/shui.zip"; New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null; tar.exe -xf "$env:TEMP/shui.zip" -C "$HOME/.local/bin" shui.exe }
 ```
 
-Add `~/.local/bin` to your `PATH` (in Bash or Zsh: `export PATH="$HOME/.local/bin:$PATH"`). On Windows, run SSH Menu from [Git Bash](https://git-scm.com/downloads/win); PowerShell is only used for installation. macOS binaries are unsigned. See the [installation guide](docs/installation.md) for checksum verification, platform requirements, and source builds, or browse [GitHub Releases](https://github.com/azazar/ssh-menu/releases).
+Add `~/.local/bin` to your `PATH` (in Bash or Zsh: `export PATH="$HOME/.local/bin:$PATH"`). On Windows, run Shui from [Git Bash](https://git-scm.com/downloads/win); PowerShell is only used for installation. macOS binaries are unsigned. See the [installation guide](docs/installation.md) for checksum verification, platform requirements, and source builds, or browse [GitHub Releases](https://github.com/azazar/shui/releases).
 
-Help is embedded in the executable. Only `ssh-menu` (or `ssh-menu.exe`) is needed; no documentation files are required for F1 help.
+Help is embedded in the executable. Only `shui` (or `shui.exe`) is needed; no documentation files are required for F1 help.
 
-Run `ssh-menu`, type to fuzzy-search your hosts and their SSH config settings/comments, and press Enter to connect, or use a profile shortcut to connect immediately. The single-row action bar reveals shortcuts for the exact Alt, Shift, Ctrl, or combined modifiers held. **Alt+Enter** connects and returns to the menu afterward. **Ctrl+Enter** adjusts one connection. **F4** configures the selected host. **Shift+F4** adds a new remote. **F9** edits and validates configuration. **F1** opens the built-in documentation, including navigation help and the configuration reference.
+Run `shui`, type to fuzzy-search your hosts and their SSH config settings/comments, and press Enter to connect, or use a profile shortcut to connect immediately. The single-row action bar reveals shortcuts for the exact Alt, Shift, Ctrl, or combined modifiers held. **Alt+Enter** connects and returns to the menu afterward. **Ctrl+Enter** adjusts one connection. **F4** configures the selected host. **Shift+F4** adds a new remote. **F9** edits and validates configuration. **F1** opens the built-in documentation, including navigation help and the configuration reference.
 
 ## Documentation
 
@@ -87,7 +87,7 @@ The [documentation index](docs/README.md) covers daily use, installation, config
 
 ![Built-in documentation viewer](screenshot-help.png)
 
-Edit `~/.ssh/ssh-menu-config.yml` to customize launch profiles, setup recipes and all app keybindings. Default profiles offer installation of missing dependencies before continuing; profile shortcuts launch the selected host directly. The [commented example](ssh-menu-config.example.yml) contains the shipped defaults, editing guidance and configuration examples. Existing configs are preserved; see [upgrading](docs/installation.md#upgrading) when merging new defaults.
+Edit `$XDG_CONFIG_HOME/shui/config.yml` (default: `~/.config/shui/config.yml`) to customize launch profiles, setup recipes and all app keybindings. Default profiles offer installation of missing dependencies before continuing; profile shortcuts launch the selected host directly. The [commented example](shui-config.example.yml) contains the shipped defaults, editing guidance and configuration examples. Existing configs are preserved; see [upgrading](docs/installation.md#upgrading) when merging new defaults.
 
 ## License
 

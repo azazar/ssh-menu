@@ -33,16 +33,16 @@ if args.install_prompt:
     title, output_name, quit_keys = 'Install mc? [y/N]', 'screenshot-install-prompt.png', b'n\n'
 elif args.search:
     keys = b'maintenance'
-    title, output_name, quit_keys = 'SSH MENU', 'screenshot-search.png', b'\x03'
+    title, output_name, quit_keys = 'SHUI', 'screenshot-search.png', b'\x03'
 elif args.monitor:
     keys = b'\x1bh'
     title, output_name, quit_keys = 'cpu', 'screenshot-monitor.png', b'q'
 elif args.shift_shortcuts:
     keys = b'\x1b[57441;2u'
-    title, output_name, quit_keys = 'SSH MENU', 'screenshot-shift-shortcuts.png', b'\x1b[57441;2:3u\x03'
+    title, output_name, quit_keys = 'SHUI', 'screenshot-shift-shortcuts.png', b'\x1b[57441;2:3u\x03'
 elif args.shortcuts:
     keys = b'\x1b[57443;3u'
-    title, output_name, quit_keys = 'SSH MENU', 'screenshot-shortcuts.png', b'\x1b[57443;3:3u\x03'
+    title, output_name, quit_keys = 'SHUI', 'screenshot-shortcuts.png', b'\x1b[57443;3:3u\x03'
 elif args.connection:
     keys = b'\x1b[13;5u'
     title, output_name, quit_keys = 'CONNECT', 'screenshot-connection.png', b'\x03\x03'
@@ -57,14 +57,14 @@ elif args.help_viewer:
     title, output_name, quit_keys = 'HELP', 'screenshot-help.png', b'\x03\x03'
 else:
     keys = b'\x1b[C' * 4
-    title, output_name, quit_keys = 'SSH MENU', 'screenshot.png', b'\x03'
+    title, output_name, quit_keys = 'SHUI', 'screenshot.png', b'\x03'
 
 repo = Path(__file__).resolve().parents[1]
-binary = repo / 'target/x86_64-unknown-linux-musl/release/ssh-menu'
+binary = repo / 'target/x86_64-unknown-linux-musl/release/shui'
 cols, rows = (110, 30) if args.monitor else (90, 5) if args.install_prompt else (90, 22)
 screen = pyte.Screen(cols, rows)
 stream = pyte.ByteStream(screen)
-with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
+with tempfile.TemporaryDirectory(prefix='shui-screenshot-') as directory:
     home = Path(directory)
     (home / "bin").mkdir()
     for program in ('ssh', 'mosh', 'mc', 'sftp'):
@@ -75,11 +75,12 @@ with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
         # Run the profile's real remote script locally; never contact a server.
         (home / "bin/ssh").write_text('#!/bin/sh\nwhile [ "$#" -gt 1 ]; do shift; done\nexec sh -c "$1"\n')
     (home / ".ssh").mkdir()
+    (home / ".config/shui").mkdir(parents=True)
     if args.monitor:
         # Keep this machine's container-specific mounts out of the demo capture.
-        config = (repo / 'ssh-menu-config.example.yml').read_text()
+        config = (repo / 'shui-config.example.yml').read_text()
         config = re.sub(r'(?m)^      disks_filter = .*$', '      disks_filter = "/"', config)
-        (home / '.ssh/ssh-menu-config.yml').write_text(config)
+        (home / '.config/shui/config.yml').write_text(config)
     (home / ".ssh/config").write_text("# Production · deploy window 02:00 UTC\nHost production.example.org\n User deploy\n HostName 192.0.2.10\n Port 2222\n # Check backups before maintenance\n")
     (home / ".ssh/id_ed25519").write_text("demo fixture")
     (home / ".ssh/id_ed25519.pub").write_text("demo fixture")
@@ -92,7 +93,7 @@ with tempfile.TemporaryDirectory(prefix='ssh-menu-screenshot-') as directory:
         'ssh deploy@production.example.org\n'
     )
     if args.connection:
-        (home / '.ssh/ssh-menu-config.yml').write_text("""default: Remote command
+        (home / '.config/shui/config.yml').write_text("""default: Remote command
 profiles:
   - name: Remote command
     command: ssh %h %{input:remote}
@@ -105,7 +106,7 @@ profiles:
 """)
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
-    child_env = dict(os.environ, HOME=str(home), USER='demo', TERM='xterm-256color',
+    child_env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / '.config'), USER='demo', TERM='xterm-256color',
                      PATH=str(home / 'bin') + os.pathsep + os.environ['PATH'])
     if args.install_prompt:
         (home / 'bin/mc').unlink()
@@ -125,7 +126,7 @@ profiles:
                     screen.reset()
                     data = data.rsplit(b'\x1b[?1049l', 1)[1]
                 stream.feed(data)
-                if not keys_sent and any('SSH MENU' in line for line in screen.display):
+                if not keys_sent and any('SHUI' in line for line in screen.display):
                     os.write(master, keys)
                     keys_sent = True
         assert any(title in line for line in screen.display), screen.display
@@ -155,7 +156,7 @@ def color(value, default):
         return default
     return palette.get(value, '#' + value)
 
-font_path = os.environ.get('SSH_MENU_SCREENSHOT_FONT') or subprocess.check_output(
+font_path = os.environ.get('SHUI_SCREENSHOT_FONT') or subprocess.check_output(
     ['fc-match', '-f', '%{file}', 'DejaVu Sans Mono for Powerline'], text=True)
 font = ImageFont.truetype(font_path, 18)
 cell_w, cell_h, pad = 11, 24, 18

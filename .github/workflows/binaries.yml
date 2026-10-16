@@ -76,7 +76,7 @@ jobs:
       - name: Verify Linux static linkage
         if: runner.os == 'Linux'
         run: |
-          binary="target/$TARGET/release/ssh-menu"
+          binary="target/$TARGET/release/shui"
           file "$binary"
           if readelf -l "$binary" | grep -q INTERP; then
             echo 'Unexpected dynamic interpreter' >&2
@@ -89,7 +89,7 @@ jobs:
       - name: Smoke test native executable
         if: matrix.smoke
         run: |
-          binary="target/$TARGET/release/ssh-menu"
+          binary="target/$TARGET/release/shui"
           if [[ "$RUNNER_OS" == Windows ]]; then binary="$binary.exe"; fi
           "$binary" --version
           "$binary" --help
@@ -97,7 +97,7 @@ jobs:
         run: python scripts/package.py "$TARGET"
       - uses: actions/upload-artifact@v7.0.2
         with:
-          name: ssh-menu-${{ matrix.target }}
+          name: shui-${{ matrix.target }}
           path: dist/*
           if-no-files-found: error
 
@@ -111,7 +111,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8.0.2
         with:
-          pattern: ssh-menu-*
+          pattern: shui-*
           path: dist
           merge-multiple: true
       - name: Combine archive checksums

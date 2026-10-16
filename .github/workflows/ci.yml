@@ -16,16 +16,16 @@ jobs:
       - run: cargo test --locked
       - run: python3 tests/zellij.py
       - run: cargo build --locked --release --target x86_64-unknown-linux-musl
-      - run: python3 tests/terminal.py target/x86_64-unknown-linux-musl/release/ssh-menu
+      - run: python3 tests/terminal.py target/x86_64-unknown-linux-musl/release/shui
       - name: Verify static executable
         run: |
-          file target/x86_64-unknown-linux-musl/release/ssh-menu
-          if readelf -l target/x86_64-unknown-linux-musl/release/ssh-menu | grep -q INTERP; then exit 1; fi
-          if readelf -d target/x86_64-unknown-linux-musl/release/ssh-menu | grep -q NEEDED; then exit 1; fi
+          file target/x86_64-unknown-linux-musl/release/shui
+          if readelf -l target/x86_64-unknown-linux-musl/release/shui | grep -q INTERP; then exit 1; fi
+          if readelf -d target/x86_64-unknown-linux-musl/release/shui | grep -q NEEDED; then exit 1; fi
 
       - name: Export Docker integration fixtures
         env:
-          SSH_MENU_DOCKER_FIXTURES: ${{ github.workspace }}/target/docker-fixtures
+          SHUI_DOCKER_FIXTURES: ${{ github.workspace }}/target/docker-fixtures
         run: cargo test --locked export_docker_fixtures -- --ignored
       - uses: actions/upload-artifact@v7.0.2
         with:

@@ -1,6 +1,6 @@
 # Keybindings
 
-All app shortcuts can be changed under `keybindings` in `~/.ssh/ssh-menu-config.yml`. Each screen has its own action map: `menu`, `dialog`, `help`, and `editor`. Omitted actions retain their defaults. A supplied list replaces the defaults for that action; `[]` disables it. Key names are case-insensitive.
+All app shortcuts can be changed under `keybindings` in `$XDG_CONFIG_HOME/shui/config.yml` (default: `~/.config/shui/config.yml`). Each screen has its own action map: `menu`, `dialog`, `help`, and `editor`. Omitted actions retain their defaults. A supplied list replaces the defaults for that action; `[]` disables it. Key names are case-insensitive.
 
 The complete default action map and remapping examples are documented in the config comments. The Keys help topic shows your active bindings.
 

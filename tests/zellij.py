@@ -11,7 +11,7 @@ import textwrap
 
 repo = Path(__file__).resolve().parents[1]
 # Read the literal script field from the shipped recipe (no extra YAML dependency).
-config = (repo / 'ssh-menu-config.example.yml').read_text()
+config = (repo / 'shui-config.example.yml').read_text()
 block = config.split('  - name: Zellij\n', 1)[1].split('    script: |\n', 1)[1]
 source = textwrap.dedent(''.join(itertools.takewhile(
     lambda line: line.startswith('      ') or not line.strip(), block.splitlines(keepends=True)
@@ -19,7 +19,7 @@ source = textwrap.dedent(''.join(itertools.takewhile(
 assert source.startswith('#!/bin/sh\n'), 'Zellij recipe must contain a literal shell script'
 expected = re.search(r'expected=([0-9a-f]{64})', source).group(1)
 
-with tempfile.TemporaryDirectory(prefix='ssh-menu-zellij-test-') as directory:
+with tempfile.TemporaryDirectory(prefix='shui-zellij-test-') as directory:
     root = Path(directory)
     script = root / 'zellij-remote.sh'
     script.write_text(source)
@@ -99,7 +99,7 @@ exit 1
     assert (home / '.local/bin/zellij').is_file()
     assert '--proto =https' in downloads.read_text()
     assert 'v0.45.1/zellij-x86_64-unknown-linux-musl.tar.gz' in downloads.read_text()
-    assert not list((home / '.local/bin').glob('.ssh-menu-zellij.*'))
+    assert not list((home / '.local/bin').glob('.shui-zellij.*'))
     _, result, calls, downloads = run('install', 'restored-session')
     assert result.returncode == 0 and calls[-1] == 'attach --create restored-session'
     assert not downloads.exists(), 'local installation should be reused without PATH changes'
@@ -112,6 +112,6 @@ exit 1
         home, result, calls, _ = run(name, **changes)
         assert result.returncode != 0 and message in result.stderr, result.stderr
         assert not calls and not (home / '.local/bin/zellij').exists()
-        assert not list((home / '.local/bin').glob('.ssh-menu-zellij.*'))
+        assert not list((home / '.local/bin').glob('.shui-zellij.*'))
 
 print('PASS: Zellij reuse, attach/create, verified-install flow, input preservation, failures and cleanup')

@@ -20,7 +20,7 @@ FIXTURES = Path('/tests/fixtures')
 RESULTS = Path('/results')
 RESULTS.mkdir(exist_ok=True)
 CASES = []
-SSH = ['ssh', '-p', '2222', '-o', 'BatchMode=yes', 'remote@ssh-menu-docker']
+SSH = ['ssh', '-p', '2222', '-o', 'BatchMode=yes', 'remote@shui-docker']
 
 
 def remote(command, check=True):
@@ -58,7 +58,7 @@ def interactive(name, command, *, consent='y', finish=None, expected=0, timeout=
     next_probe = time.monotonic() + 1
     responses = [
         (re.compile(r'(?i)Enter (?:same )?passphrase[^\r\n]*:'), b'\n', False),
-        (re.compile(r'(?i)(?:password|Password)[^\r\n]*:'), b'ssh-menu-test-password\n', False),
+        (re.compile(r'(?i)(?:password|Password)[^\r\n]*:'), b'shui-test-password\n', False),
         (re.compile(r'(?i)Install[^\r\n]*\[y/n\]'), (consent + '\n').encode(), True),
         (re.compile(r'(?i)(?:Do you want|Proceed|Is this ok|Continue)[^\r\n]*\[[^\]\r\n]*[yn][^\]\r\n]*\](?:[^\r\n]*:)?'), b'y\n', False),
     ]
@@ -132,7 +132,7 @@ PasswordAuthentication yes
 KbdInteractiveAuthentication no
 UsePAM no
 PermitRootLogin no
-PidFile /run/ssh-menu-test-sshd.pid
+PidFile /run/shui-test-sshd.pid
 Subsystem sftp internal-sftp
 AcceptEnv http_proxy https_proxy no_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY
 SetEnv ENV=/home/remote/.profile LANG=C.UTF-8
@@ -143,7 +143,7 @@ SetEnv ENV=/home/remote/.profile LANG=C.UTF-8
         # This loopback fixture deliberately rejects keys; don't rate-limit later cases.
         with config.open('a') as file:
             file.write('PerSourcePenalties no\n')
-    Path('/root/.ssh/config').write_text('''Host ssh-menu-docker
+    Path('/root/.ssh/config').write_text('''Host shui-docker
   HostName 127.0.0.1
   Port 1
   User remote
@@ -157,7 +157,7 @@ SetEnv ENV=/home/remote/.profile LANG=C.UTF-8
     # A recognizable interactive shell prompt for SSH/Bash and multiplexers.
     for name in ['.profile', '.bash_profile', '.bashrc']:
         path = Path('/home/remote') / name
-        path.write_text("case $- in *i*) PS1='SSH_MENU_READY> '; export PS1 ;; esac\n")
+        path.write_text("case $- in *i*) PS1='SHUI_READY> '; export PS1 ;; esac\n")
         subprocess.run(['chown', 'remote:remote', str(path)], check=True)
     server_log = (RESULTS / 'sshd.log').open('w')
     server = subprocess.Popen(['/usr/sbin/sshd', '-D', '-e', '-f', str(config)], stdout=server_log, stderr=server_log)
@@ -173,9 +173,9 @@ SetEnv ENV=/home/remote/.profile LANG=C.UTF-8
 
 
 def shell_finish(master, text):
-    if 'SSH_MENU_READY>' not in text:
+    if 'SHUI_READY>' not in text:
         return False
-    os.write(master, b"printf '\\nSSH_MENU_SHELL_OK:%s\\n' \"$HOME\"; exit\n")
+    os.write(master, b"printf '\\nSHUI_SHELL_OK:%s\\n' \"$HOME\"; exit\n")
     return True
 
 
@@ -190,7 +190,7 @@ def profile(name, finish, tool=None):
     if missing:
         assert prompts == 1 and available(tool), f'{name}: dependency was not installed'
     if name in ['ssh', 'bash']:
-        assert '\r\nSSH_MENU_SHELL_OK:/home/remote\r\n' in output, output[-2000:]
+        assert '\r\nSHUI_SHELL_OK:/home/remote\r\n' in output, output[-2000:]
     # A second launch must reuse the installed dependency without prompting.
     _, prompts = script(f'{name}-reuse', name, finish=finish)
     assert prompts == 0, f'{name}: repeated the dependency installation'
@@ -238,7 +238,7 @@ def run():
         remote('true')
         script('auth-expiry-reset', 'auth-expiry-never')
         assert 'expiry-time=' not in remote('cat "$HOME/.ssh/authorized_keys"').stdout
-        assert not list(Path('/home/remote/.ssh').glob('.ssh-menu-expiry.*'))
+        assert not list(Path('/home/remote/.ssh').glob('.shui-expiry.*'))
 
         dotfiles = Path('/root/src/dotfiles')
         dotfiles.mkdir(parents=True)
@@ -250,18 +250,18 @@ def run():
         remote('test -f "$HOME/src/dotfiles/.fixture"')
 
         definition = Path('/tests/fixture.terminfo')
-        definition.write_text('ssh-menu-docker|integration test terminal,\n cols#80, lines#24, bel=^G, clear=\\E[H\\E[2J,\n')
+        definition.write_text('shui-docker|integration test terminal,\n cols#80, lines#24, bel=^G, clear=\\E[H\\E[2J,\n')
         # Some ncurses builds ignore root's ~/.terminfo. Install the client's
         # fixture in the system database, and check the remote's private database
         # explicitly so a system fallback cannot make the copy test pass.
         subprocess.run(['tic', '-x', str(definition)], check=True)
-        remote_definition = 'infocmp -x -A "$HOME/.terminfo" ssh-menu-docker'
+        remote_definition = 'infocmp -x -A "$HOME/.terminfo" shui-docker'
         assert remote(remote_definition, check=False).returncode != 0
-        os.environ['TERM'] = 'ssh-menu-docker'
+        os.environ['TERM'] = 'shui-docker'
         # interactive() sets TERM for terminal apps; explicitly set it for this recipe.
-        interactive('terminfo', ['env', 'TERM=ssh-menu-docker', 'sh', str(FIXTURES / 'terminfo.sh')])
+        interactive('terminfo', ['env', 'TERM=shui-docker', 'sh', str(FIXTURES / 'terminfo.sh')])
         assert 'cols#80' in remote(remote_definition).stdout
-        assert not list(Path('/tmp').glob('ssh-menu-terminfo.*'))
+        assert not list(Path('/tmp').glob('shui-terminfo.*'))
         os.environ['TERM'] = 'xterm-256color'
 
         profile('ssh', shell_finish)
@@ -272,7 +272,7 @@ def run():
             assert not available(tool), f'{tool} was preinstalled; auto-install coverage would be lost'
 
         def detach_tmux(master, text):
-            if 'SSH_MENU_READY>' not in text or remote('tmux has-session -t main', check=False).returncode:
+            if 'SHUI_READY>' not in text or remote('tmux has-session -t main', check=False).returncode:
                 return False
             remote('tmux detach-client -s main')
             return True
@@ -286,7 +286,7 @@ def run():
         def close_monitor(master, text):
             if remote('pgrep -u remote -x btop', check=False).returncode:
                 return False
-            matches = list(Path('/tmp').glob('ssh-menu-monitor.*/btop/btop.conf'))
+            matches = list(Path('/tmp').glob('shui-monitor.*/btop/btop.conf'))
             if not matches:
                 return False
             config = matches[0]
@@ -301,7 +301,7 @@ def run():
         session_names = []
 
         def detach_zellij(master, text):
-            if 'SSH_MENU_READY>' not in text:
+            if 'SHUI_READY>' not in text:
                 return False
             result = remote('"$HOME/.local/bin/zellij" list-sessions --short --no-formatting', check=False)
             if result.returncode or not result.stdout.strip():
@@ -315,7 +315,7 @@ def run():
         profile('zellij', detach_zellij, 'zellij')
         assert len(session_names) == 2 and session_names[0] == session_names[1], 'Zellij did not attach to the existing session'
         remote('"$HOME/.local/bin/zellij" kill-all-sessions --yes')
-        assert not list(Path('/home/remote/.local/bin').glob('.ssh-menu-zellij.*'))
+        assert not list(Path('/home/remote/.local/bin').glob('.shui-zellij.*'))
 
     finally:
         server.terminate()

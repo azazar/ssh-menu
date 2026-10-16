@@ -56,6 +56,6 @@ CI exports fixtures once in the Rust job, then runs the seven distributions in p
 To export once and rerun containers without rebuilding Rust tests:
 
 ```sh
-SSH_MENU_DOCKER_FIXTURES="$PWD/target/docker-fixtures" cargo test --locked export_docker_fixtures -- --ignored
+SHUI_DOCKER_FIXTURES="$PWD/target/docker-fixtures" cargo test --locked export_docker_fixtures -- --ignored
 python3 tests/docker/run.py --fixtures target/docker-fixtures --distro debian
 ```

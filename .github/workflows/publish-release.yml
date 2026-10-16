@@ -43,7 +43,7 @@ jobs:
             aarch64-pc-windows-msvc; do
             extension=tar.gz
             if [[ "$target" == *windows* ]]; then extension=zip; fi
-            grep -Fx "ssh-menu-$target.$extension" assets.txt
+            grep -Fx "shui-$target.$extension" assets.txt
           done
           grep -Fx SHA256SUMS assets.txt
       - name: Verify archive checksums

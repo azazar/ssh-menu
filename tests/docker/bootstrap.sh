@@ -12,7 +12,7 @@ for cert in /tests/ca/*.crt; do
     *) anchors=/usr/local/share/ca-certificates; bundle=/etc/ssl/certs/ca-certificates.crt ;;
   esac
   mkdir -p "$anchors" "${bundle%/*}"
-  cp "$cert" "$anchors/ssh-menu-${cert##*/}"
+  cp "$cert" "$anchors/shui-${cert##*/}"
   printf "\n" >> "$bundle"
   cat "$cert" >> "$bundle"
   printf "\n" >> "$bundle"
@@ -26,11 +26,11 @@ case "$1" in
       for file in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; do
         [ ! -f "$file" ] || sed -i 's|http://|https://|g' "$file"
       done
-      printf 'Acquire::https::CaInfo "/etc/ssl/certs/ca-certificates.crt";\n' > /etc/apt/apt.conf.d/99ssh-menu-test-ca
+      printf 'Acquire::https::CaInfo "/etc/ssl/certs/ca-certificates.crt";\n' > /etc/apt/apt.conf.d/99shui-test-ca
     fi
     apt-get update
     apt-get install -y --no-install-recommends python3 openssh-client openssh-server sudo ca-certificates curl tar gzip diffutils ncurses-bin ncurses-term procps passwd
-    rm -f /etc/apt/apt.conf.d/99ssh-menu-test-ca
+    rm -f /etc/apt/apt.conf.d/99shui-test-ca
     ;;
   fedora)
     dnf install -y --allowerasing python3 openssh-clients openssh-server sudo ca-certificates curl tar gzip diffutils ncurses procps-ng shadow-utils passwd
@@ -63,6 +63,6 @@ done
 mkdir -p /run/sshd /results /root/.ssh
 chmod 700 /root/.ssh
 useradd -m -U -s /bin/sh remote
-printf 'remote:ssh-menu-test-password\n' | chpasswd
-printf 'Defaults env_keep += "http_proxy https_proxy no_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY"\nremote ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/ssh-menu-test
-chmod 440 /etc/sudoers.d/ssh-menu-test
+printf 'remote:shui-test-password\n' | chpasswd
+printf 'Defaults env_keep += "http_proxy https_proxy no_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY"\nremote ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/shui-test
+chmod 440 /etc/sudoers.d/shui-test

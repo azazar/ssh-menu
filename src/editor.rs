@@ -30,7 +30,7 @@ pub(super) fn edit(
                 Err(err) => {
                     message = format!(
                         "{}\n\n{err}\n\nConfiguration not reloaded.\nEdit to fix, open help, or cancel to keep the current configuration.",
-                        home.join(".ssh").join(launch::CONFIG_NAME).display()
+                        launch::config_path(home).display()
                     )
                 }
             }
@@ -86,11 +86,6 @@ pub(super) fn edit(
 }
 
 fn launch_editor(terminal: &mut DefaultTerminal, home: &Path) -> io::Result<launch::Config> {
-    if !home.join(".ssh").is_dir() {
-        return Err(io::Error::other(
-            "~/.ssh does not exist. Create it before editing configuration.",
-        ));
-    }
     let editor = ["VISUAL", "EDITOR"]
         .into_iter()
         .find_map(|name| env::var(name).ok().filter(|value| !value.trim().is_empty()))
@@ -102,7 +97,7 @@ fn launch_editor(terminal: &mut DefaultTerminal, home: &Path) -> io::Result<laun
     suspend_terminal()?;
     let status = Command::new(&words[0])
         .args(&words[1..])
-        .arg(home.join(".ssh").join(launch::CONFIG_NAME))
+        .arg(launch::config_path(home))
         .status();
     *terminal = init_terminal()?;
     let status = status?;

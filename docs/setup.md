@@ -4,7 +4,7 @@ Press **F4** to open remote setup for the selected host. Press **Shift+F4** to o
 
 Use Left/Right on **Action** to switch between:
 
-- **Configure host**: the selected address is filled in. Choose a setup recipe and press **Enter** to apply it. SSH Menu returns to the host list with a success or failure message, preserving your filter and profile choices. It does not launch a connection or save a history entry.
+- **Configure host**: the selected address is filled in. Choose a setup recipe and press **Enter** to apply it. Shui returns to the host list with a success or failure message, preserving your filter and profile choices. It does not launch a connection or save a history entry.
 - **Add new**: enter `user@host[:port]` (or `user@[IPv6]:port`), and optionally choose a setup recipe. **Enter** adds and connects using the default launch profile; **Alt+Enter** returns to the menu after the connection ends.
 
 Each action retains its own address draft while you switch. Tab/Shift-Tab or Up/Down moves between fields; Left/Right changes the action, recipe, or dropdown choice. **Esc** cancels. All controls can be rebound under `keybindings.dialog`.
@@ -29,7 +29,7 @@ Both key-auth recipes offer **Key expiry**: never (default), 8 hours, day, week,
 
 The updater expects a regular remote `~/.ssh/authorized_keys` file and an OpenSSH server supporting `expiry-time`. Custom authorized-key locations require adapting the recipe. If the post-copy update fails, setup reports failure, but the copied key remains installed.
 
-Existing configuration files are preserved. To adopt these samples in an existing installation, copy the desired entries under `configuration_scripts` from the [updated example](../ssh-menu-config.example.yml); keep your custom recipes.
+Existing configuration files are preserved. To adopt these samples in an existing installation, copy the desired entries under `configuration_scripts` from the [updated example](../shui-config.example.yml); keep your custom recipes.
 
 Setup defaults to **None**. Configure mode requires a recipe; adding a remote can skip setup. Authentication prompts run with the terminal restored. Failed setup prevents adding or connecting. In configure mode, failures return to the menu so you can retry. Setup is not repeated on later connections. The dialog itself does not edit SSH config; the selected recipe determines what changes on the local or remote machine.
 

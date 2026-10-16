@@ -45,7 +45,7 @@ def main():
     # Some cloud proxies are host-only DNS aliases; make them resolvable in Docker.
     proxy_hosts = {urlsplit(os.environ[name]).hostname for name in PROXIES if name.lower() != 'no_proxy'} - {None}
     extra_hosts = [arg for host in sorted(proxy_hosts) for arg in ('--add-host', f'{host}:{socket.gethostbyname(host)}')]
-    with tempfile.TemporaryDirectory(prefix='ssh-menu-docker-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='shui-docker-') as temporary:
         context = Path(temporary)
         certificates = context / 'ca'
         certificates.mkdir()
@@ -58,7 +58,7 @@ def main():
         else:
             fixtures.mkdir()
             subprocess.run(['cargo', 'test', '--locked', 'export_docker_fixtures', '--', '--ignored'],
-                           cwd=REPO, env=dict(os.environ, SSH_MENU_DOCKER_FIXTURES=str(fixtures)), check=True)
+                           cwd=REPO, env=dict(os.environ, SHUI_DOCKER_FIXTURES=str(fixtures)), check=True)
         if not (fixtures / 'coverage.txt').is_file():
             parser.error('missing exported fixtures')
         print((fixtures / 'coverage.txt').read_text(), flush=True)
@@ -66,7 +66,7 @@ def main():
             shutil.copy2(Path(__file__).with_name(name), context / name)
 
         def run(distro):
-            name = f'ssh-menu-test-{distro}-{run_id}'
+            name = f'shui-test-{distro}-{run_id}'
             image = f'{name}:latest'
             logs = output / run_id / distro
             logs.mkdir(parents=True, exist_ok=True)
@@ -83,7 +83,7 @@ def main():
                 capabilities = ['--cap-add=PERFMON', '--cap-add=DAC_READ_SEARCH'] if distro == 'arch' else []
                 with (logs / 'container.log').open('w') as log:
                     try:
-                        subprocess.run(['docker', 'run', *extra_hosts, *capabilities, '--name', name, '--hostname', 'ssh-menu-docker', *[arg for name in PROXIES for arg in ('--env', name)], image],
+                        subprocess.run(['docker', 'run', *extra_hosts, *capabilities, '--name', name, '--hostname', 'shui-docker', *[arg for name in PROXIES for arg in ('--env', name)], image],
                                        stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.timeout)
                     finally:
                         subprocess.run(['docker', 'cp', f'{name}:/results/.', str(logs)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

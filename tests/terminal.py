@@ -16,10 +16,10 @@ import time
 ADD_REMOTE = b"\x1b[1;2S"
 
 source_binary = Path(sys.argv[1]).resolve()
-with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
+with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
     root = Path(directory)
     # Exercise a single-file installation, with no docs beside it or in the cwd.
-    binary = str(root / "ssh-menu")
+    binary = str(root / "shui")
     shutil.copy2(source_binary, binary)
     (root / ".ssh").mkdir()
     (root / ".ssh/id_ed25519").write_text("fake private key")
@@ -30,12 +30,12 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
     (root / "bin").mkdir()
     for name in ("ssh", "mosh", "mc", "sftp", "custom-connect"):
         stub = root / "bin" / name
-        stub.write_text('#!/bin/sh\nprintf "%s\\n" "$0" "$@" > "$SSH_MENU_TEST_LOG"\n')
-        stub.write_text(stub.read_text() + 'stty -g > "$SSH_MENU_TEST_LOG.tty"\nprintf "SSH_MENU_HANDOFF\\n"\n')
+        stub.write_text('#!/bin/sh\nprintf "%s\\n" "$0" "$@" > "$SHUI_TEST_LOG"\n')
+        stub.write_text(stub.read_text() + 'stty -g > "$SHUI_TEST_LOG.tty"\nprintf "SHUI_HANDOFF\\n"\n')
         stub.chmod(0o755)
     child_env = dict(os.environ, HOME=str(root), USER="tester", TERM="xterm",
                      PATH=str(root / "bin") + os.pathsep + os.environ["PATH"],
-                     SSH_MENU_TEST_LOG=str(root / "command"))
+                     SHUI_TEST_LOG=str(root / "command"), XDG_CONFIG_HOME=str(root / "settings"))
     dump = subprocess.check_output([binary, "--dump"], env=child_env, text=True)
     assert dump.splitlines()[:2] == ["beta:2222", "alpha"], dump
 
@@ -55,19 +55,19 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
                     output.extend(os.read(master, 65536))
         try:
             read_for(0.3)
-            assert b"SSH MENU" in output, output
+            assert b"SHUI" in output, output
             for key in keys:
                 os.write(master, key)
                 read_for(0.1)
             process.wait(timeout=3)
             assert process.returncode == expected_status, output
             assert termios.tcgetattr(slave) == before, "terminal settings were not restored"
-            handoff = output.find(b"SSH_MENU_HANDOFF")
+            handoff = output.find(b"SHUI_HANDOFF")
             cleanup = output[:handoff] if handoff >= 0 else output
             assert cleanup.rfind(b"\x1b[?25h") > cleanup.rfind(b"\x1b[?25l"), "cursor hidden at handoff/exit"
             assert cleanup.rfind(b"\x1b[?1049l") > cleanup.rfind(b"\x1b[?1049h"), "alternate screen active"
             assert b"\x1b[0m" in cleanup[cleanup.rfind(b"\x1b[?1049l"):], "styles not reset"
-            if b"SSH_MENU_EDITOR" in output:
+            if b"SHUI_EDITOR" in output:
                 assert (root / "command.editor-tty").read_bytes().strip() == tty_before, "editor inherited modified tty"
             if (root / "command.setup-tty").exists():
                 assert (root / "command.setup-tty").read_bytes().strip() == tty_before, "setup inherited modified tty"
@@ -80,6 +80,21 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
                 process.wait()
             os.close(master)
             os.close(slave)
+
+    # A fresh home needs no SSH directory; unset, empty and relative XDG values fall back.
+    for index, xdg in enumerate((None, "", "relative-config")):
+        fresh_home = root / f"fresh-home-{index}"
+        fresh_home.mkdir()
+        child_env["HOME"] = str(fresh_home)
+        if xdg is None:
+            child_env.pop("XDG_CONFIG_HOME", None)
+        else:
+            child_env["XDG_CONFIG_HOME"] = xdg
+        session([b"\x03"])
+        assert (fresh_home / ".config/shui/config.yml").is_file()
+        assert not (fresh_home / ".ssh").exists()
+    child_env["HOME"] = str(root)
+    child_env["XDG_CONFIG_HOME"] = str(root / "settings")
 
     session([b"\x1b[3~", b"ALPHA", "я".encode(), b"\x1b[3~", b"\r"])  # Delete on empty filter and a Unicode character
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
@@ -100,7 +115,7 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
     for erase in (b"\x08", b"\x1b[127;5u", b"\x1b[3;5~"):
         session([erase, b"alpha extra", erase, b"\x7f", b"\x15", b"\r"])
         assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
-    config_file = root / ".ssh/ssh-menu-config.yml"
+    config_file = root / "settings/shui/config.yml"
     original_config = config_file.read_text()
     session([b"beta:2222", b"\x1b[C", b"\x1b[C", b"\r"])
     command = (root / "command").read_text().splitlines()
@@ -119,7 +134,7 @@ with tempfile.TemporaryDirectory(prefix="ssh-menu-pty-") as directory:
     assert "attach --create" in remote_command
     # Execute the actual encoded remote command with an existing mock Zellij.
     zellij = root / "bin/zellij"
-    zellij.write_text('#!/bin/sh\ncase "$1" in\nlist-sessions) printf "existing session\\n" ;;\nattach) printf "%s\\n" "$@" > "$SSH_MENU_TEST_LOG.zellij"; read -r line; [ "$line" = terminal-input ] ;;\nesac\n')
+    zellij.write_text('#!/bin/sh\ncase "$1" in\nlist-sessions) printf "existing session\\n" ;;\nattach) printf "%s\\n" "$@" > "$SHUI_TEST_LOG.zellij"; read -r line; [ "$line" = terminal-input ] ;;\nesac\n')
     zellij.chmod(0o755)
     remote = subprocess.run(["sh", "-c", remote_command], env=child_env, input="terminal-input\n", text=True, capture_output=True)
     assert remote.returncode == 0, remote.stderr
@@ -161,7 +176,7 @@ profiles:
     config_file.write_text("profiles: [")
     invalid = subprocess.run([binary], env=child_env, capture_output=True)
     assert invalid.returncode != 0
-    assert b"ssh-menu-config.yml" in invalid.stderr
+    assert b"config.yml" in invalid.stderr
     assert b"\x1b[?1049h" not in invalid.stdout, "invalid config opened the TUI"
     config_file.write_text(original_config)
     (root / "command").unlink()
@@ -189,7 +204,7 @@ profiles:
     # Exercise both shipped recipes with fake tools; no network or real dotfiles.
     for name in ("ssh-copy-id", "scp"):
         stub = root / "bin" / name
-        stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SSH_MENU_TEST_LOG.' + name + '"\n')
+        stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SHUI_TEST_LOG.' + name + '"\n')
         stub.chmod(0o755)
     session([ADD_REMOTE, b"setup@example.org:2200", b"\x1b[C", b"\r"])
     assert (root / "command.ssh-copy-id").read_text().splitlines() == ["-p", "2200", "-i", str(root / ".ssh/id_ed25519.pub"), "setup@example.org"]
@@ -197,7 +212,7 @@ profiles:
     (root / "src/dotfiles/install.sh").write_text("exit 0\n")
     ssh = root / "bin/ssh"
     original_ssh = ssh.read_text()
-    ssh.write_text(original_ssh + 'printf "%s\\n" "$@" >> "$SSH_MENU_TEST_LOG.calls"\n')
+    ssh.write_text(original_ssh + 'printf "%s\\n" "$@" >> "$SHUI_TEST_LOG.calls"\n')
     session([ADD_REMOTE, b"dotfiles@example.org:2201", b"\x1b[C", b"\x1b[C", b"\r"])
     assert (root / "command.ssh-copy-id").read_text().splitlines() == ["-p", "2201", "-i", str(root / ".ssh/id_ed25519.pub"), "dotfiles@example.org"]
     assert (root / "command.scp").read_text().splitlines() == ["-P", "2201", "-i", str(root / ".ssh/id_ed25519"), "-r", str(root / "src/dotfiles") + "/.", "dotfiles@example.org:src/dotfiles/"]
@@ -213,7 +228,7 @@ profiles:
     assert (root / ".bash_history").read_text() == before
     # Configured setup receives escaped target/port and a restored terminal before connect.
     stub = root / "bin/setup-test"
-    stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SSH_MENU_TEST_LOG.setup"\nstty -g > "$SSH_MENU_TEST_LOG.setup-tty"\nexit "${SETUP_EXIT:-0}"\n')
+    stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SHUI_TEST_LOG.setup"\nstty -g > "$SHUI_TEST_LOG.setup-tty"\nexit "${SETUP_EXIT:-0}"\n')
     stub.chmod(0o755)
     config_file.write_text("""default: SSH
 profiles: [{name: SSH, command: 'ssh -- %h'}]
@@ -384,7 +399,7 @@ configuration_scripts:
     assert (root / "command").read_text().splitlines()[1:] == ["--", "ctrlq-host"]
     # Preparation runs with a restored tty and must succeed before connection/history.
     prepare = root / "bin/prepare-test"
-    prepare.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SSH_MENU_TEST_LOG.prepare"\nstty -g > "$SSH_MENU_TEST_LOG.setup-tty"\nprintf "Install test dependency? [y/N] "\nread -r reply\n[ "$reply" = y ]\n')
+    prepare.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SHUI_TEST_LOG.prepare"\nstty -g > "$SHUI_TEST_LOG.setup-tty"\nprintf "Install test dependency? [y/N] "\nread -r reply\n[ "$reply" = y ]\n')
     prepare.chmod(0o755)
     config_file.write_text("default: SSH\nprofiles: [{name: SSH, command: 'ssh -- %h', prepare_command: 'prepare-test %h %p %{literal}', literal: 'a ; $HOME'}]\n")
     before = (root / ".bash_history").read_text()
@@ -492,31 +507,31 @@ profiles:
     # Return mode restores the child tty and then preserves the filter.
     config_file.write_text("default: SSH\nprofiles: [{name: SSH, command: 'ssh -- %h'}]\n")
     output = session([b"alpha", b"\x1b\r", b"\x1b\r", b"\x03"])
-    assert output.count(b"SSH_MENU_HANDOFF") == 2
+    assert output.count(b"SHUI_HANDOFF") == 2
 
     # Editor handoff, valid reload, and invalid edits retaining the active config.
     editor = root / "bin/test-editor"
-    editor.write_text('#!/bin/sh\nstty -g > "$SSH_MENU_TEST_LOG.editor-tty"\ncp "$HOME/edited.yml" "$1"\nprintf "SSH_MENU_EDITOR\\n"\n')
+    editor.write_text('#!/bin/sh\nstty -g > "$SHUI_TEST_LOG.editor-tty"\ncp "$HOME/edited.yml" "$1"\nprintf "SHUI_EDITOR\\n"\n')
     editor.chmod(0o755)
     child_env["VISUAL"] = str(editor)
     (root / "edited.yml").write_text("default: Custom\nprofiles: [{name: Custom, command: 'custom-connect %h'}]\n")
     output = session([b"alpha", b"\x1b[20~", b"\r"])
-    assert output.count(b"SSH_MENU_EDITOR") == 1
+    assert output.count(b"SHUI_EDITOR") == 1
     assert b"CONFIGURATION" not in output
     assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
     # Empty environment values fall through to EDITOR, then vi.
     child_env["VISUAL"] = " "
     child_env["EDITOR"] = str(editor)
     output = session([b"\x1b[20~", b"\x03"])
-    assert output.count(b"SSH_MENU_EDITOR") == 1
+    assert output.count(b"SHUI_EDITOR") == 1
     shutil.copy2(editor, root / "bin/vi")
     child_env["EDITOR"] = ""
     output = session([b"\x1b[20~", b"\x03"])
-    assert output.count(b"SSH_MENU_EDITOR") == 1
+    assert output.count(b"SHUI_EDITOR") == 1
     child_env["VISUAL"] = str(editor)
     (root / "edited.yml").write_text("profiles: [broken\n")
     output = session([b"alpha", b"\x1b[20~", b"\x1bOP", b"\x1bOP", b"\r", b"\x1b", b"\r"])
-    assert output.count(b"SSH_MENU_EDITOR") == 2
+    assert output.count(b"SHUI_EDITOR") == 2
     assert b"Configuration not reloaded" in output
     assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
     config_file.write_text(original_config)
@@ -550,12 +565,12 @@ keybindings:
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     assert b"F3" in output and b"Ctrl" in output
     output = session([b"alpha", b"\x12", b"\x12", b"\x11"])
-    assert output.count(b"SSH_MENU_HANDOFF") == 2
+    assert output.count(b"SHUI_HANDOFF") == 2
     # Former help-close keys must no longer close help; plain X may close only there.
     session([b"alpha", b"\x1b[17~", b"\x1bOP", b"q", b"x", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
     output = session([b"alpha", b"\x1b[15~", b"\r", b"\x1b[15~", b"\x11"])
-    assert output.count(b"SSH_MENU_HANDOFF") == 1
+    assert output.count(b"SHUI_HANDOFF") == 1
     session([b"\x1bOQ", b"new-rebound", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "new-rebound"]
     config_file.write_text(config_file.read_text() + "\nconfiguration_scripts: [{name: Rebound setup, command: 'setup-test %h'}]\n")
@@ -581,7 +596,7 @@ profiles:
     inputs: [{id: value, type: promptString, default: test}]
 """)
     output = session([b"alpha", b"\x1b\r", b"\r", b"\x03"])
-    assert output.count(b"SSH_MENU_HANDOFF") == 1
+    assert output.count(b"SHUI_HANDOFF") == 1
     config_file.write_text("default: Fail\nprofiles: [{name: Fail, command: 'exit 7'}]\n")
     session([b"alpha", b"\x1b\r", b"\x03"])
     config_file.write_text(original_config)
@@ -614,8 +629,8 @@ profiles:
     keygen = root / "bin/ssh-keygen"
     keygen.write_text('''#!/bin/sh
 set -eu
-printf '%s\\n' "$@" > "$SSH_MENU_TEST_LOG.keygen"
-stty -g > "$SSH_MENU_TEST_LOG.keygen-tty"
+printf '%s\\n' "$@" > "$SHUI_TEST_LOG.keygen"
+stty -g > "$SHUI_TEST_LOG.keygen-tty"
 [ ! -f "$HOME/keygen-fail" ] || exit 1
 while [ "$#" -gt 0 ]; do
   if [ "$1" = -f ]; then shift; private=$1; fi

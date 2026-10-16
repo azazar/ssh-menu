@@ -14,8 +14,7 @@ use std::{
 struct Sandbox(PathBuf);
 impl Sandbox {
     fn new(name: &str) -> Self {
-        let root =
-            std::env::temp_dir().join(format!("ssh-menu-presets-{name}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("shui-presets-{name}-{}", std::process::id()));
         fs::create_dir_all(root.join("bin")).unwrap();
         let sandbox = Self(root);
         sandbox.link("sh");
@@ -167,7 +166,7 @@ fn monitor_uses_isolated_dashboard_and_cleans_up_on_failure() {
         f.unwrap()
             .file_name()
             .to_string_lossy()
-            .starts_with("ssh-menu-monitor.")
+            .starts_with("shui-monitor.")
     }));
 }
 
@@ -241,7 +240,7 @@ fn terminal_definition_is_exported_before_ssh_and_temp_files_are_removed() {
         f.unwrap()
             .file_name()
             .to_string_lossy()
-            .starts_with("ssh-menu-terminfo.")
+            .starts_with("shui-terminfo.")
     }));
     env.stub("ssh", "touch \"$HOME/contacted\"");
     env.link("touch");
@@ -362,7 +361,7 @@ fn key_expiry_updates_all_matching_entries_and_preserves_restrictions() {
         f.unwrap()
             .file_name()
             .to_string_lossy()
-            .starts_with(".ssh-menu-expiry.")
+            .starts_with(".shui-expiry.")
     }));
     // Both shipped recipes share the same picker and updater.
     let dotfiles = profile("Configure key-based auth + install dotfiles");

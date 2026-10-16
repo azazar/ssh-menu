@@ -2,28 +2,28 @@
 
 ## Get a binary
 
-Download **[v0.1.0-rc.4](https://github.com/azazar/ssh-menu/releases/tag/v0.1.0-rc.4)** from GitHub Releases. Release publication requires all platform builds and checks to pass. Choose the archive for your system and download `SHA256SUMS` to verify it.
+Download **[v0.1.0-rc.4](https://github.com/azazar/shui/releases/tag/v0.1.0-rc.4)** from GitHub Releases. Release publication requires all platform builds and checks to pass. Choose the archive for your system and download `SHA256SUMS` to verify it.
 
-F1 help is embedded in the executable and works offline. You only need to install `ssh-menu` (or `ssh-menu.exe`); the documentation files in the archive are optional.
+F1 help is embedded in the executable and works offline. You only need to install `shui` (or `shui.exe`); the documentation files in the archive are optional.
 
-For development builds, use the **Artifacts** section of a successful [Binaries workflow](https://github.com/azazar/ssh-menu/actions/workflows/binaries.yml) run. Downloading Actions artifacts requires signing in to GitHub. Each artifact ZIP contains a platform archive and its `.sha256` checksum file—extract that outer ZIP first.
+For development builds, use the **Artifacts** section of a successful [Binaries workflow](https://github.com/azazar/shui/actions/workflows/binaries.yml) run. Downloading Actions artifacts requires signing in to GitHub. Each artifact ZIP contains a platform archive and its `.sha256` checksum file—extract that outer ZIP first.
 
 | System | Archive to choose |
 | --- | --- |
-| Linux x86-64 | `ssh-menu-x86_64-unknown-linux-musl.tar.gz` |
-| Linux ARM64 | `ssh-menu-aarch64-unknown-linux-musl.tar.gz` |
-| Linux ARMv7, hard-float | `ssh-menu-armv7-unknown-linux-musleabihf.tar.gz` |
-| macOS Intel | `ssh-menu-x86_64-apple-darwin.tar.gz` |
-| macOS Apple Silicon | `ssh-menu-aarch64-apple-darwin.tar.gz` |
-| Windows x64 | `ssh-menu-x86_64-pc-windows-msvc.zip` |
-| Windows ARM64 | `ssh-menu-aarch64-pc-windows-msvc.zip` |
+| Linux x86-64 | `shui-x86_64-unknown-linux-musl.tar.gz` |
+| Linux ARM64 | `shui-aarch64-unknown-linux-musl.tar.gz` |
+| Linux ARMv7, hard-float | `shui-armv7-unknown-linux-musleabihf.tar.gz` |
+| macOS Intel | `shui-x86_64-apple-darwin.tar.gz` |
+| macOS Apple Silicon | `shui-aarch64-apple-darwin.tar.gz` |
+| Windows x64 | `shui-x86_64-pc-windows-msvc.zip` |
+| Windows ARM64 | `shui-aarch64-pc-windows-msvc.zip` |
 
 ### Linux and macOS
 
 After downloading, choose your archive name and verify its checksum. For an Actions artifact:
 
 ```sh
-archive=ssh-menu-x86_64-unknown-linux-musl.tar.gz  # Change for your platform.
+archive=shui-x86_64-unknown-linux-musl.tar.gz  # Change for your platform.
 sha256sum -c "$archive.sha256"                  # macOS: shasum -a 256 -c "$archive.sha256"
 ```
 
@@ -36,11 +36,11 @@ awk -v name="$archive" '$2 == name' SHA256SUMS > "$archive.sha256"
 Once verified, extract the executable and install it:
 
 ```sh
-tar -xzf "$archive" ssh-menu
+tar -xzf "$archive" shui
 mkdir -p "$HOME/.local/bin"
-install -m 755 ssh-menu "$HOME/.local/bin/ssh-menu"
+install -m 755 shui "$HOME/.local/bin/shui"
 export PATH="$HOME/.local/bin:$PATH"
-ssh-menu
+shui
 ```
 
 Add the `PATH` line to your shell's startup file to keep it across sessions. Linux builds have no dynamic libc dependency. macOS builds use system libraries and are not signed or notarized.
@@ -51,8 +51,8 @@ Use an explicit version for release candidates; GitHub's `latest` download URL e
 
 ```sh
 version=v0.1.0-rc.4
-archive=ssh-menu-x86_64-unknown-linux-musl.tar.gz
-base="https://github.com/azazar/ssh-menu/releases/download/$version"
+archive=shui-x86_64-unknown-linux-musl.tar.gz
+base="https://github.com/azazar/shui/releases/download/$version"
 curl -fLO "$base/$archive"
 curl -fLO "$base/SHA256SUMS"
 awk -v name="$archive" '$2 == name' SHA256SUMS > "$archive.sha256"
@@ -63,7 +63,7 @@ Then follow the extraction and installation steps above.
 
 ### Windows
 
-Download the matching ZIP and compare `Get-FileHash -Algorithm SHA256 .\ssh-menu-x86_64-pc-windows-msvc.zip` in PowerShell with the supplied checksum. Extract `ssh-menu.exe` into a directory on your `PATH`.
+Download the matching ZIP and compare `Get-FileHash -Algorithm SHA256 .\shui-x86_64-pc-windows-msvc.zip` in PowerShell with the supplied checksum. Extract `shui.exe` into a directory on your `PATH`.
 
 Run it from **[Git Bash](https://git-scm.com/downloads/win)**, which supplies the `sh`, `HOME`, and `USER` environment used by command templates and host discovery. PowerShell alone does not supply that environment. For WSL, install a Linux build inside WSL instead.
 
@@ -72,10 +72,10 @@ Run it from **[Git Bash](https://git-scm.com/downloads/win)**, which supplies th
 Install [Rust via rustup](https://rustup.rs/), then:
 
 ```sh
-git clone https://github.com/azazar/ssh-menu.git
-cd ssh-menu
+git clone https://github.com/azazar/shui.git
+cd shui
 cargo build --locked --release
-./target/release/ssh-menu
+./target/release/shui
 ```
 
 The repository pins its Rust toolchain. To build the RC source specifically, run `git checkout v0.1.0-rc.4` before building. On Linux x86-64, add `--target x86_64-unknown-linux-musl` for a static build; the binary will be in `target/x86_64-unknown-linux-musl/release/`.
@@ -86,10 +86,12 @@ Use a UTF-8 terminal with a monospace font. The action bar needs no Powerline or
 
 ## Command-line options
 
-Run `ssh-menu` to open the menu. Use `ssh-menu --dump` to list hosts without opening the UI; `--help` and `--version` are also available.
+Run `shui` to open the menu. Use `shui --dump` to list hosts without opening the UI; `--help` and `--version` are also available.
 
 ## Upgrading
 
-Re-run the install command for your platform to replace the executable. Check `ssh-menu --version` afterward; this release is **0.1.0-rc.4**. Help remains embedded, so no separate documentation installation is needed.
+Re-run the install command for your platform to replace the executable. Check `shui --version` afterward; this release is **0.1.0-rc.4**. Help remains embedded, so no separate documentation installation is needed.
 
-An existing `~/.ssh/ssh-menu-config.yml` is never overwritten. To adopt new profiles or recipes, merge complete entries from the [commented config](../ssh-menu-config.example.yml), including their inputs and script fields. Preserve your custom commands and choose unused shortcuts. Saving through F9 validates and reloads the result; restart after external edits.
+When upgrading from the previous project name, copy your existing configuration to `$XDG_CONFIG_HOME/shui/config.yml` (default: `~/.config/shui/config.yml`) before the first launch to preserve custom settings. Update shell aliases and scripts to invoke `shui`.
+
+An existing `$XDG_CONFIG_HOME/shui/config.yml` is never overwritten. To adopt new profiles or recipes, merge complete entries from the [commented config](../shui-config.example.yml), including their inputs and script fields. Preserve your custom commands and choose unused shortcuts. Saving through F9 validates and reloads the result; restart after external edits.

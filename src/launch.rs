@@ -4,12 +4,26 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     io::{self, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
-pub const CONFIG_NAME: &str = "ssh-menu-config.yml";
-pub const DEFAULT_CONFIG: &str = include_str!("../ssh-menu-config.example.yml");
-const HISTORY_TARGET: &str = " # ssh-menu-target=";
+pub fn config_path(home: &Path) -> PathBuf {
+    config_path_with_base(
+        home,
+        std::env::var_os("XDG_CONFIG_HOME")
+            .as_deref()
+            .map(Path::new),
+    )
+}
+
+fn config_path_with_base(home: &Path, base: Option<&Path>) -> PathBuf {
+    base.filter(|path| path.is_absolute())
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| home.join(".config"))
+        .join("shui/config.yml")
+}
+pub const DEFAULT_CONFIG: &str = include_str!("../shui-config.example.yml");
+const HISTORY_TARGET: &str = " # shui-target=";
 const SCRIPT_PREFIX: &str = "exec sh -c \"$(printf '%b' ";
 const SCRIPT_SUFFIX: &str = ")\"";
 
@@ -616,13 +630,19 @@ impl Config {
         selected
     }
     pub fn load(home: &Path) -> io::Result<Self> {
-        let dir = home.join(".ssh");
-        if !dir.is_dir() {
-            return Self::parse(DEFAULT_CONFIG)?.available_profiles();
-        }
-        let path = dir.join(CONFIG_NAME);
+        Self::load_path(&config_path(home))
+    }
+    fn load_path(path: &Path) -> io::Result<Self> {
         let load = || -> io::Result<Self> {
-            let text = match fs::read_to_string(&path) {
+            let mut directory = fs::DirBuilder::new();
+            directory.recursive(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                directory.mode(0o700);
+            }
+            directory.create(path.parent().expect("config parent directory"))?;
+            let text = match fs::read_to_string(path) {
                 Ok(text) => text,
                 Err(e) if e.kind() == io::ErrorKind::NotFound => {
                     let mut options = fs::OpenOptions::new();
@@ -632,13 +652,13 @@ impl Config {
                         use std::os::unix::fs::OpenOptionsExt;
                         options.mode(0o600);
                     }
-                    match options.open(&path) {
+                    match options.open(path) {
                         Ok(mut file) => {
                             file.write_all(DEFAULT_CONFIG.as_bytes())?;
                             DEFAULT_CONFIG.into()
                         }
                         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-                            fs::read_to_string(&path)?
+                            fs::read_to_string(path)?
                         }
                         Err(e) => return Err(e),
                     }
@@ -733,7 +753,7 @@ mod tests {
         );
         let line = config.profiles[2].history_line(&targets[1]);
         assert_eq!(config.history_profiles(&targets, &line, "me"), [0, 2]);
-        let line = format!("{line}\nexec sh -c 'unknown' # ssh-menu-target=alice@host:2222");
+        let line = format!("{line}\nexec sh -c 'unknown' # shui-target=alice@host:2222");
         assert_eq!(config.history_profiles(&targets, &line, "me"), [0, 0]);
     }
     #[test]
@@ -853,7 +873,7 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
 
     #[test]
     fn key_generator_lists_pairs_and_quotes_filenames() {
-        let home = std::env::temp_dir().join(format!("ssh-menu-key-test-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("shui-key-test-{}", std::process::id()));
         fs::create_dir_all(home.join(".ssh")).unwrap();
         for name in [
             "id_ed25519",
@@ -939,19 +959,36 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
     }
 
     #[test]
-    fn creates_config_only_in_existing_ssh_directory() {
-        let home =
-            std::env::temp_dir().join(format!("ssh-menu-template-test-{}", std::process::id()));
+    fn config_path_uses_absolute_xdg_base_or_home_fallback() {
+        let home = std::env::temp_dir().join("shui-home");
+        let custom = home.join("custom-config");
+        assert_eq!(
+            config_path_with_base(&home, Some(&custom)),
+            custom.join("shui/config.yml")
+        );
+        for base in [
+            None,
+            Some(Path::new("")),
+            Some(Path::new("relative/config")),
+        ] {
+            assert_eq!(
+                config_path_with_base(&home, base),
+                home.join(".config/shui/config.yml")
+            );
+        }
+    }
+
+    #[test]
+    fn creates_config_directory_and_preserves_existing_config() {
+        let home = std::env::temp_dir().join(format!("shui-template-test-{}", std::process::id()));
         fs::create_dir_all(&home).unwrap();
-        Config::load(&home).unwrap();
+        let path = config_path_with_base(&home, None);
+        Config::load_path(&path).unwrap();
         assert!(!home.join(".ssh").exists());
-        fs::create_dir(home.join(".ssh")).unwrap();
-        Config::load(&home).unwrap();
-        let path = home.join(".ssh").join(CONFIG_NAME);
         assert_eq!(fs::read_to_string(&path).unwrap(), DEFAULT_CONFIG);
         let custom = "default: Custom\nprofiles: [{name: Custom, command: 'ssh %h'}]\n";
         fs::write(&path, custom).unwrap();
-        assert_eq!(Config::load(&home).unwrap().default, "Custom");
+        assert_eq!(Config::load_path(&path).unwrap().default, "Custom");
         assert_eq!(fs::read_to_string(&path).unwrap(), custom);
         fs::remove_dir_all(home).unwrap();
     }

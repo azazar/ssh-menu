@@ -6,14 +6,14 @@ use crate::{
 use std::{collections::HashSet, fs, path::PathBuf};
 
 #[test]
-#[ignore = "fixture generator for tests/docker/run.py; requires SSH_MENU_DOCKER_FIXTURES"]
+#[ignore = "fixture generator for tests/docker/run.py; requires SHUI_DOCKER_FIXTURES"]
 fn export_docker_fixtures() {
     let directory =
-        PathBuf::from(std::env::var_os("SSH_MENU_DOCKER_FIXTURES").expect("fixture directory"));
+        PathBuf::from(std::env::var_os("SHUI_DOCKER_FIXTURES").expect("fixture directory"));
     fs::create_dir_all(&directory).unwrap();
     let config = Config::parse(DEFAULT_CONFIG).unwrap();
     let target = Target {
-        host: "remote@ssh-menu-docker".into(),
+        host: "remote@shui-docker".into(),
         port: Some("2222".into()),
     };
     let covered = [

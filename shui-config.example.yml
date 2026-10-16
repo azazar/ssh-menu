@@ -1,4 +1,4 @@
-# ~/.ssh/ssh-menu-config.yml
+# $XDG_CONFIG_HOME/shui/config.yml (default: ~/.config/shui/config.yml)
 # F9 edits this file and validates/reloads it after saving. Existing files are
 # never overwritten on upgrade; merge desired profiles/recipes from the defaults.
 # Commands and scripts are trusted shell code. Checks and generators run locally.
@@ -180,7 +180,7 @@ profiles:
       #!/bin/sh
       # Runs on the SSH server with its terminal still attached to stdin.
       set -eu
-      fail() { printf 'ssh-menu: %s\n' "$*" >&2; exit 1; }
+      fail() { printf 'shui: %s\n' "$*" >&2; exit 1; }
 
       if command -v zellij >/dev/null 2>&1; then
           zellij_bin=$(command -v zellij)
@@ -211,7 +211,7 @@ profiles:
           fi
           umask 077
           mkdir -p "$HOME/.local/bin"
-          install_dir=$(mktemp -d "$HOME/.local/bin/.ssh-menu-zellij.XXXXXX")
+          install_dir=$(mktemp -d "$HOME/.local/bin/.shui-zellij.XXXXXX")
           trap 'rm -rf "$install_dir"' 0
           trap 'exit 1' HUP INT TERM
           archive=$install_dir/zellij.tar.gz
@@ -300,7 +300,7 @@ profiles:
       sh -c %{ensure} -- btop btop 'the remote' %{install} || exit $?
       # Isolate the dashboard from the user's regular btop configuration.
       umask 077
-      config_dir=$(mktemp -d "${TMPDIR:-/tmp}/ssh-menu-monitor.XXXXXX")
+      config_dir=$(mktemp -d "${TMPDIR:-/tmp}/shui-monitor.XXXXXX")
       trap 'rm -rf "$config_dir"' 0
       trap 'exit 1' HUP INT TERM
       mkdir -p "$config_dir/btop"
@@ -408,7 +408,7 @@ configuration_scripts:
         echo 'Expected a regular ~/.ssh/authorized_keys file.' >&2; exit 1;
       }
       umask 077
-      work=$(mktemp -d "$HOME/.ssh/.ssh-menu-expiry.XXXXXX")
+      work=$(mktemp -d "$HOME/.ssh/.shui-expiry.XXXXXX")
       trap 'rm -rf "$work"' 0
       trap 'exit 1' HUP INT TERM
       cp "$file" "$work/original"
@@ -536,7 +536,7 @@ configuration_scripts:
         exit 1
       }
       umask 077
-      source=$(mktemp "${TMPDIR:-/tmp}/ssh-menu-terminfo.XXXXXX")
+      source=$(mktemp "${TMPDIR:-/tmp}/shui-terminfo.XXXXXX")
       trap 'rm -f "$source"' 0
       trap 'exit 1' HUP INT TERM
       cat > "$source"

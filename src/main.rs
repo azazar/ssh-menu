@@ -302,7 +302,7 @@ fn menu(
             .split(frame.area());
             let header = Line::from(vec![
                 Span::styled(
-                    " SSH MENU ",
+                    " SHUI ",
                     Style::default()
                         .fg(theme::BASE)
                         .bg(theme::LAVENDER)
@@ -678,12 +678,12 @@ fn run() -> io::Result<()> {
     let args: Vec<_> = env::args().skip(1).collect();
     if args == ["--help"] || args == ["-h"] {
         println!(
-            "ssh-menu [--dump | --help | --version]\nTerminal menu for SSH connections and remote tools. Reads ~/.ssh/config, ~/.bash_history and MC hotlist."
+            "shui [--dump | --help | --version]\nTerminal menu for SSH connections and remote tools. Reads ~/.ssh/config, ~/.bash_history and MC hotlist."
         );
         return Ok(());
     }
     if args == ["--version"] {
-        println!("ssh-menu {}", env!("CARGO_PKG_VERSION"));
+        println!("shui {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
     if !args.is_empty() && args != ["--dump"] {
@@ -800,7 +800,7 @@ fn run() -> io::Result<()> {
 }
 fn main() {
     if let Err(err) = run() {
-        eprintln!("ssh-menu: {err}");
+        eprintln!("shui: {err}");
         std::process::exit(1);
     }
 }
@@ -852,7 +852,7 @@ mod tests {
     }
     #[test]
     fn discovery_recency() {
-        let dir = env::temp_dir().join(format!("ssh-menu-test-{}", std::process::id()));
+        let dir = env::temp_dir().join(format!("shui-test-{}", std::process::id()));
         fs::create_dir_all(dir.join(".ssh")).unwrap();
         fs::create_dir_all(dir.join(".config/mc")).unwrap();
         fs::write(
