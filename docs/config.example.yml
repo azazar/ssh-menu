@@ -204,15 +204,11 @@ profiles:
           zellij_bin=$HOME/.local/bin/zellij
       fi
 
-      # Names are returned without formatting, oldest session first. Keep spaces intact.
-      # When no sessions exist, list-sessions returns nonzero; attach --create handles it.
-      if sessions=$("$zellij_bin" list-sessions --short --no-formatting 2>/dev/null); then
-          session=$(printf '%s\n' "$sessions" | sed -n '1p')
-          if [ -n "$session" ]; then
-              exec "$zellij_bin" attach --create "$session"
-          fi
-      fi
-      exec "$zellij_bin" attach --create
+      # Index selection considers only live sessions, never exited layouts with
+      # suspended commands. A clean config skips the first-run wizard without
+      # writing user settings; the layout applies only when creating a session.
+      exec "$zellij_bin" --config /dev/null --layout-string 'layout { pane; }' attach --create --index 0 options \
+          --show-startup-tips false --show-release-notes false
 
   # Persistent sessions, file transfers, monitoring and SSH forwarding.
   - name: Tmux

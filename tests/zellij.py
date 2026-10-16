@@ -27,15 +27,14 @@ with tempfile.TemporaryDirectory(prefix='shui-zellij-test-') as directory:
     bins.mkdir()
     fake_zellij = '''#!/bin/sh
 printf '%s\\n' "$*" >> "$TEST_LOG"
-case "$1" in
-  list-sessions)
-    [ -n "${TEST_SESSIONS:-}" ] || exit 1
-    printf '%s\\n' "$TEST_SESSIONS" ;;
-  attach)
-    read -r line
-    [ "$line" = terminal-input ] || exit 9 ;;
-  *) exit 8 ;;
-esac
+[ "$#" = 13 ] || exit 8
+[ "$1" = --config ] && [ "$2" = /dev/null ] || exit 8
+shift 2
+[ "$1" = --layout-string ] && [ "$2" = 'layout { pane; }' ] || exit 8
+shift 2
+[ "$*" = 'attach --create --index 0 options --show-startup-tips false --show-release-notes false' ] || exit 8
+read -r line
+[ "$line" = terminal-input ] || exit 9
 '''
     archive = root / 'fixture.tar.gz'
     with tarfile.open(archive, 'w:gz') as tar:
@@ -65,7 +64,7 @@ exit 1
     # process for successful orchestration; production hashes remain untouched.
     executable('sha256sum', '#!/bin/sh\nprintf "%s  %s\\n" "$TEST_DIGEST" "$1"\n')
 
-    def run(name, sessions='', consent=None, **changes):
+    def run(name, consent=None, **changes):
         home = root / name
         home.mkdir(exist_ok=True)
         log = root / 'calls'
@@ -74,17 +73,17 @@ exit 1
         downloads.unlink(missing_ok=True)
         child_env = dict(os.environ, HOME=str(home), PATH=f'{bins}:/usr/bin:/bin',
                          TEST_LOG=str(log), TEST_DOWNLOAD_LOG=str(downloads),
-                         TEST_ARCHIVE=str(archive), TEST_DIGEST=expected,
-                         TEST_SESSIONS=sessions)
+                         TEST_ARCHIVE=str(archive), TEST_DIGEST=expected)
         child_env.update(changes)
         result = subprocess.run(['sh', str(script)], env=child_env, input=('y\n' if consent is None and not (bins / 'zellij').exists() and not (home / '.local/bin/zellij').exists() else (consent or '')) + 'terminal-input\n',
                                 text=True, capture_output=True, timeout=10)
         return home, result, log.read_text().splitlines() if log.exists() else [], downloads
 
     installed = executable('zellij', fake_zellij)
-    home, result, calls, downloads = run('existing', 'old session\nnew-session')
+    home, result, calls, downloads = run('existing')
     assert result.returncode == 0, result.stderr
-    assert calls == ['list-sessions --short --no-formatting', 'attach --create old session'], calls
+    launch = '--config /dev/null --layout-string layout { pane; } attach --create --index 0 options --show-startup-tips false --show-release-notes false'
+    assert calls == [launch], calls
     assert not downloads.exists() and not (home / '.local').exists()
     installed.unlink()
 
@@ -95,13 +94,13 @@ exit 1
 
     home, result, calls, downloads = run('install')
     assert result.returncode == 0, result.stderr
-    assert calls[-1] == 'attach --create', calls
+    assert calls == [launch], calls
     assert (home / '.local/bin/zellij').is_file()
     assert '--proto =https' in downloads.read_text()
     assert 'v0.45.1/zellij-x86_64-unknown-linux-musl.tar.gz' in downloads.read_text()
     assert not list((home / '.local/bin').glob('.shui-zellij.*'))
-    _, result, calls, downloads = run('install', 'restored-session')
-    assert result.returncode == 0 and calls[-1] == 'attach --create restored-session'
+    _, result, calls, downloads = run('install')
+    assert result.returncode == 0 and calls == [launch]
     assert not downloads.exists(), 'local installation should be reused without PATH changes'
 
     for name, changes, message in [

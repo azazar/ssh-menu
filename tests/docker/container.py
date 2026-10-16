@@ -300,13 +300,27 @@ def run():
 
         session_names = []
 
+        def live_zellij_sessions():
+            result = remote('"$HOME/.local/bin/zellij" list-sessions --no-formatting', check=False)
+            live = [line.split(' [Created ', 1)[0] for line in result.stdout.splitlines()
+                    if '(EXITED' not in line]
+            return live if result.returncode == 0 else []
+
         def detach_zellij(master, text):
             if 'SHUI_READY>' not in text:
                 return False
-            result = remote('"$HOME/.local/bin/zellij" list-sessions --short --no-formatting', check=False)
-            if result.returncode or not result.stdout.strip():
+            live = live_zellij_sessions()
+            if not live:
                 return False
-            name = result.stdout.splitlines()[0]
+            assert len(live) == 1, live
+            name = live[0]
+            client = '"$HOME/.local/bin/zellij" --session ' + shlex.quote(name)
+            tabs = remote(client + ' action query-tab-names').stdout.splitlines()
+            assert len(tabs) == 1, f'Zellij opened extra tabs: {tabs}'
+            panes = json.loads(remote(client + ' action list-panes --json').stdout)
+            visible = [pane for pane in panes if not pane['is_suppressed']]
+            assert len(visible) == 1, panes
+            assert not visible[0]['is_plugin'] and not visible[0]['is_held'], panes
             # Detach the actual terminal client; a separate CLI action has no client ID.
             os.write(master, b'\x0fd')  # Zellij's default Ctrl+O, d binding.
             session_names.append(name)
@@ -314,6 +328,15 @@ def run():
 
         profile('zellij', detach_zellij, 'zellij')
         assert len(session_names) == 2 and session_names[0] == session_names[1], 'Zellij did not attach to the existing session'
+        remote('"$HOME/.local/bin/zellij" kill-all-sessions --yes')
+        # Wait for asynchronous server shutdown before testing a fresh launch.
+        deadline = time.monotonic() + 10
+        while live_zellij_sessions():
+            assert time.monotonic() < deadline, 'Zellij did not stop'
+            time.sleep(0.1)
+        # Exited sessions must not be resurrected with suspended command prompts.
+        script('zellij-after-exit', 'zellij', finish=detach_zellij)
+        assert session_names[-1] != session_names[0], 'Zellij resurrected the exited session'
         remote('"$HOME/.local/bin/zellij" kill-all-sessions --yes')
         assert not list(Path('/home/remote/.local/bin').glob('.shui-zellij.*'))
 
