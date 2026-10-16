@@ -1,13 +1,17 @@
 # Development
 
 ```sh
+python3 -m pip install pyte==0.8.2
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 python3 tests/zellij.py
 cargo build --locked --release --target x86_64-unknown-linux-musl
+python3 tests/cli.py target/x86_64-unknown-linux-musl/release/shui
 python3 tests/terminal.py target/x86_64-unknown-linux-musl/release/shui
 ```
+
+The terminal suite checks rendered screens after real keyboard, modifier, focus and resize events. It compares dialog anchors across recipes and profiles, scroll positions, visible selections and shortcut groups at several terminal sizes. Use `python3 tests/terminal.py PATH_TO_SHUI --interaction-only` for this focused pass. When auditing UI changes, check the entire screen before and after an interaction; checking that individual labels occur in terminal output misses stale hints, overlapping content and layout movement.
 
 The Zellij test reads its bootstrap directly from the shipped config; there is no separate script copy to synchronize. The fast Python tests above use temporary fixtures and fake connection tools; they do not connect to remote hosts. To refresh screenshots, install Pillow and pyte, build the static binary, then run `python3 scripts/screenshot.py`, `python3 scripts/screenshot.py --dialog`, `python3 scripts/screenshot.py --configure`, `python3 scripts/screenshot.py --connection`, `python3 scripts/screenshot.py --shortcuts`, `python3 scripts/screenshot.py --shift-shortcuts`, and `python3 scripts/screenshot.py --help-viewer`. Use `python3 scripts/screenshot.py --install-prompt` for the dependency prompt (isolated PATH, no installs) and `python3 scripts/screenshot.py --search` to capture hint-text search. To capture the health dashboard, put `btop` on PATH and run `python3 scripts/screenshot.py --monitor`; the real Monitor script runs locally through a fake SSH command. These use fontconfig and DejaVu Sans Mono for Powerline; `SHUI_SCREENSHOT_FONT` can point to another compatible TTF.
 

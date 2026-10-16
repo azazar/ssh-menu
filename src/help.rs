@@ -53,7 +53,7 @@ impl tui_markdown::StyleSheet for HelpStyle {
 
 struct Help {
     bar_state: bar::State,
-    controls: Vec<(String, &'static str, u8)>,
+    controls: Vec<bar::Item>,
     topics: Vec<(&'static str, &'static str)>,
     reference: String,
     topic: usize,
@@ -74,15 +74,11 @@ impl Help {
         Self {
             bar_state: bar::State::default(),
             controls: vec![
-                (
-                    bar::pair(bindings, "help", "previous_topic", "next_topic"),
-                    "Topic",
-                    3,
-                ),
-                (bar::pair(bindings, "help", "up", "down"), "Scroll", 2),
-                (bar::plain_hint(bindings, "help", "page_down"), "Page", 4),
-                (bar::plain_hint(bindings, "help", "help"), "Back", 1),
-                (bar::plain_hint(bindings, "help", "close"), "Close", 0),
+                bar::Item::pair(bindings, "help", "previous_topic", "next_topic", "Topic", 3),
+                bar::Item::pair(bindings, "help", "up", "down", "Scroll", 2),
+                bar::Item::action(bindings, "help", "page_down", "Page", 4),
+                bar::Item::action(bindings, "help", "help", "Back", 1),
+                bar::Item::action(bindings, "help", "close", "Close", 0),
             ],
             topics,
             reference: bindings.reference(scope),
@@ -170,11 +166,7 @@ impl Help {
             (*offset + self.page_height).min(total),
             total
         );
-        let mut items: Vec<_> = self
-            .controls
-            .iter()
-            .map(|(key, label, priority)| bar::Item::new(key, *label, *priority))
-            .collect();
+        let mut items = self.controls.clone();
         items.push(bar::Item::new("", position.trim(), 5));
         if let Some(config) = config {
             self.bar_state.draw(frame, areas[2], config, "help", items);
@@ -267,6 +259,29 @@ pub(super) fn show(
 mod tests {
     use super::*;
     use ratatui::{Terminal, backend::TestBackend};
+    #[test]
+    fn modified_help_binding_keeps_its_back_label() {
+        let config = launch::Config::parse("default: SSH\nprofiles: [{name: SSH, command: 'ssh %h'}]\nkeybindings: {help: {help: [Shift+F3]}}\n").unwrap();
+        let mut help = Help::new(Context::Hosts, &config.keybindings);
+        let mut terminal = Terminal::new(TestBackend::new(100, 12)).unwrap();
+        help.bar_state.event(
+            crossterm::event::KeyEvent::new(
+                KeyCode::Modifier(crossterm::event::ModifierKeyCode::LeftShift),
+                KeyModifiers::SHIFT,
+            ),
+            &config.keybindings,
+            "help",
+        );
+        terminal
+            .draw(|frame| help.draw(frame, Some(&config)))
+            .unwrap();
+        let footer = (0..100)
+            .map(|x| terminal.backend().buffer()[(x, 11)].symbol())
+            .collect::<String>();
+        assert!(footer.contains("F3 Back"), "{footer}");
+        assert!(!footer.contains("F3 Help"), "{footer}");
+    }
+
     #[test]
     fn documents_render_at_small_sizes_and_scroll_is_clamped() {
         for (width, height) in [(1, 1), (20, 6), (80, 24)] {

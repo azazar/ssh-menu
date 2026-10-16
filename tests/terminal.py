@@ -5,6 +5,7 @@ from pathlib import Path
 import pty
 import select
 import shutil
+import signal
 import struct
 import subprocess
 import sys
@@ -15,7 +16,288 @@ import time
 # Shift+F4 opens Add new directly, focused on its blank remote.
 ADD_REMOTE = b"\x1b[1;2S"
 
+
+def interaction_checks(binary):
+    """Assert the final screen and geometry after real keyboard/focus/resize events."""
+    import pyte
+
+    with tempfile.TemporaryDirectory(prefix="shui-interaction-") as directory:
+        root = Path(directory)
+        (root / ".ssh").mkdir()
+        hosts = [f"host-{index:02}-long-production-name" for index in range(45)]
+        (root / ".ssh/config").write_text("".join(
+            f"Host {host}\n User tester\n HostName 192.0.2.{index + 1}\n"
+            " IdentityFile ~/.ssh/a-long-private-key-name\n ProxyJump jump.example.org\n"
+            for index, host in enumerate(hosts)))
+        config = root / "settings/shui/config.yml"
+        config.parent.mkdir(parents=True)
+        # The harmless commands are deliberate: a regression must never use real SSH.
+        profiles = """  - {name: Zero, key: Alt+Z, command: 'true %h'}
+  - name: One
+    key: Ctrl+Alt+O
+    command: 'true %h %{input:first}'
+    inputs: [{id: first, type: promptString, default: first-value}]
+  - name: Many
+    command: 'true %h %{input:first} %{input:second} %{input:third} %{input:fourth}'
+    inputs:
+      - {id: first, type: promptString, default: first-value}
+      - {id: second, type: promptString, default: second-value}
+      - {id: third, type: promptString, default: third-value}
+      - {id: fourth, type: promptString, default: fourth-value}
+"""
+        recipes = profiles.replace("key: Alt+Z, ", "").replace("    key: Ctrl+Alt+O\n", "")
+        config.write_text("default: Zero\nprofiles:\n" + profiles +
+                          "configuration_scripts:\n" + recipes)
+        env = dict(os.environ, HOME=str(root), USER="tester", TERM="xterm-256color",
+                   XDG_CONFIG_HOME=str(root / "settings"))
+        hosts = subprocess.check_output([str(binary), "--dump"], env=env, text=True).splitlines()
+
+        class ScreenSession:
+            def __init__(self, rows, cols):
+                self.master, self.slave = pty.openpty()
+                self.rows, self.cols = rows, cols
+                self.screen = pyte.Screen(cols, rows)
+                self.stream = pyte.ByteStream(self.screen)
+                fcntl.ioctl(self.slave, termios.TIOCSWINSZ,
+                            struct.pack("HHHH", rows, cols, 0, 0))
+                self.before = termios.tcgetattr(self.slave)
+                self.process = subprocess.Popen([str(binary)], stdin=self.slave,
+                                                stdout=self.slave, stderr=self.slave,
+                                                env=env, cwd=root)
+
+            def __enter__(self):
+                try:
+                    deadline = time.monotonic() + 5
+                    while "SHUI" not in self.screen.display[0] and time.monotonic() < deadline:
+                        self.drain()
+                        if self.process.poll() is not None:
+                            break
+                    self.require("SHUI" in self.screen.display[0], "menu did not open")
+                    return self
+                except BaseException:
+                    self.__exit__(*sys.exc_info())
+                    raise
+
+            def __exit__(self, *error):
+                try:
+                    # Cancel a form/help first, then exit the menu. Never send Enter.
+                    for _ in range(3):
+                        if self.process.poll() is not None:
+                            break
+                        self.send(b"\x03")
+                    self.process.wait(timeout=2)
+                    if error[0] is None:
+                        self.require(self.process.returncode == 0, "unexpected exit")
+                        assert termios.tcgetattr(self.slave) == self.before
+                finally:
+                    if self.process.poll() is None:
+                        self.process.kill()
+                        self.process.wait()
+                    os.close(self.master)
+                    os.close(self.slave)
+
+            def drain(self):
+                # Wait for one complete redraw and a quiet period, with a hard bound.
+                deadline = time.monotonic() + 1
+                while time.monotonic() < deadline:
+                    if not select.select([self.master], [], [], 0.08)[0]:
+                        return
+                    self.stream.feed(os.read(self.master, 65536))
+
+            def send(self, key):
+                os.write(self.master, key)
+                self.drain()
+
+            def resize(self, rows, cols):
+                self.rows, self.cols = rows, cols
+                self.screen.resize(lines=rows, columns=cols)
+                fcntl.ioctl(self.slave, termios.TIOCSWINSZ,
+                            struct.pack("HHHH", rows, cols, 0, 0))
+                self.process.send_signal(signal.SIGWINCH)
+                self.drain()
+
+            def require(self, condition, message):
+                assert condition, message + "\n" + "\n".join(self.screen.display)
+
+            def locate(self, text):
+                found = [(row, line.index(text)) for row, line in enumerate(self.screen.display)
+                         if text in line]
+                self.require(len(found) == 1, f"expected one visible {text!r}, got {found}")
+                return found[0]
+
+            def selected(self):
+                found = [(row, line) for row, line in enumerate(self.screen.display) if "› " in line]
+                self.require(len(found) == 1, f"expected one selected row, got {found}")
+                return found[0]
+
+            def focus(self, label):
+                for _ in range(12):
+                    if label in self.selected()[1]:
+                        return
+                    self.send(b"\t")
+                self.require(False, f"could not focus {label}")
+
+            def footer(self):
+                return self.screen.display[-1]
+
+            def normal_bar(self):
+                footer = self.footer()
+                self.require("Help" in footer and "Quit" in footer, "normal menu bar missing")
+                self.require(not any(text in footer for text in ("Shift", "Ctrl", "Alt", "New")),
+                             "normal bar exposed modified shortcuts")
+
+        for rows, cols in [(24, 100), (16, 65), (9, 40), (6, 26)]:
+            with ScreenSession(rows, cols) as tui:
+                tui.normal_bar()
+                tui.send(b"\x1bOS")  # Configure the selected host, focused on Setup.
+                tui.require("Setup" in tui.selected()[1], "F4 did not focus the recipe")
+                anchors = {label: tui.locate(label)
+                           for label in ("REMOTE SETUP", "Action", "Remote", "Setup")}
+                footer = tui.locate("Cancel")
+                tui.send(b"\r")  # Validation errors use the reserved status area.
+                for label, position in anchors.items():
+                    tui.require(tui.locate(label) == position, f"validation moved {label}")
+                for name in ("Zero", "One", "Many", "None"):
+                    tui.send(b"\x1b[C")
+                    tui.require(name in tui.selected()[1], f"recipe {name} not selected")
+                    for label, position in anchors.items():
+                        tui.require(tui.locate(label) == position, f"{label} moved for {name}")
+                    tui.require(tui.locate("Cancel") == footer, f"footer moved for {name}")
+                # Inputs must scroll into view without moving the dialog itself.
+                tui.send(b"\x1b[D")  # None -> Many.
+                tui.focus("fourth")
+                tui.require("fourth-value" in tui.selected()[1], "last input obscured")
+                tui.require(tui.locate("REMOTE SETUP") == anchors["REMOTE SETUP"],
+                            "scrolling fields moved the header")
+                tui.focus("Setup")
+                tui.send(b"\x1bOP")  # Help returns to the same field and geometry.
+                tui.send(b"\x1bOP")
+                tui.require("Setup" in tui.selected()[1], "help lost form focus")
+                tui.require(tui.locate("REMOTE SETUP") == anchors["REMOTE SETUP"],
+                            "help moved the dialog")
+                tui.send(b"\x1b")
+                tui.send(b"\x1b[13;5u")
+                tui.focus("Profile")
+                anchors = {label: tui.locate(label)
+                           for label in ("CONNECT", "Remote", "Profile", "Cancel")}
+                for name in ("One", "Many", "Zero"):
+                    tui.send(b"\x1b[C")
+                    tui.require(name in tui.selected()[1], f"profile {name} not selected")
+                    for label, position in anchors.items():
+                        tui.require(tui.locate(label) == position, f"{label} moved for {name}")
+
+        # The form advertises arrows only for fields where they change a choice.
+        with ScreenSession(24, 100) as tui:
+            tui.send(ADD_REMOTE)
+            tui.require("Remote" in tui.selected()[1], "new form did not focus Remote")
+            footer_row = tui.locate("Cancel")[0]
+            tui.require("Choice" not in tui.screen.display[footer_row], "Remote offered Choice")
+            tui.send(b"draft-host")
+            before = tui.selected()
+            tui.send(b"\x1b[C")
+            tui.require(tui.selected() == before, "Right changed the editable Remote")
+            tui.focus("Setup")
+            tui.require("Choice" in tui.screen.display[footer_row], "recipe omitted Choice")
+            tui.send(b"\x1b[C")
+            tui.require("Zero" in tui.selected()[1], "advertised recipe choice did not work")
+
+        # Modifier groups are exact. A release keeps the remaining held modifier,
+        # and losing window focus resets stale state even if releases were missed.
+        for rows, cols in [(24, 100), (10, 40)]:
+            with ScreenSession(rows, cols) as tui:
+                tui.normal_bar()
+                tui.send(b"\x1b[57441;2u")
+                tui.require("Shift" in tui.footer() and "New" in tui.footer(), "Shift menu missing")
+                tui.send(b"\x1b[57441;2:3u")
+                tui.normal_bar()
+                tui.send(b"\x1b[57443;3u")
+                tui.require("Alt" in tui.footer() and "Zero" in tui.footer(), "Alt profile missing")
+                tui.send(b"\x1b[57442;7u")
+                tui.require("Ctrl+Alt" in tui.footer() and "One" in tui.footer(), "combined group missing")
+                tui.require("Zero" not in tui.footer(), "Alt-only profile leaked into combination")
+                tui.send(b"\x1b[57442;7:3u")
+                tui.require("Alt" in tui.footer() and "Ctrl" not in tui.footer(), "release lost held Alt")
+                tui.resize(rows + 2, cols + 3)
+                tui.require("Alt" in tui.footer(), "resize lost held modifier")
+                tui.send(b"\x1b[O")
+                tui.send(b"\x1b[I")
+                tui.normal_bar()
+                tui.send(b"\x1b[57443;3:3u")
+                tui.normal_bar()
+                tui.send(b"\x1b?")
+                tui.require("Alt" in tui.footer(), "fallback reveal failed")
+                tui.send(b"\x1b?")
+                tui.normal_bar()
+                tui.send(b"\x1b[1;2P")
+                tui.require("Shift" in tui.footer(), "Shift fallback reveal failed")
+                tui.send(b"\x1b[1;2P")
+                tui.normal_bar()
+                # Uppercase Shift+Alt is a distinct shortcut, not Alt+Z.
+                tui.send(b"\x1b[57443;3u")
+                tui.send(b"\x1b[57441;4u")
+                tui.send(b"\x1b[90;4u")
+                tui.require(tui.process.poll() is None, "Shift+Alt+Z launched Alt+Z")
+                tui.require("Alt+Shift" in tui.footer() and "Zero" not in tui.footer(),
+                            "Shift+Alt offered Alt-only profile")
+                tui.send(b"\x1b[57441;4:3u")
+                tui.send(b"\x1b[57442;7u")
+                tui.send(b"\x1b[122;7u")
+                tui.require(tui.process.poll() is None, "Ctrl+Alt+Z launched Alt+Z")
+                tui.send(b"\x1b[57442;7:3u")
+                tui.send(b"\x1b[57443;3:3u")
+                tui.normal_bar()
+                # An invalid unmatched query has no target for any profile action.
+                tui.send(b"not a valid address")
+                tui.require("Open" not in tui.footer(), "invalid query offered Open")
+                tui.require(not any(name in tui.footer() for name in ("Zero", "One", "Many")),
+                            "invalid query offered profile cycling")
+                tui.send(b"\x1b[57443;3u")
+                tui.require("Zero" not in tui.footer(), "invalid query offered Alt profile")
+                tui.send(b"\x1b[57442;7u")
+                tui.require("One" not in tui.footer(), "invalid query offered Ctrl+Alt profile")
+                tui.send(b"\x1b[57442;7:3u")
+                tui.send(b"\x1b[57443;3:3u")
+
+        # Full lists with long host/config hints must retain a stable viewport and
+        # keep the selected host readable, including when refresh shows a notice.
+        for rows, cols in [(24, 100), (12, 60), (6, 40)]:
+            with ScreenSession(rows, cols) as tui:
+                tui.send(b"\x1b[F")
+                last_row, last_line = tui.selected()
+                tui.require(hosts[-1] in last_line, "End selection obscured")
+                first_visible = next(line for line in tui.screen.display[1:] if "host-" in line)
+                tui.send(b"\x1b[A")
+                row, line = tui.selected()
+                tui.require(hosts[-2] in line and row == last_row - 1, "Up jumped the viewport")
+                tui.require(next(line for line in tui.screen.display[1:] if "host-" in line) == first_visible,
+                            "Up changed the first visible host")
+                tui.send(b"\x1b[15~")
+                tui.require(tui.selected() == (row, line), "refresh moved or obscured selection")
+                tui.require("Refreshed" in tui.footer(), "refresh notice not in footer")
+                tui.send(b"\x1b[H")
+                tui.require(hosts[0] in tui.selected()[1], "Home selection missing")
+                tui.send(b"x" * 120 + b"QUERY_TAIL")
+                tui.require("QUERY_TAIL" in tui.screen.display[0], "active query tail clipped")
+                tui.resize(rows + 1, cols + 5)
+                tui.require("QUERY_TAIL" in tui.screen.display[0], "resize lost query tail")
+                tui.send(b"\x15")
+                tui.require(hosts[0] in tui.selected()[1], "Ctrl+U did not restore hosts")
+                tui.send(b"\x1b[F")
+                tui.require(hosts[-1] in tui.selected()[1], "End selection missing before growth")
+                tui.resize(len(hosts) + 4, cols)
+                host_lines = tui.screen.display[1:len(hosts) + 1]
+                tui.require(all(host in line for host, line in zip(hosts, host_lines)),
+                            "growth retained a stale list offset or omitted hosts")
+                tui.require(hosts[-1] in tui.selected()[1], "growth lost selected host")
+                tui.resize(rows, cols)
+                tui.require(hosts[-1] in tui.selected()[1], "shrink obscured selected host")
+    print("terminal screen interactions passed")
+
+
 source_binary = Path(sys.argv[1]).resolve()
+interaction_checks(source_binary)
+if sys.argv[2:] == ["--interaction-only"]:
+    sys.exit(0)
 with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
     root = Path(directory)
     # Exercise a single-file installation, with no docs beside it or in the cwd.
@@ -39,14 +321,28 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
     dump = subprocess.check_output([binary, "--dump"], env=child_env, text=True)
     assert dump.splitlines()[:2] == ["beta:2222", "alpha"], dump
 
-    def session(keys, rows=24, cols=100, expected_status=0):
+    def startup_failure():
+        master, slave = pty.openpty()
+        try:
+            result = subprocess.run([binary], stdin=slave, stdout=slave, stderr=subprocess.PIPE,
+                                    env=child_env, timeout=5)
+            output = bytearray()
+            while select.select([master], [], [], 0)[0]:
+                output.extend(os.read(master, 65536))
+            result.stdout = bytes(output)
+            return result
+        finally:
+            os.close(master)
+            os.close(slave)
+
+    def session(keys, rows=24, cols=100, expected_status=0, args=()):
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
         before = termios.tcgetattr(slave)
         tty_before = subprocess.check_output(["stty", "-g"], stdin=slave).strip()
         (root / "command.tty").unlink(missing_ok=True)
         (root / "command.setup-tty").unlink(missing_ok=True)
-        process = subprocess.Popen([binary], stdin=slave, stdout=slave, stderr=slave, env=child_env, cwd=root)
+        process = subprocess.Popen([binary, *args], stdin=slave, stdout=slave, stderr=slave, env=child_env, cwd=root)
         output = bytearray()
         def read_for(seconds):
             end = time.monotonic() + seconds
@@ -57,6 +353,9 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
             read_for(0.3)
             assert b"SHUI" in output, output
             for key in keys:
+                if callable(key):
+                    key()
+                    continue
                 os.write(master, key)
                 read_for(0.1)
             process.wait(timeout=3)
@@ -115,6 +414,50 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
     for erase in (b"\x08", b"\x1b[127;5u", b"\x1b[3;5~"):
         session([erase, b"alpha extra", erase, b"\x7f", b"\x15", b"\r"])
         assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    session([b"\r"], args=("alpha",))
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    # Direct addresses avoid a setup dialog, and only redundant configured users disappear.
+    output = session([b"new-direct:2202", b"\r"])
+    assert b"connects to" in output
+    assert (root / "command").read_text().splitlines()[1:] == ["-p", "2202", "--", "new-direct"]
+    session([b"tester@alpha", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    (root / ".ssh/config").write_text("Host alpha beta\n User other\n")
+    session([b"tester@alpha", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "tester@alpha"]
+    (root / ".ssh/config").write_text("Host alpha beta\n User tester\n")
+    session([b"new-settings", b"\x1b[13;5u", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "new-settings"]
+    (root / ".ssh/config").write_text('Match exec "false"\n User other\nHost alpha beta\n User tester\n')
+    session([b"tester@alpha", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "tester@alpha"]
+    (root / ".ssh/config").write_text("Host alpha beta\n User tester\n")
+    # A missing final newline must not merge our entry into a previous command.
+    (root / ".bash_history").write_text("echo previous")
+    session([b"alpha", b"\r"])
+    assert (root / ".bash_history").read_text().splitlines()[0] == "echo previous"
+    # An unusable history file must not block an otherwise valid connection.
+    (root / ".bash_history").unlink()
+    (root / ".bash_history").mkdir()
+    output = session([b"alpha", b"\r"])
+    assert b"could not save connection history" in output
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    (root / ".bash_history").rmdir()
+    (root / ".bash_history").write_text("ssh alpha\nssh -p 2222 beta\n")
+    session([b"wrong-filter", b"\x15", b"alpha", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
+    # Refresh retains both selected identity and profile despite changed history order.
+    def changed_hosts():
+        with (root / ".ssh/config").open("a") as file:
+            file.write("Host alphabeta\n User other\n")
+        with (root / ".bash_history").open("a") as file:
+            file.write("ssh alphabeta\n")
+    output = session([b"alpha", b"\x1b[C", changed_hosts, b"\x1b[15~", b"\r"])
+    assert b"Refreshed" in output
+    command = (root / "command").read_text().splitlines()
+    assert command[0].endswith("/mosh") and command[-1] == "alpha", command
+    (root / ".ssh/config").write_text("Host alpha beta\n User tester\n")
+    (root / ".bash_history").write_text("ssh alpha\nssh -p 2222 beta\n")
     config_file = root / "settings/shui/config.yml"
     original_config = config_file.read_text()
     session([b"beta:2222", b"\x1b[C", b"\x1b[C", b"\r"])
@@ -174,13 +517,13 @@ profiles:
     session([b"beta:2222", b"\r"])  # Custom argv is restored too.
     assert (root / "command").read_text().splitlines()[0].endswith("/custom-connect")
     config_file.write_text("profiles: [")
-    invalid = subprocess.run([binary], env=child_env, capture_output=True)
+    invalid = startup_failure()
     assert invalid.returncode != 0
     assert b"config.yml" in invalid.stderr
     assert b"\x1b[?1049h" not in invalid.stdout, "invalid config opened the TUI"
     config_file.write_text(original_config)
     (root / "command").unlink()
-    session([b"no-such-host", b"\r", b"\x03"])  # empty result, then Ctrl-C
+    session([b"no such host", b"\r", b"\x03"])  # invalid address, then Ctrl-C
     assert not (root / "command").exists()
     session([b"\x03"], rows=10, cols=40)
     # Profile changes belong to target identity, not the current row or filter.
@@ -206,14 +549,14 @@ profiles:
         stub = root / "bin" / name
         stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SHUI_TEST_LOG.' + name + '"\n')
         stub.chmod(0o755)
-    session([ADD_REMOTE, b"setup@example.org:2200", b"\x1b[C", b"\r"])
+    session([ADD_REMOTE, b"setup@example.org:2200", b"\t", b"\x1b[C", b"\r"])
     assert (root / "command.ssh-copy-id").read_text().splitlines() == ["-p", "2200", "-i", str(root / ".ssh/id_ed25519.pub"), "setup@example.org"]
     (root / "src/dotfiles").mkdir(parents=True)
     (root / "src/dotfiles/install.sh").write_text("exit 0\n")
     ssh = root / "bin/ssh"
     original_ssh = ssh.read_text()
     ssh.write_text(original_ssh + 'printf "%s\\n" "$@" >> "$SHUI_TEST_LOG.calls"\n')
-    session([ADD_REMOTE, b"dotfiles@example.org:2201", b"\x1b[C", b"\x1b[C", b"\r"])
+    session([ADD_REMOTE, b"dotfiles@example.org:2201", b"\t", b"\x1b[C", b"\x1b[C", b"\r"])
     assert (root / "command.ssh-copy-id").read_text().splitlines() == ["-p", "2201", "-i", str(root / ".ssh/id_ed25519.pub"), "dotfiles@example.org"]
     assert (root / "command.scp").read_text().splitlines() == ["-P", "2201", "-i", str(root / ".ssh/id_ed25519"), "-r", str(root / "src/dotfiles") + "/.", "dotfiles@example.org:src/dotfiles/"]
     assert 'exec "$2" "./$1"' in (root / "command.calls").read_text()
@@ -242,7 +585,7 @@ configuration_scripts:
     before = (root / ".bash_history").read_text()
     (root / "command").unlink()
     child_env["SETUP_EXIT"] = "7"
-    session([ADD_REMOTE, b"failed", b"\x1b[C", b"\r"], expected_status=1)
+    session([ADD_REMOTE, b"failed", b"\t", b"\x1b[C", b"\r"], expected_status=1)
     assert not (root / "command").exists()
     assert (root / ".bash_history").read_text() == before
     del child_env["SETUP_EXIT"]
@@ -250,14 +593,14 @@ configuration_scripts:
     before = (root / ".bash_history").read_text()
     config_before = (root / ".ssh/config").read_text()
     (root / "command").unlink(missing_ok=True)
-    output = session([b"added:2222", b"\x1bOS", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
+    output = session([b"added:2222", b"\x1bOS", b"\x1b[C", b"\r", b"\x03"])
     assert b"Configure host" in output and b"completed" in output
     assert (root / "command.setup").read_text().splitlines() == ["added", "2222", "literal ; $HOME"]
     assert not (root / "command").exists(), "configure-only launched a connection"
     assert (root / ".bash_history").read_text() == before
     assert (root / ".ssh/config").read_text() == config_before
     child_env["SETUP_EXIT"] = "7"
-    output = session([b"added:2222", b"\x1bOS", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
+    output = session([b"added:2222", b"\x1bOS", b"\x1b[C", b"\r", b"\x03"])
     assert b"failed" in output and not (root / "command").exists()
     assert (root / ".bash_history").read_text() == before
     del child_env["SETUP_EXIT"]
@@ -266,10 +609,12 @@ configuration_scripts:
     output = session([b"added:2222", b"\x1bOS", b"\r", b"\x1b", b"\x03"])
     assert b"Choose a setup recipe" in output
     assert not (root / "command.setup").exists()
-    session([b"added:2222", b"\x1bOS", b"\x1b[C", b"\t", b"draft", b"\x1b[Z", b"\x1b[D", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
+    session([b"added:2222", b"\x1bOS", b"\x1b[Z", b"\x1b[Z", b"\x1b[C", b"\t", b"draft", b"\x1b[Z", b"\x1b[D", b"\t", b"\t", b"\x1b[C", b"\r", b"\x03"])
     assert (root / "command.setup").read_text().splitlines()[:2] == ["added", "2222"]
-    # With no selected match, F4 still starts with an empty Add new form.
-    session([b"no-such-host", b"\x1bOS", b"no-selection", b"\r"])
+    # F4 carries a typed address into Add new; Shift+F4 always starts blank.
+    session([b"no-such-host", b"\x1bOS", b"\r"])
+    assert (root / "command").read_text().splitlines()[1:] == ["--", "no-such-host"]
+    session([b"unused-draft", ADD_REMOTE, b"no-selection", b"\r"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "no-selection"]
     # Script-specific fields, required validation, choices, cancellation and literal input.
     config_file.write_text("""default: SSH
@@ -297,7 +642,7 @@ configuration_scripts:
     command: ssh -- %h %{input:launch}
     inputs: [{id: launch, type: promptString, required: true}]"""))
     (root / "command").unlink()
-    output = session([b"added:2222", b"\x1bOS", b"\t", b"\t", b"\x1b[C", b"\r",
+    output = session([b"added:2222", b"\x1bOS", b"\x1b[C", b"\r",
                       b"configure-value", b"\t", b"\x1b[C", b"\x1b\r", b"\x03"], rows=9, cols=90)
     assert b"is required" in output and b"completed" in output
     assert (root / "command.setup").read_text().splitlines() == ["added", "configure-value", "full"]
@@ -310,7 +655,7 @@ configuration_scripts:
     assert (root / "command.setup").read_text().splitlines() == ["inputs-host", literal, "full"]
     assert literal not in (root / ".bash_history").read_text(), "setup values must not enter history"
     before = (root / ".bash_history").read_text()
-    session([ADD_REMOTE, b"cancelled", b"\x1b[C", b"\t", b"\t", b"discard me", b"\x1b", b"\x03"])
+    session([ADD_REMOTE, b"cancelled", b"\t", b"\x1b[C", b"\t", b"discard me", b"\x1b", b"\x03"])
     assert (root / ".bash_history").read_text() == before
     # Generators run on selection, cache results in this dialog, and pass resolved choices.
     config_file.write_text("""default: SSH
@@ -341,7 +686,7 @@ configuration_scripts:
     assert (root / "command.setup").read_text().splitlines() == ["generated text", "second"]
     assert (root / "generator-runs").read_text().splitlines() == ["run"], "generator was rerun instead of cached"
     (root / "command.setup").unlink()
-    output = session([ADD_REMOTE, b"broken", b"\x1b[D", b"\r", b"\t", b"\t", b"\x1b[C", b"\x1b", b"\x03"])
+    output = session([ADD_REMOTE, b"broken", b"\t", b"\x1b[D", b"\r", b"\t", b"\t", b"\x1b[C", b"\x1b", b"\x03"])
     assert b"generator test failure" in output
     assert not (root / "command.setup").exists(), "failed generator allowed setup to run"
     # Availability filters choices, preserves original script identity, and skips generators.
@@ -363,18 +708,18 @@ configuration_scripts:
 """)
     session([b"\x03"])
     assert not (root / "availability-checks").exists()
-    output = session([ADD_REMOTE, b"available", b"\x1b[C", b"\r"])
+    output = session([ADD_REMOTE, b"available", b"\t", b"\x1b[C", b"\r"])
     assert b"Running Visible for available" in output
     assert (root / "command.setup").read_text().splitlines() == ["visible"]
     assert (root / "availability-checks").read_text().splitlines() == ["checked"]
     assert not (root / "hidden-generator").exists()
     config_file.write_text(original_config)
     (root / ".ssh/id_ed25519").unlink()  # Public files alone do not make a keypair.
-    output = session([ADD_REMOTE, b"no-keys", b"\x1b[C", b"\x1b[D", b"\r"])
+    output = session([ADD_REMOTE, b"no-keys", b"\t", b"\x1b[C", b"\x1b[D", b"\r"])
     assert not (root / ".ssh/id_ed25519").exists(), "opening setup must not generate keys"
     assert (root / "command").read_text().splitlines()[1:] == ["--", "no-keys"]
     (root / ".ssh/id_ed25519").write_text("fake private key")
-    output = session([ADD_REMOTE, b"\x1b[C", b"\x1b", b"\x03"])
+    output = session([ADD_REMOTE, b"\t", b"\x1b[C", b"\x1b", b"\x03"])
     assert (root / ".ssh/id_ed25519").read_text() == "fake private key"
     config_file.write_text(original_config)
     # Help is embedded and returns to the same filter/profile without launching anything.
@@ -440,7 +785,7 @@ configuration_scripts:
     assert (root / "command").read_text().splitlines()[1:] == ['--', 'alpha']
     # All unavailable is an actionable error, without entering the alternate screen.
     config_file.write_text("default: Missing\nprofiles: [{name: Missing, available_command: 'exit 1', command: 'ssh %h'}]\n")
-    result = subprocess.run([binary], env=child_env, capture_output=True)
+    result = startup_failure()
     assert result.returncode != 0 and b"no launch profiles are available" in result.stderr
     assert b"\x1b[?1049h" not in result.stdout
     config_file.write_text(original_config)
@@ -459,13 +804,20 @@ profiles:
         session([b"alpha", shortcut])
         command = (root / "command").read_text().splitlines()
         assert command[0].endswith('/' + program) and command[1:] == arguments, command
+    # Profile cycling and shortcuts also work for valid addresses absent from history/config.
+    session([b"direct-cycle", b"\x1b[C", b"\r"])
+    command = (root / "command").read_text().splitlines()
+    assert command[0].endswith('/mosh') and command[1:] == ["--", "direct-cycle"], command
+    session([b"direct-shortcut", b"\x1b\x18"])
+    command = (root / "command").read_text().splitlines()
+    assert command[0].endswith('/custom-connect') and command[1:] == ["direct-shortcut"], command
     # The directly launched profile is restored on the next ordinary Enter.
     session([b"alpha", b"\r"])
     assert (root / "command").read_text().splitlines()[0].endswith('/custom-connect')
     before = (root / ".bash_history").read_text()
     (root / "command").unlink()
     session([b"m", b"\x03"])  # Plain typing must not launch the Alt+M profile.
-    session([b"no-such-host", b"\x1bm", b"\x03"])
+    session([b"not a valid address", b"\x1bm", b"\x03"])
     session([b"\x1bOP", b"\x1bm", b"\x1bOP", b"\x03"])  # Help does not launch profiles.
     session([ADD_REMOTE, b"\x1bm", b"\x1b", b"\x03"])  # Neither does the dialog.
     assert not (root / "command").exists()
@@ -501,7 +853,7 @@ profiles:
     assert b"CONNECT" in output and b"required" in output
     assert (root / "command").read_text().splitlines()[1:] == ["other", "literal; $(false)"]
     assert (root / ".bash_history").read_text() == before
-    session([b"alpha", b"\x1bx", b"\t", b"\t", b"shortcut", b"\r"])
+    session([b"alpha", b"\x1bx", b"shortcut", b"\r"])
     assert (root / "command").read_text().splitlines()[1:] == ["alpha", "shortcut"]
 
     # Return mode restores the child tty and then preserves the filter.
@@ -543,6 +895,7 @@ keybindings:
     connect: [F3]
     connect_and_return: [Ctrl+R]
     connection_settings: [F5]
+    refresh: []
     help: [F6]
     new_remote: [F2]
     configure_remote: [F9]
@@ -563,7 +916,7 @@ keybindings:
 """)
     output = session([b"alpha", b"\r", b"\x1bOR"])
     assert (root / "command").read_text().splitlines()[1:] == ["--", "alpha"]
-    assert b"F3" in output and b"Ctrl" in output
+    assert b"F3" in output
     output = session([b"alpha", b"\x12", b"\x12", b"\x11"])
     assert output.count(b"SHUI_HANDOFF") == 2
     # Former help-close keys must no longer close help; plain X may close only there.
@@ -575,7 +928,7 @@ keybindings:
     assert (root / "command").read_text().splitlines()[1:] == ["--", "new-rebound"]
     config_file.write_text(config_file.read_text() + "\nconfiguration_scripts: [{name: Rebound setup, command: 'setup-test %h'}]\n")
     (root / "command").unlink()
-    output = session([b"alpha", b"\x1b[20~", b"\t", b"\t", b"\x1b[C", b"\x1bOR", b"\x11"])
+    output = session([b"alpha", b"\x1b[20~", b"\x1b[C", b"\x1bOR", b"\x11"])
     assert b"completed" in output and b"Apply" in output
     assert (root / "command.setup").read_text().splitlines() == ["alpha"]
     assert not (root / "command").exists()
@@ -645,19 +998,19 @@ printf 'generated public key' > "$private.pub"
     for suffix in ("keygen", "ssh-copy-id"):
         (root / ("command." + suffix)).unlink(missing_ok=True)
     before = (root / ".bash_history").read_text()
-    output = session([ADD_REMOTE, b"\x1b[C", b"\x1b", b"\x03"])
+    output = session([ADD_REMOTE, b"\t", b"\x1b[C", b"\x1b", b"\x03"])
     assert not (root / "command.keygen").exists()
     assert not (root / ".ssh/id_ed25519").exists()
     # Never overwrite a partial default pair, and don't copy anything after failure.
     (root / ".ssh/id_ed25519.pub").write_text("existing public key")
-    session([ADD_REMOTE, b"blocked", b"\x1b[C", b"\r"], expected_status=1)
+    session([ADD_REMOTE, b"blocked", b"\t", b"\x1b[C", b"\r"], expected_status=1)
     assert (root / ".ssh/id_ed25519.pub").read_text() == "existing public key"
     assert not (root / "command.keygen").exists()
     assert not (root / "command.ssh-copy-id").exists()
     assert (root / ".bash_history").read_text() == before
     (root / ".ssh/id_ed25519.pub").unlink()
     (root / "keygen-fail").touch()
-    session([ADD_REMOTE, b"failed", b"\x1b[C", b"\r"], expected_status=1)
+    session([ADD_REMOTE, b"failed", b"\t", b"\x1b[C", b"\r"], expected_status=1)
     assert not (root / "command.ssh-copy-id").exists()
     assert (root / ".bash_history").read_text() == before
     (root / "keygen-fail").unlink()
@@ -665,8 +1018,45 @@ printf 'generated public key' > "$private.pub"
     for steps, host in [(1, "generated"), (2, "generated-dotfiles")]:
         for name in ("id_ed25519", "id_ed25519.pub"):
             (root / ".ssh" / name).unlink(missing_ok=True)
-        session([ADD_REMOTE, (host + ":2202").encode()] + [b"\x1b[C"] * steps + [b"\r"])
+        session([ADD_REMOTE, (host + ":2202").encode(), b"\t"] + [b"\x1b[C"] * steps + [b"\r"])
         assert (root / "command.keygen").read_text().splitlines() == ["-q", "-t", "ed25519", "-f", str(root / ".ssh/id_ed25519")]
         assert (root / "command.ssh-copy-id").read_text().splitlines() == ["-p", "2202", "-i", str(root / ".ssh/id_ed25519.pub"), host]
         assert (root / "command.keygen-tty").read_bytes() == (root / "command.tty").read_bytes()
+    # A real controlling TTY must remain inaccessible to background checks.
+    config_file.write_text("""default: SSH
+profiles:
+  - name: SSH
+    available_command: if (printf probe > /dev/tty) 2>/dev/null; then touch "$HOME/tty-leak"; fi; true
+    command: ssh -- %h
+""")
+    pid, master = pty.fork()
+    if pid == 0:
+        fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
+        # Prove that the app starts with a controlling TTY before it detaches checks.
+        with open('/dev/tty', 'wb', buffering=0):
+            pass
+        os.execve(binary, [binary], child_env)
+    try:
+        output = bytearray()
+        deadline = time.monotonic() + 5
+        while b'SHUI' not in output and time.monotonic() < deadline:
+            if select.select([master], [], [], 0.05)[0]:
+                output.extend(os.read(master, 65536))
+        assert b'SHUI' in output, output
+        assert not (root / 'tty-leak').exists(), 'background check accessed the controlling terminal'
+        os.write(master, b'\x03')
+        while time.monotonic() < deadline:
+            waited, status = os.waitpid(pid, os.WNOHANG)
+            if waited:
+                assert os.waitstatus_to_exitcode(status) == 0
+                pid = None
+                break
+            time.sleep(0.02)
+        assert pid is None, 'TTY probe did not exit'
+    finally:
+        if pid is not None:
+            import signal
+            os.kill(pid, signal.SIGKILL)
+            os.waitpid(pid, 0)
+        os.close(master)
     print("PASS: discovery, editing, per-entry profiles and history restore, SSH/Mosh/MC/script/custom handoff, config validation, adding/configuring remotes and setup recipes, embedded help, terminal restoration")

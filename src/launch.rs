@@ -3,8 +3,9 @@ use serde::Deserialize;
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    io::{self, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 pub fn config_path(home: &Path) -> PathBuf {
@@ -24,8 +25,233 @@ fn config_path_with_base(home: &Path, base: Option<&Path>) -> PathBuf {
 }
 pub const DEFAULT_CONFIG: &str = include_str!("../shui-config.example.yml");
 const HISTORY_TARGET: &str = " # shui-target=";
+const LEGACY_HISTORY_TARGET: &str = " # ssh-menu-target=";
 const SCRIPT_PREFIX: &str = "exec sh -c \"$(printf '%b' ";
 const SCRIPT_SUFFIX: &str = ")\"";
+const BACKGROUND_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_CONFIG_SIZE: usize = 1024 * 1024;
+
+pub fn read_config(path: &Path) -> io::Result<String> {
+    if !fs::metadata(path)?.is_file() {
+        return Err(invalid("configuration must be a regular file"));
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // Avoid blocking if a regular path is replaced with a FIFO after stat.
+        options.custom_flags(nix::fcntl::OFlag::O_NONBLOCK.bits());
+    }
+    let file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(invalid("configuration must be a regular file"));
+    }
+    let mut text = String::new();
+    file.take(MAX_CONFIG_SIZE as u64 + 1)
+        .read_to_string(&mut text)?;
+    if text.len() > MAX_CONFIG_SIZE {
+        return Err(invalid("configuration exceeds 1 MiB"));
+    }
+    Ok(text)
+}
+
+// Checks and generators run while the UI cannot accept input. Bound both their
+// lifetime and memory use, and keep pipe reads nonblocking even if a subprocess
+// inherits a pipe and outlives its shell.
+mod background {
+    use std::{
+        io::{self, Read},
+        process::{Child, Command, Output, Stdio},
+        time::{Duration, Instant},
+    };
+
+    const OUTPUT_LIMIT: usize = 64 * 1024;
+
+    struct Process {
+        child: Child,
+        stopped: bool,
+    }
+
+    impl Process {
+        fn stop(&mut self) {
+            if self.stopped {
+                return;
+            }
+            self.stopped = true;
+            #[cfg(unix)]
+            {
+                use nix::{
+                    sys::signal::{Signal, killpg},
+                    unistd::Pid,
+                };
+                // This child created its own session before exec. Killing
+                // the group also stops ordinary grandchildren such as sleep.
+                if let Ok(pid) = i32::try_from(self.child.id()) {
+                    let _ = killpg(Pid::from_raw(pid), Signal::SIGKILL);
+                }
+            }
+            let _ = self.child.kill();
+        }
+    }
+
+    impl Drop for Process {
+        fn drop(&mut self) {
+            self.stop();
+            let _ = self.child.wait();
+        }
+    }
+
+    fn append(bytes: &[u8], output: &mut Vec<u8>, stream: &str) -> io::Result<()> {
+        if bytes.len() > OUTPUT_LIMIT.saturating_sub(output.len()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{stream} exceeds 64 KiB"),
+            ));
+        }
+        output.extend_from_slice(bytes);
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn nonblocking(pipe: &impl std::os::fd::AsFd) -> io::Result<()> {
+        use nix::fcntl::{FcntlArg, OFlag, fcntl};
+        let flags = OFlag::from_bits_truncate(fcntl(pipe, FcntlArg::F_GETFL)?);
+        fcntl(pipe, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK))?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn drain(pipe: &mut impl Read, output: &mut Vec<u8>, stream: &str) -> io::Result<()> {
+        let mut buffer = [0; 4096];
+        loop {
+            match pipe.read(&mut buffer) {
+                Ok(0) => return Ok(()),
+                Ok(count) => append(&buffer[..count], output, stream)?,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(()),
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn drain(
+        pipe: &mut (impl Read + std::os::windows::io::AsRawHandle),
+        output: &mut Vec<u8>,
+        stream: &str,
+    ) -> io::Result<()> {
+        use windows_sys::Win32::{Foundation::ERROR_BROKEN_PIPE, System::Pipes::PeekNamedPipe};
+        let mut buffer = [0; 4096];
+        loop {
+            let mut available = 0;
+            // SAFETY: the pipe owns this live handle, the byte-count pointer is
+            // valid, and null pointers request no data copy from PeekNamedPipe.
+            let success = unsafe {
+                PeekNamedPipe(
+                    pipe.as_raw_handle(),
+                    std::ptr::null_mut(),
+                    0,
+                    std::ptr::null_mut(),
+                    &mut available,
+                    std::ptr::null_mut(),
+                )
+            };
+            if success == 0 {
+                let error = io::Error::last_os_error();
+                return if error.raw_os_error() == Some(ERROR_BROKEN_PIPE as i32) {
+                    Ok(())
+                } else {
+                    Err(error)
+                };
+            }
+            if available == 0 {
+                return Ok(());
+            }
+            let count = usize::try_from(available)
+                .unwrap_or(usize::MAX)
+                .min(buffer.len());
+            match pipe.read(&mut buffer[..count]) {
+                Ok(0) => return Ok(()),
+                Ok(count) => append(&buffer[..count], output, stream)?,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    pub(super) fn run(command: &str, capture: bool, timeout: Duration) -> io::Result<Output> {
+        let mut command_builder = Command::new("sh");
+        command_builder.arg("-c").arg(command).stdin(Stdio::null());
+        if capture {
+            command_builder
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+        } else {
+            command_builder.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            // SAFETY: setsid is async-signal-safe and this closure performs no
+            // allocation or locking. A fresh session also prevents commands
+            // such as ssh from prompting through the UI's controlling tty.
+            unsafe {
+                command_builder
+                    .pre_exec(|| nix::unistd::setsid().map(|_| ()).map_err(io::Error::from));
+            }
+        }
+        let mut process = Process {
+            child: command_builder.spawn()?,
+            stopped: false,
+        };
+        let mut stdout = process.child.stdout.take();
+        let mut stderr = process.child.stderr.take();
+        #[cfg(unix)]
+        {
+            if let Some(pipe) = &stdout {
+                nonblocking(pipe)?;
+            }
+            if let Some(pipe) = &stderr {
+                nonblocking(pipe)?;
+            }
+        }
+        let mut output = Vec::new();
+        let mut errors = Vec::new();
+        let started = Instant::now();
+        loop {
+            if let Some(pipe) = &mut stdout {
+                drain(pipe, &mut output, "stdout")?;
+            }
+            if let Some(pipe) = &mut stderr {
+                drain(pipe, &mut errors, "stderr")?;
+            }
+            if let Some(status) = process.child.try_wait()? {
+                process.stop();
+                if let Some(pipe) = &mut stdout {
+                    drain(pipe, &mut output, "stdout")?;
+                }
+                if let Some(pipe) = &mut stderr {
+                    drain(pipe, &mut errors, "stderr")?;
+                }
+                return Ok(Output {
+                    status,
+                    stdout: output,
+                    stderr: errors,
+                });
+            }
+            if started.elapsed() >= timeout {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!("timed out after {} seconds", timeout.as_secs_f32()),
+                ));
+            }
+            std::thread::sleep(
+                Duration::from_millis(10).min(timeout.saturating_sub(started.elapsed())),
+            );
+        }
+    }
+}
 
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -69,11 +295,9 @@ impl Input {
         let Some(command) = &self.command else {
             return Ok(self.clone());
         };
-        let output = std::process::Command::new("sh")
-            .arg("-c")
-            .arg(command)
-            .stdin(std::process::Stdio::null())
-            .output()?;
+        let output = background::run(command, true, BACKGROUND_TIMEOUT).map_err(|error| {
+            io::Error::new(error.kind(), format!("{}: generator {error}", self.label()))
+        })?;
         if !output.status.success() {
             let message: String = String::from_utf8_lossy(&output.stderr)
                 .chars()
@@ -86,9 +310,6 @@ impl Input {
                 output.status,
                 message
             )));
-        }
-        if output.stdout.len() > 65536 {
-            return Err(invalid("input generator output exceeds 64 KiB"));
         }
         let generated: GeneratedInput = serde_yaml_ng::from_slice(&output.stdout)
             .map_err(|e| invalid(format!("{}: invalid generated input: {e}", self.label())))?;
@@ -189,14 +410,8 @@ impl Profile {
         let Some(command) = &self.available_command else {
             return true;
         };
-        std::process::Command::new("sh")
-            .arg("-c")
-            .arg(command)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success())
+        background::run(command, false, BACKGROUND_TIMEOUT)
+            .is_ok_and(|output| output.status.success())
     }
     fn expand(
         &self,
@@ -206,9 +421,26 @@ impl Profile {
         short: bool,
         inputs: &HashMap<String, String>,
     ) -> io::Result<String> {
+        if text.len() > 65536 {
+            return Err(invalid("expanded command exceeds 64 KiB"));
+        }
         // Leaf fields (notably scripts) are literal: shell %, $, quotes, etc. are preserved.
         if !short && !text.contains("%{") {
             return Ok(text.into());
+        }
+        let substitutions = text.contains("%{")
+            || (short && ["%h", "%p", "%t"].iter().any(|token| text.contains(token)));
+        // Shell word quoting does not protect data inside a here-document,
+        // nested command/parameter expansion, or legacy backtick substitution. Keep literal
+        // scripts valid, but reject these ambiguous contexts in templates.
+        if substitutions
+            && ["<<", "$(", "$[", "`"]
+                .iter()
+                .any(|token| text.contains(token))
+        {
+            return Err(invalid(
+                "templates with placeholders must not contain here-documents, command substitutions, arithmetic expansions, or backticks; pass values as positional arguments to a literal script",
+            ));
         }
         let mut result = String::new();
         let mut chars = text.chars().peekable();
@@ -218,6 +450,49 @@ impl Profile {
                 result.push(c);
                 if let Some(next) = chars.next() {
                     result.push(next);
+                }
+                continue;
+            }
+            if substitutions && c == '$' && quote != Some('\'') && chars.peek() == Some(&'{') {
+                // Parameter expansions have independent quoting rules. Keep
+                // ordinary expressions such as ${port:+-p "$port"} literal;
+                // interpolating inside them is deliberately unsupported.
+                chars.next();
+                result.push_str("${");
+                let mut depth = 1;
+                let mut inner_quote = None;
+                while depth != 0 {
+                    let part = chars
+                        .next()
+                        .ok_or_else(|| invalid("unclosed shell parameter expansion"))?;
+                    if part == '%'
+                        && (chars.peek() == Some(&'{')
+                            || (short && matches!(chars.peek(), Some('h' | 'p' | 't'))))
+                    {
+                        return Err(invalid(
+                            "placeholders must not appear inside shell parameter expansions; pass values as positional arguments to a literal script",
+                        ));
+                    }
+                    // Fail closed on ambiguous braces/escapes rather than
+                    // trying to implement the shell's entire expansion grammar.
+                    if part == '\\' || (matches!(part, '{' | '}') && inner_quote.is_some()) {
+                        return Err(invalid(
+                            "complex shell parameter expansions must be placed in a literal script field",
+                        ));
+                    }
+                    if matches!(part, '\'' | '"') {
+                        if inner_quote == Some(part) {
+                            inner_quote = None;
+                        } else if inner_quote.is_none() {
+                            inner_quote = Some(part);
+                        }
+                    }
+                    match part {
+                        '{' => depth += 1,
+                        '}' => depth -= 1,
+                        _ => {}
+                    }
+                    result.push(part);
                 }
                 continue;
             }
@@ -292,6 +567,9 @@ impl Profile {
         if short && quote.is_some() {
             return Err(invalid("unclosed quote in command"));
         }
+        if result.len() > 65536 {
+            return Err(invalid("expanded command exceeds 64 KiB"));
+        }
         Ok(result)
     }
     pub fn expanded(&self, target: &Target) -> io::Result<String> {
@@ -347,9 +625,8 @@ impl Profile {
         let i = words.iter().position(|s| s == "exec").map_or(0, |i| i + 1);
         words.get(i).cloned().unwrap_or_default()
     }
-    pub fn command(&self, target: &Target) -> (String, Vec<String>) {
-        let command = self.expanded(target).expect("validated profile");
-        Self::shell_command(command)
+    pub fn command(&self, target: &Target) -> io::Result<(String, Vec<String>)> {
+        self.expanded(target).map(Self::shell_command)
     }
     fn shell_command(command: String) -> (String, Vec<String>) {
         // Keep scripts on one history line without sending the script through terminal stdin.
@@ -367,25 +644,29 @@ impl Profile {
         };
         ("sh".into(), vec!["-c".into(), code])
     }
-    pub fn history_line(&self, target: &Target) -> String {
-        let (program, args) = self.command(target);
+    pub fn history_line(&self, target: &Target) -> io::Result<String> {
+        let (program, args) = self.command(target)?;
         // The target hint lets generic shell commands rediscover the entry without executing them.
         // Profile selection is still inferred from the command; no profile/state ID is stored.
-        format!(
+        Ok(format!(
             "exec {}{HISTORY_TARGET}{}",
             shell_words::join(std::iter::once(program).chain(args)),
             target.label()
-        )
+        ))
     }
 }
 
 pub fn history_target_hint(line: &str) -> Option<&str> {
-    line.rsplit_once(HISTORY_TARGET).map(|(_, target)| target)
+    split_history_hint(line).map(|(_, target)| target)
+}
+
+fn split_history_hint(line: &str) -> Option<(&str, &str)> {
+    line.rsplit_once(HISTORY_TARGET)
+        .or_else(|| line.rsplit_once(LEGACY_HISTORY_TARGET))
 }
 
 pub fn history_words(line: &str) -> Option<Vec<String>> {
-    let mut code = line
-        .rsplit_once(HISTORY_TARGET)
+    let mut code = split_history_hint(line)
         .map_or(line, |(command, _)| command)
         .to_owned();
     for _ in 0..4 {
@@ -426,10 +707,21 @@ pub fn history_words(line: &str) -> Option<Vec<String>> {
     None
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum UsernameDisplay {
+    #[default]
+    Auto,
+    Always,
+    Never,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub default: String,
+    #[serde(default)]
+    pub username_display: UsernameDisplay,
     #[serde(default)]
     pub keybindings: crate::bindings::Bindings,
     pub profiles: Vec<Profile>,
@@ -438,6 +730,9 @@ pub struct Config {
 }
 impl Config {
     pub fn parse(text: &str) -> io::Result<Self> {
+        if text.len() > MAX_CONFIG_SIZE {
+            return Err(invalid("configuration exceeds 1 MiB"));
+        }
         let config: Self = serde_yaml_ng::from_str(text).map_err(|e| invalid(e.to_string()))?;
         config
             .keybindings
@@ -561,7 +856,17 @@ impl Config {
             })
             .unwrap_or(current)
     }
+    #[cfg(test)]
     pub fn history_profiles(&self, targets: &[Target], history: &str, user: &str) -> Vec<usize> {
+        self.history_profiles_with_users(targets, history, user, &HashMap::new())
+    }
+    pub fn history_profiles_with_users(
+        &self,
+        targets: &[Target],
+        history: &str,
+        user: &str,
+        users: &HashMap<String, String>,
+    ) -> Vec<usize> {
         let mut selected = vec![self.default_index(); targets.len()];
         let indices: HashMap<_, _> = targets
             .iter()
@@ -570,18 +875,33 @@ impl Config {
             .collect();
         let mut invocations: HashMap<Vec<String>, Option<(usize, usize)>> = HashMap::new();
         for (i, target) in targets.iter().enumerate() {
-            for (p, profile) in self.profiles.iter().enumerate() {
-                let Some(words) = history_words(&profile.history_line(target)) else {
-                    continue;
-                };
-                invocations
-                    .entry(words)
-                    .and_modify(|v| {
-                        if v.is_some_and(|(host, _)| host != i) {
-                            *v = None;
-                        }
-                    })
-                    .or_insert(Some((i, p)));
+            let mut variants = vec![target.clone()];
+            if !target.host.contains('@')
+                && let Some(login) = users.get(&target.host)
+            {
+                variants.push(Target {
+                    host: format!("{login}@{}", target.host),
+                    port: target.port.clone(),
+                });
+            }
+            for target in &variants {
+                for (p, profile) in self.profiles.iter().enumerate() {
+                    let Some(words) = profile
+                        .history_line(target)
+                        .ok()
+                        .and_then(|line| history_words(&line))
+                    else {
+                        continue;
+                    };
+                    invocations
+                        .entry(words)
+                        .and_modify(|v| {
+                            if v.is_some_and(|(host, _)| host != i) {
+                                *v = None;
+                            }
+                        })
+                        .or_insert(Some((i, p)));
+                }
             }
         }
         for line in history.lines() {
@@ -593,14 +913,18 @@ impl Config {
                 continue;
             }
             if let Some(hint) = history_target_hint(line) {
-                if let Some(i) = indices.get(hint) {
-                    selected[*i] = self.default_index();
+                if let Some(target) = crate::target(hint, user) {
+                    let target = crate::ssh_config::normalize_target(&target, users);
+                    if let Some(i) = indices.get(&target.label()) {
+                        selected[*i] = self.default_index();
+                    }
                 }
                 continue;
             }
             let Some((target, remote, program)) = crate::history_connection(line, user) else {
                 continue;
             };
+            let target = crate::ssh_config::normalize_target(&target, users);
             let Some(i) = indices.get(&target.label()) else {
                 continue;
             };
@@ -642,7 +966,7 @@ impl Config {
                 directory.mode(0o700);
             }
             directory.create(path.parent().expect("config parent directory"))?;
-            let text = match fs::read_to_string(path) {
+            let text = match read_config(path) {
                 Ok(text) => text,
                 Err(e) if e.kind() == io::ErrorKind::NotFound => {
                     let mut options = fs::OpenOptions::new();
@@ -657,9 +981,7 @@ impl Config {
                             file.write_all(DEFAULT_CONFIG.as_bytes())?;
                             DEFAULT_CONFIG.into()
                         }
-                        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-                            fs::read_to_string(path)?
-                        }
+                        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => read_config(path)?,
                         Err(e) => return Err(e),
                     }
                 }
@@ -683,8 +1005,173 @@ mod tests {
         }
     }
     fn run(profile: &Profile, target: &Target) -> std::process::Output {
-        let (program, args) = profile.command(target);
+        let (program, args) = profile.command(target).unwrap();
         Command::new(program).args(args).output().unwrap()
+    }
+    #[test]
+    fn background_commands_capture_both_streams_and_close_stdin() {
+        let output = background::run(
+            "if read -r line; then exit 99; fi; printf output; printf diagnostic >&2; exit 7",
+            true,
+            Duration::from_secs(1),
+        )
+        .unwrap();
+        assert_eq!(output.status.code(), Some(7));
+        assert_eq!(output.stdout, b"output");
+        assert_eq!(output.stderr, b"diagnostic");
+        let output =
+            background::run("printf discarded; exit 0", false, Duration::from_secs(1)).unwrap();
+        assert!(output.status.success());
+        assert!(output.stdout.is_empty());
+    }
+
+    #[test]
+    fn background_commands_have_deadlines_and_bounded_output() {
+        for capture in [false, true] {
+            let started = std::time::Instant::now();
+            let error =
+                background::run("sleep 30", capture, Duration::from_millis(50)).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+            assert!(started.elapsed() < Duration::from_secs(2));
+        }
+        for (command, stream) in [
+            ("while :; do printf '%01024d' 0; done", "stdout"),
+            ("while :; do printf '%01024d' 0; done >&2", "stderr"),
+        ] {
+            let error = background::run(command, true, Duration::from_secs(1)).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("{stream} exceeds 64 KiB"))
+            );
+        }
+        let output = background::run(
+            "i=0; while [ \"$i\" -lt 64 ]; do printf '%01024d' 0; i=$((i + 1)); done",
+            true,
+            Duration::from_secs(1),
+        )
+        .unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout.len(), 65536);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn background_descendants_cannot_keep_capture_open() {
+        let started = std::time::Instant::now();
+        let output = background::run(
+            "sleep 30 & printf '%s' \"$!\"",
+            true,
+            Duration::from_secs(1),
+        )
+        .unwrap();
+        assert!(output.status.success());
+        assert!(started.elapsed() < Duration::from_secs(1));
+        let pid: u32 = String::from_utf8(output.stdout).unwrap().parse().unwrap();
+        #[cfg(target_os = "linux")]
+        {
+            // An orphan can briefly remain as a zombie until init reaps it.
+            // Neither a running descendant nor a retained pipe is acceptable.
+            let deadline = std::time::Instant::now() + Duration::from_secs(1);
+            loop {
+                match fs::read_to_string(format!("/proc/{pid}/stat")) {
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => break,
+                    Ok(stat)
+                        if stat
+                            .rsplit_once(") ")
+                            .is_some_and(|(_, state)| state.starts_with('Z')) =>
+                    {
+                        break;
+                    }
+                    _ if std::time::Instant::now() < deadline => {
+                        std::thread::sleep(Duration::from_millis(10))
+                    }
+                    other => panic!("background descendant {pid} survived cleanup: {other:?}"),
+                }
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        let _ = pid;
+    }
+
+    #[test]
+    fn unsafe_shell_contexts_reject_template_substitutions() {
+        for command in [
+            "cat <<EOF\n%{input:x}\nEOF",
+            "printf '%s' $((%{input:x}))",
+            "printf '%s' $[%{input:x}]",
+            "printf '%s' `printf '%s' %{input:x}`",
+            "printf '%s\\n' \"$(printf '%s' \"%{input:x}\")\"",
+            "printf '%s\\n' \"${SHUI_TEST_UNSET:-\"%{input:x}\"}\"",
+            "printf '%s\\n' ${SHUI_TEST_UNSET:-%{input:x}}",
+        ] {
+            let profile = Profile {
+                name: "Test".into(),
+                key: None,
+                available_command: None,
+                command: command.into(),
+                prepare_command: None,
+                inputs: vec![],
+                fields: HashMap::new(),
+            };
+            let values = HashMap::from([("x".into(), "$(printf INJECTED)".into())]);
+            assert!(
+                profile.command_with_inputs(&target(None), &values).is_err(),
+                "{command}"
+            );
+        }
+        let config = Config::parse("default: Safe\nprofiles:\n  - name: Safe\n    command: sh -c %{script} -- %{input:x}\n    script: |\n      cat <<EOF\n      $1\n      EOF\n    inputs: [{id: x, type: promptString, default: '$(printf INJECTED)'}]\n").unwrap();
+        assert_eq!(
+            run(&config.profiles[0], &target(None)).stdout,
+            b"$(printf INJECTED)\n"
+        );
+    }
+
+    #[test]
+    fn oversized_runtime_expansion_returns_error_instead_of_panicking() {
+        let config =
+            Config::parse("default: SSH\nprofiles: [{name: SSH, command: 'ssh %h'}]").unwrap();
+        let oversized = Target {
+            host: "h".repeat(65537),
+            port: None,
+        };
+        assert!(config.profiles[0].command(&oversized).is_err());
+        assert!(config.profiles[0].history_line(&oversized).is_err());
+        assert_eq!(config.history_profiles(&[oversized], "", "me"), [0]);
+    }
+
+    #[test]
+    fn old_project_history_hints_remain_readable() {
+        let config = Config::parse(DEFAULT_CONFIG).unwrap();
+        let target = target(Some("2222"));
+        let line = config.profiles[2].history_line(&target).unwrap();
+        let old_line = line.replace(HISTORY_TARGET, LEGACY_HISTORY_TARGET);
+        assert_eq!(history_target_hint(&old_line), Some("alice@host:2222"));
+        assert_eq!(history_words(&line), history_words(&old_line));
+        assert_eq!(config.history_profiles(&[target], &old_line, "me"), [2]);
+    }
+
+    #[test]
+    fn username_display_defaults_and_validates_modes() {
+        let yaml = "default: SSH\nprofiles: [{name: SSH, command: 'ssh %h'}]\n";
+        assert_eq!(
+            Config::parse(yaml).unwrap().username_display,
+            UsernameDisplay::Auto
+        );
+        for (name, expected) in [
+            ("auto", UsernameDisplay::Auto),
+            ("always", UsernameDisplay::Always),
+            ("never", UsernameDisplay::Never),
+        ] {
+            assert_eq!(
+                Config::parse(&format!("{yaml}username_display: {name}\n"))
+                    .unwrap()
+                    .username_display,
+                expected
+            );
+        }
+        assert!(Config::parse(&format!("{yaml}username_display: invalid\n")).is_err());
     }
     #[test]
     fn minimal_profiles_and_literal_shell_substitution() {
@@ -706,7 +1193,7 @@ mod tests {
             String::from_utf8(out.stdout).unwrap(),
             "spaces ' quotes\n${literal%% *}\n"
         );
-        let line = config.profiles[0].history_line(&target(None));
+        let line = config.profiles[0].history_line(&target(None)).unwrap();
         assert!(!line.contains('\n'));
         assert_eq!(config.history_profiles(&[target(None)], &line, "me"), [0]);
     }
@@ -727,7 +1214,7 @@ mod tests {
         let config = Config::parse(DEFAULT_CONFIG).unwrap();
         for (index, profile) in config.profiles.iter().enumerate() {
             let target = target(Some("2222"));
-            let line = profile.history_line(&target);
+            let line = profile.history_line(&target).unwrap();
             assert!(!line.contains('\n'));
             assert_eq!(
                 config.history_profiles(std::slice::from_ref(&target), &line, "me"),
@@ -751,7 +1238,7 @@ mod tests {
             ),
             [1, 3]
         );
-        let line = config.profiles[2].history_line(&targets[1]);
+        let line = config.profiles[2].history_line(&targets[1]).unwrap();
         assert_eq!(config.history_profiles(&targets, &line, "me"), [0, 2]);
         let line = format!("{line}\nexec sh -c 'unknown' # shui-target=alice@host:2222");
         assert_eq!(config.history_profiles(&targets, &line, "me"), [0, 0]);
@@ -991,5 +1478,51 @@ command: printf '%s' '{"options":["one","two"],"default":"two","description":"Ge
         assert_eq!(Config::load_path(&path).unwrap().default, "Custom");
         assert_eq!(fs::read_to_string(&path).unwrap(), custom);
         fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn configuration_reads_are_bounded_and_require_regular_files() {
+        let directory =
+            std::env::temp_dir().join(format!("shui-config-safety-{}", std::process::id()));
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("config.yml");
+        let oversized = "#".repeat(MAX_CONFIG_SIZE + 1);
+        fs::write(&path, &oversized).unwrap();
+        assert!(
+            read_config(&path)
+                .unwrap_err()
+                .to_string()
+                .contains("exceeds 1 MiB")
+        );
+        assert!(
+            Config::parse(&oversized)
+                .unwrap_err()
+                .to_string()
+                .contains("exceeds 1 MiB")
+        );
+        assert!(
+            read_config(&directory)
+                .unwrap_err()
+                .to_string()
+                .contains("regular file")
+        );
+        #[cfg(unix)]
+        {
+            let fifo = directory.join("fifo");
+            nix::unistd::mkfifo(
+                &fifo,
+                nix::sys::stat::Mode::S_IRUSR | nix::sys::stat::Mode::S_IWUSR,
+            )
+            .unwrap();
+            let started = std::time::Instant::now();
+            assert!(
+                read_config(&fifo)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("regular file")
+            );
+            assert!(started.elapsed() < Duration::from_secs(1));
+        }
+        fs::remove_dir_all(directory).unwrap();
     }
 }

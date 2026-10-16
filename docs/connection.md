@@ -6,7 +6,7 @@ Press **Ctrl+Enter** on a host to change its remote (`user@host:port`), profile,
 
 Your terminal must send a distinct Ctrl+Enter sequence (such as CSI `13;5u`). Terminals that send ordinary Enter for both keys cannot distinguish them.
 
-Profiles can declare `inputs` just like configuration scripts. Use `%{input:id}` in a command or named field; values are shell-escaped. Profiles with inputs also open this dialog on Enter or their shortcut, so required values cannot be bypassed. Input generators run when the profile is selected in the dialog. Values are cached only while that dialog is open.
+Profiles can declare `inputs` just like configuration scripts. Use `%{input:id}` in a command or named field; values are shell-escaped. Profiles with inputs also open this dialog on Enter or their shortcut, focused on the first input. Required values cannot be bypassed. Input generators run when the profile is selected in the dialog. Values are cached only while that dialog is open. Switching profiles keeps the dialog in place. When setup fixes the remote address, field navigation skips that locked row.
 
 Configuration examples are documented in the shipped config comments; use F9 from the host list to edit your copy.
 

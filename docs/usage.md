@@ -5,6 +5,8 @@ Your existing hosts appear automatically in three aligned, borderless columns: l
 1. Type a hostname fragment, SSH config detail, comment, or fuzzy abbreviation and select a matching row with **↑ / ↓**.
 2. Use **← / →** to choose how that host opens, then press **Enter**.
 
+You can start with a filter directly: `shui production` or `shui "deploy database"`. With no saved hosts, the menu shows how to add one; an empty search result suggests clearing the filter or adding a remote.
+
 Changing a profile affects only the selected host. Moving away or changing the filter preserves the choice while the menu is open.
 
 | Key | Action |
@@ -24,6 +26,9 @@ Changing a profile affects only the selected host. Moving away or changing the f
 | Shift+F4 | Add a new remote |
 | F9 | Edit configuration with format help and validation |
 | F8 | Toggle plain SSH / Mosh for the selected host |
+| F5 | Refresh hosts and SSH config hints, preserving the filter and profile choices |
+| Home / End | Select the first / last matching host |
+| Ctrl-U | Clear the search |
 | Backspace / Delete | Remove the last character |
 | Ctrl-Backspace / Ctrl-Delete | Remove the last word |
 | Esc / Ctrl-C | Quit |
@@ -32,13 +37,19 @@ All keys listed here are defaults and can be changed in `keybindings`; see the K
 
 Editing happens at the end of the text. Ctrl-Backspace also accepts the legacy Ctrl-H encoding.
 
+If a search has no matches and is a valid address, **Enter** connects directly; the empty-result message shows the target and profile before you launch. Profile arrows, F8 and profile shortcuts also work for that address. **Alt+Enter** returns afterward and keeps the new host in the list. Multiword searches are never treated as addresses.
+
 ## Where hosts and remembered profiles come from
 
-Shui reads `~/.ssh/config`, `~/.bash_history`, and `~/.config/mc/hotlist`. Duplicate targets are merged; recently encountered connections appear first. The SSH config reader handles explicit `Host` and `User` sections and skips wildcard aliases. It does not expand `Include` or `Match`; SSH itself resolves connection settings at launch.
+Shui reads `~/.ssh/config`, `~/.bash_history`, and `~/.config/mc/hotlist`. Duplicate targets are merged; recently encountered connections appear first. SSH config entries appear as their actual aliases. Shui leaves the username and other connection settings to OpenSSH; it does not invent root connections. Explicit usernames and ports from history or bookmarks remain separate targets. The host list hides usernames unless multiple accounts need distinguishing; `username_display: always` or `never` overrides this. Commands omit a username matching a proven static SSH `User` setting. Different or uncertain accounts stay explicit.
+
+The SSH config reader accepts quoted values, `Keyword=value` syntax and multiple aliases. It expands `Include` files, including wildcard paths in lexical order, absolute paths and `~/` paths. Relative includes resolve from `~/.ssh`, including nested files. Wildcard and negated `Host` patterns supply context but do not create targets. Included files respect their surrounding `Host` or `Match` scope. Shui does not execute `Match exec` or other SSH directives during discovery.
+
+Discovery is a bounded, best-effort index: unreadable files, cycles, non-file paths and includes beyond 16 levels, 256 files or 4 MiB total are skipped. The index also caps aliases at 4096 and limits stored hint text. Dynamic Include paths containing SSH tokens or environment variables, other users' `~name` paths, and full `Match` evaluation are left to OpenSSH. The original alias is always passed to the selected connection tool, so OpenSSH resolves the actual settings at launch.
 
 On startup, history entries are matched against configured profiles. Host, username, and explicit port distinguish entries. Unknown or ambiguous commands fall back to the default profile. History is parsed as data, never executed.
 
-Launching appends its command to an existing `.bash_history`; adding a remote creates that file if needed. Switching profiles and quitting writes nothing. Generated commands include a target comment so custom commands can be rediscovered. Run `history -a` in another Bash session to make its recent commands visible.
+Launching appends its command to an existing `.bash_history`; adding a remote creates that file if needed. History write failures are reported without preventing the connection, and a missing final newline is repaired before appending. Switching profiles and quitting writes nothing. Generated commands include a target comment so custom commands can be rediscovered. Run `history -a` in another Bash session, then press **F5** to refresh hosts without restarting Shui. History reads use the most recent 8 MiB and skip a partial leading line. Imports recover targets and matching profiles, not arbitrary command-line overrides such as `-F`, `-i` or `-J`; put reusable connection settings in SSH config.
 
 ## How the Zellij profile works
 
@@ -66,11 +77,11 @@ Search includes the complete text used by each host's configuration hint, even w
 
 ## Host configuration hint
 
-When a selected SSH config entry has an explicit `User`, its complete source block appears in a borderless hint at the bottom right: the `Host` line, settings, and comments. A comment group immediately before `Host` belongs to that entry, even when indented; comments inside the block and inline comments remain in place. Multiple matching blocks are shown in file order. Hints match the configured username and alias, including entries rediscovered from history; they are not copied to synthetic root entries. This is the source configuration, not SSH’s resolved settings: wildcards, `Include`, and `Match` expansion are not supported. The popup grows with the block up to the available screen height; very long blocks can still be clipped, and small terminals hide the hint to leave room for hosts.
+The selected SSH config alias shows its source configuration in a borderless hint at the bottom right, including aliases without an explicit `User`: the `Host` line, settings, and comments. A comment group immediately before `Host` belongs to that entry, even when indented; comments inside the block and inline comments remain in place. Matching static blocks and included settings are shown in source order. Hints also match explicit-user history entries when the first applicable `User` can be determined without evaluating a dynamic `Match`. This is source configuration, not a report of SSH’s resolved settings; dynamic `Match` blocks are omitted. Hints use spare space beside or below host text and disappear when they would cover it. Very long blocks can be clipped, and small terminals hide the hint to leave room for hosts.
 
 ## After disconnecting
 
-Use **Alt+Enter** (`connect_and_return`) to reopen the menu after the launched command exits, including nonzero exit status. Your filter, row and per-host profile choices remain. **Enter** (`connect`) hands the terminal directly to the connection. Both actions are available in dialogs as well as the host list and can be rebound independently.
+Use **Alt+Enter** (`connect_and_return`) to reopen the menu after the launched command exits, including nonzero exit status. Your filter, row and per-host profile choices remain, newly added targets remain available, and unsuccessful connections show their exit status. Results replace the footer until the next key, keeping the host list in place. **Enter** (`connect`) hands the terminal directly to the connection. Both actions are available in dialogs as well as the host list and can be rebound independently.
 
 ## Adjusting and editing
 

@@ -1,7 +1,7 @@
 use crate::*;
 use ratatui::layout::Rect;
 
-fn parse_remote(text: &str) -> Option<Target> {
+pub(super) fn parse_remote(text: &str) -> Option<Target> {
     let text = text.trim();
     if text.starts_with('@') {
         return None;
@@ -33,8 +33,9 @@ pub(super) fn dialog(
     terminal: &mut DefaultTerminal,
     config: &launch::Config,
     selected: Option<&Target>,
+    draft: Option<&Target>,
 ) -> io::Result<Option<Selection>> {
-    form(terminal, config, None, false, selected)
+    form(terminal, config, None, false, selected, draft)
 }
 
 pub(super) fn connect(
@@ -50,7 +51,273 @@ pub(super) fn connect(
         Some((target, profile)),
         fixed_remote,
         None,
+        None,
     )
+}
+
+fn next_focus(current: usize, count: usize, remote: usize, fixed: bool, forward: bool) -> usize {
+    let step = if forward { 1 } else { count - 1 };
+    let next = (current + step) % count;
+    if fixed && next == remote {
+        (next + step) % count
+    } else {
+        next
+    }
+}
+
+fn initial_focus(connecting: bool, configuring: bool, fixed: bool, has_inputs: bool) -> usize {
+    let remote = usize::from(!connecting);
+    if connecting && has_inputs {
+        remote + 2
+    } else if configuring || fixed {
+        remote + 1
+    } else {
+        remote
+    }
+}
+
+fn field_text(label: &str, value: &str, focused: bool, width: usize) -> String {
+    let prefix = format!("{label}  ");
+    let text = format!("{prefix}{value}");
+    if !focused || Line::from(text.as_str()).width() <= width {
+        return text;
+    }
+    let prefix_width = Line::from(prefix.as_str()).width();
+    if prefix_width + 4 <= width {
+        format!("{prefix}{}", text_tail(value, width - prefix_width))
+    } else {
+        text_tail(&text, width)
+    }
+}
+
+struct FormView<'a> {
+    connecting: bool,
+    configuring: bool,
+    fixed_remote: bool,
+    remote: &'a str,
+    script: Option<&'a launch::Profile>,
+    values: Option<&'a HashMap<String, String>>,
+    focus: usize,
+    generation_error: &'a str,
+    error: &'a str,
+}
+
+struct Dialog {
+    required_height: usize,
+    selector_choices: usize,
+    list_state: ListState,
+}
+
+impl Dialog {
+    fn new(scripts: &[launch::Profile], connecting: bool) -> Self {
+        Self {
+            // Reserve room for every available recipe before opening the form.
+            // Switching recipes changes its contents, never its screen position.
+            required_height: scripts
+                .iter()
+                .map(|script| script.inputs.len())
+                .max()
+                .unwrap_or(0)
+                .saturating_add(8 + usize::from(!connecting)),
+            selector_choices: scripts.len() + usize::from(!connecting),
+            list_state: ListState::default(),
+        }
+    }
+
+    fn draw(
+        &mut self,
+        frame: &mut ratatui::Frame,
+        config: &launch::Config,
+        bar_state: &bar::State,
+        view: FormView<'_>,
+    ) {
+        let FormView {
+            connecting,
+            configuring,
+            fixed_remote,
+            remote,
+            script,
+            values,
+            focus,
+            generation_error,
+            error,
+        } = view;
+        let inputs = script.map_or(&[][..], |script| script.inputs.as_slice());
+        let area = frame.area();
+        frame.render_widget(
+            Block::default().style(Style::default().fg(theme::TEXT).bg(theme::BASE)),
+            area,
+        );
+        let width = area.width.min(90);
+        let height = self.required_height.min(usize::from(area.height)) as u16;
+        let rect = Rect::new(
+            area.x + (area.width - width) / 2,
+            area.y + (area.height - height) / 2,
+            width,
+            height,
+        );
+        let areas = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(if height >= 8 { 2 } else { 1 }),
+            Constraint::Length(1),
+        ])
+        .split(rect);
+        frame.render_widget(
+            Paragraph::new(if connecting {
+                " CONNECT "
+            } else {
+                " REMOTE SETUP "
+            })
+            .style(
+                Style::default()
+                    .fg(theme::BASE)
+                    .bg(theme::LAVENDER)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            areas[0],
+        );
+        let mut fields = Vec::new();
+        if !connecting {
+            fields.push((
+                "Action".to_owned(),
+                format!(
+                    "← {} →",
+                    if configuring {
+                        "Configure host"
+                    } else {
+                        "Add new"
+                    }
+                ),
+            ));
+        }
+        fields.extend([
+            ("Remote".to_owned(), remote.to_owned()),
+            (
+                if connecting { "Profile" } else { "Setup" }.to_owned(),
+                if self.selector_choices > 1 {
+                    format!("← {} →", script.map_or("None", |s| s.name.as_str()))
+                } else {
+                    script.map_or("None", |s| s.name.as_str()).to_owned()
+                },
+            ),
+        ]);
+        for input in inputs {
+            let value = values
+                .and_then(|values| values.get(&input.id))
+                .map_or("", String::as_str);
+            let label = format!(
+                "{}{}",
+                input.label(),
+                if input.required { " *" } else { "" }
+            );
+            fields.push((
+                label,
+                if input.kind == launch::InputType::PickString && input.options.len() > 1 {
+                    format!("← {value} →")
+                } else {
+                    value.to_owned()
+                },
+            ));
+        }
+        if fields.len() <= usize::from(areas[1].height) {
+            *self.list_state.offset_mut() = 0;
+        }
+        // A stateful list scrolls the focused field into view on short terminals.
+        let items: Vec<_> = fields
+            .into_iter()
+            .enumerate()
+            .map(|(i, (label, value))| {
+                ListItem::new(field_text(
+                    &label,
+                    &value,
+                    i == focus,
+                    usize::from(areas[1].width.saturating_sub(2)),
+                ))
+            })
+            .collect();
+        let list = List::new(items)
+            .style(Style::default().bg(theme::SURFACE))
+            .highlight_symbol("› ")
+            .highlight_style(Style::default().bg(theme::SELECTION));
+        self.list_state.select(Some(focus));
+        frame.render_stateful_widget(list, areas[1], &mut self.list_state);
+        frame.render_widget(
+            Paragraph::new(if !generation_error.is_empty() {
+                generation_error
+            } else if error.is_empty() {
+                if configuring {
+                    " Runs setup only · returns to menu · * required"
+                } else if fixed_remote {
+                    " Remote fixed for setup · * required"
+                } else {
+                    " user@host[:port] · * required"
+                }
+            } else {
+                error
+            })
+            .wrap(ratatui::widgets::Wrap { trim: false })
+            .style(Style::default().fg(
+                if error.is_empty() && generation_error.is_empty() {
+                    theme::SUBTEXT
+                } else {
+                    theme::PEACH
+                },
+            )),
+            areas[2],
+        );
+        let keys = &config.keybindings;
+        let remote_field = usize::from(!connecting);
+        let input = focus
+            .checked_sub(remote_field + 2)
+            .and_then(|index| inputs.get(index));
+        let can_choose = (!connecting && focus == 0)
+            || (focus == remote_field + 1 && self.selector_choices > 1)
+            || input.is_some_and(|input| {
+                input.kind == launch::InputType::PickString && input.options.len() > 1
+            });
+        let can_edit = (focus == remote_field && !fixed_remote)
+            || input.is_some_and(|input| input.kind == launch::InputType::PromptString);
+        let mut items = vec![
+            bar::Item::pair(keys, "dialog", "previous_field", "next_field", "Field", 3),
+            bar::Item::pair(keys, "dialog", "left", "right", "Choice", 4).available(can_choose),
+            bar::Item::action(
+                keys,
+                "dialog",
+                "connect",
+                if connecting {
+                    "Open"
+                } else if configuring {
+                    "Apply"
+                } else {
+                    "Add+open"
+                },
+                2,
+            ),
+            bar::Item::action(
+                keys,
+                "dialog",
+                "connect_and_return",
+                if configuring { "Apply" } else { "Return" },
+                5,
+            ),
+            bar::Item::action(keys, "dialog", "help", "Help", 0),
+            bar::Item::action(keys, "dialog", "cancel", "Cancel", 1),
+        ];
+        // Pair hints describe both directions, but modified menus enumerate the
+        // underlying actions independently. Suppress unavailable actions there too.
+        for (actions, available) in [
+            (&["left", "right"][..], can_choose),
+            (&["erase_character", "erase_word"][..], can_edit),
+        ] {
+            if !available {
+                items.extend(actions.iter().map(|action| {
+                    bar::Item::action(keys, "dialog", action, "", 10).available(false)
+                }));
+            }
+        }
+        bar_state.draw(frame, areas[3], config, "dialog", items);
+    }
 }
 
 fn form(
@@ -59,23 +326,19 @@ fn form(
     connection: Option<(&Target, usize)>,
     fixed_remote: bool,
     selected: Option<&Target>,
+    draft: Option<&Target>,
 ) -> io::Result<Option<Selection>> {
     let connecting = connection.is_some();
     let mut configuring = selected.is_some();
     let mut remote = connection
         .map(|(t, _)| t.label())
-        .or_else(|| selected.map(Target::label))
+        .or_else(|| selected.or(draft).map(Target::label))
         .unwrap_or_default();
     let mut alternate_remote = String::new();
     let remote_field = usize::from(!connecting);
     let recipe_field = remote_field + 1;
     let input_start = recipe_field + 1;
     let mut setup = connection.map_or(0, |(_, p)| p + 1);
-    let mut focus = if connecting || configuring {
-        0
-    } else {
-        remote_field
-    };
     let available: Vec<_> = if connecting {
         (0..config.profiles.len()).collect()
     } else {
@@ -97,6 +360,13 @@ fn form(
             }
         })
         .collect();
+    let mut focus = initial_focus(
+        connecting,
+        configuring,
+        fixed_remote,
+        connecting && !scripts[setup - 1].inputs.is_empty(),
+    );
+    let mut dialog = Dialog::new(&scripts, connecting);
     let mut values: Vec<_> = scripts.iter().map(|p| p.input_defaults()).collect();
     let mut loaded = vec![false; scripts.len()];
     let mut generation_error = String::new();
@@ -126,156 +396,21 @@ fn form(
         let field_count = inputs.len() + input_start;
         focus = focus.min(field_count - 1);
         terminal.draw(|frame| {
-            let area = frame.area();
-            frame.render_widget(
-                Block::default().style(Style::default().fg(theme::TEXT).bg(theme::BASE)),
-                area,
-            );
-            let width = area.width.min(90);
-            let height = (inputs.len().saturating_add(8 + remote_field))
-                .min(usize::from(area.height)) as u16;
-            let rect = Rect::new(
-                area.x + (area.width - width) / 2,
-                area.y + (area.height - height) / 2,
-                width,
-                height,
-            );
-            let areas = Layout::vertical([
-                Constraint::Length(1),
-                Constraint::Min(0),
-                Constraint::Length(1),
-                Constraint::Length(1),
-            ])
-            .split(rect);
-            frame.render_widget(
-                Paragraph::new(if connecting {
-                    " CONNECT "
-                } else {
-                    " REMOTE SETUP "
-                })
-                .style(
-                    Style::default()
-                        .fg(theme::BASE)
-                        .bg(theme::LAVENDER)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                areas[0],
-            );
-            let mut fields = Vec::new();
-            if !connecting {
-                fields.push(format!(
-                    "Action  ← {} →",
-                    if configuring {
-                        "Configure host"
-                    } else {
-                        "Add new"
-                    }
-                ));
-            }
-            fields.extend([
-                format!("Remote  {remote}"),
-                format!(
-                    "{}   ← {} →",
-                    if connecting { "Profile" } else { "Setup" },
-                    script.map_or("None", |s| s.name.as_str())
-                ),
-            ]);
-            for input in inputs {
-                let value = &values[setup - 1][&input.id];
-                let label = format!(
-                    "{}{}",
-                    input.label(),
-                    if input.required { " *" } else { "" }
-                );
-                fields.push(if input.kind == launch::InputType::PickString {
-                    format!("{label}  ← {value} →")
-                } else {
-                    format!("{label}  {value}")
-                });
-            }
-            // A stateful list scrolls the focused field into view on short terminals.
-            let items: Vec<_> = fields
-                .into_iter()
-                .enumerate()
-                .map(|(i, field)| {
-                    let text = if i == focus {
-                        let width = usize::from(areas[1].width.saturating_sub(3));
-                        let chars: Vec<_> = field.chars().collect();
-                        if chars.len() > width {
-                            chars[chars.len() - width..].iter().collect()
-                        } else {
-                            field
-                        }
-                    } else {
-                        field
-                    };
-                    ListItem::new(text)
-                })
-                .collect();
-            let list = List::new(items)
-                .style(Style::default().bg(theme::SURFACE))
-                .highlight_symbol("› ")
-                .highlight_style(Style::default().bg(theme::SELECTION));
-            frame.render_stateful_widget(
-                list,
-                areas[1],
-                &mut ListState::default().with_selected(Some(focus)),
-            );
-            frame.render_widget(
-                Paragraph::new(if !generation_error.is_empty() {
-                    &generation_error
-                } else if error.is_empty() {
-                    if configuring {
-                        " Runs setup only · returns to menu · * required"
-                    } else if fixed_remote {
-                        " Remote fixed for setup · * required"
-                    } else {
-                        " user@host[:port] · * required"
-                    }
-                } else {
-                    &error
-                })
-                .style(Style::default().fg(
-                    if error.is_empty() && generation_error.is_empty() {
-                        theme::SUBTEXT
-                    } else {
-                        theme::PEACH
-                    },
-                )),
-                areas[2],
-            );
-            let keys = &config.keybindings;
-            bar_state.draw(
+            dialog.draw(
                 frame,
-                areas[3],
                 config,
-                "dialog",
-                vec![
-                    bar::Item::pair(keys, "dialog", "previous_field", "next_field", "Field", 3),
-                    bar::Item::pair(keys, "dialog", "left", "right", "Choice", 4),
-                    bar::Item::action(
-                        keys,
-                        "dialog",
-                        "connect",
-                        if connecting {
-                            "Open"
-                        } else if configuring {
-                            "Apply"
-                        } else {
-                            "Add+open"
-                        },
-                        2,
-                    ),
-                    bar::Item::action(
-                        keys,
-                        "dialog",
-                        "connect_and_return",
-                        if configuring { "Apply" } else { "Return" },
-                        5,
-                    ),
-                    bar::Item::action(keys, "dialog", "help", "Help", 0),
-                    bar::Item::action(keys, "dialog", "cancel", "Cancel", 1),
-                ],
+                &bar_state,
+                FormView {
+                    connecting,
+                    configuring,
+                    fixed_remote,
+                    remote: &remote,
+                    script,
+                    values: setup.checked_sub(1).map(|index| &values[index]),
+                    focus,
+                    generation_error: &generation_error,
+                    error: &error,
+                },
             );
         })?;
         let event = event::read()?;
@@ -330,8 +465,12 @@ fn form(
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return Ok(None);
             }
-            KeyCode::Tab | KeyCode::Down => focus = (focus + 1) % field_count,
-            KeyCode::BackTab | KeyCode::Up => focus = (focus + field_count - 1) % field_count,
+            KeyCode::Tab | KeyCode::Down => {
+                focus = next_focus(focus, field_count, remote_field, fixed_remote, true);
+            }
+            KeyCode::BackTab | KeyCode::Up => {
+                focus = next_focus(focus, field_count, remote_field, fixed_remote, false);
+            }
             KeyCode::Left | KeyCode::Right => {
                 let next = |current: usize, len: usize| {
                     if key.code == KeyCode::Right {
@@ -343,14 +482,14 @@ fn form(
                 if !connecting && focus == 0 {
                     configuring = !configuring;
                     std::mem::swap(&mut remote, &mut alternate_remote);
-                } else if focus <= recipe_field {
+                } else if focus == recipe_field {
                     setup = if connecting {
                         next(setup - 1, scripts.len()) + 1
                     } else {
                         next(setup, scripts.len() + 1)
                     };
                     generation_error.clear();
-                } else {
+                } else if focus >= input_start {
                     let input = &inputs[focus - input_start];
                     if input.kind == launch::InputType::PickString && !input.options.is_empty() {
                         let value = values[setup - 1].get_mut(&input.id).unwrap();
@@ -373,6 +512,15 @@ fn form(
                     error = " Enter a valid host and optional port (1–65535)".into();
                     focus = remote_field;
                     continue;
+                };
+                let target = if let Some(home) = env::var_os("HOME") {
+                    normalized_target(
+                        &target,
+                        Path::new(&home),
+                        &env::var("USER").unwrap_or_default(),
+                    )
+                } else {
+                    target
                 };
                 let selected_values = setup
                     .checked_sub(1)
@@ -458,6 +606,352 @@ fn form(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::{Terminal, backend::TestBackend};
+
+    fn sample_config() -> launch::Config {
+        let inputs = (0..7)
+            .map(|index| format!("      - {{id: field{index}, type: promptString, description: Field{index}, default: value{index}}}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        launch::Config::parse(&format!(
+            "default: Zero\nprofiles:\n  - {{name: Zero, command: 'ssh %h'}}\n  - name: One\n    command: ssh %h\n    inputs:\n      - {{id: single, type: promptString, default: example}}\n  - name: Many\n    command: ssh %h\n    inputs:\n{inputs}\n"
+        )).unwrap()
+    }
+
+    fn render(
+        terminal: &mut Terminal<TestBackend>,
+        dialog: &mut Dialog,
+        config: &launch::Config,
+        view: FormView<'_>,
+    ) -> Vec<String> {
+        render_with_bar(terminal, dialog, config, &bar::State::default(), view)
+    }
+
+    fn render_with_bar(
+        terminal: &mut Terminal<TestBackend>,
+        dialog: &mut Dialog,
+        config: &launch::Config,
+        bar_state: &bar::State,
+        view: FormView<'_>,
+    ) -> Vec<String> {
+        terminal
+            .draw(|frame| dialog.draw(frame, config, bar_state, view))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        buffer
+            .content
+            .chunks(usize::from(buffer.area.width))
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect())
+            .collect()
+    }
+
+    fn position(lines: &[String], text: &str) -> (usize, usize) {
+        lines
+            .iter()
+            .enumerate()
+            .find_map(|(y, line)| line.find(text).map(|x| (Line::from(&line[..x]).width(), y)))
+            .unwrap_or_else(|| panic!("missing {text:?}: {lines:?}"))
+    }
+
+    #[test]
+    fn rendered_choices_and_modified_edit_hints_follow_the_focused_field() {
+        let config = launch::Config::parse(
+            "default: Only\nprofiles:\n  - name: Only\n    command: ssh %h\n    inputs:\n      - {id: text, type: promptString, default: text}\n      - {id: single, type: pickString, options: [one]}\n      - {id: multiple, type: pickString, options: [one, two]}\nkeybindings:\n  dialog:\n    left: [Left, Ctrl+Left]\n    right: [Right, Ctrl+Right]\n    erase_character: [Backspace, Delete, Alt+Backspace]\n",
+        )
+        .unwrap();
+        let script = &config.profiles[0];
+        let values = script.input_defaults();
+        let mut terminal = Terminal::new(TestBackend::new(120, 24)).unwrap();
+        let mut dialog = Dialog::new(&config.profiles, true);
+        for (focus, fixed_remote, can_choose, can_edit) in [
+            (0, false, false, true),
+            (0, true, false, false),
+            (1, false, false, false),
+            (2, false, false, true),
+            (3, false, false, false),
+            (4, false, true, false),
+        ] {
+            for modifier in [KeyModifiers::NONE, KeyModifiers::CONTROL, KeyModifiers::ALT] {
+                let mut bar_state = bar::State::default();
+                if !modifier.is_empty() {
+                    let code = if modifier == KeyModifiers::CONTROL {
+                        crossterm::event::ModifierKeyCode::LeftControl
+                    } else {
+                        crossterm::event::ModifierKeyCode::LeftAlt
+                    };
+                    bar_state.event(
+                        crossterm::event::KeyEvent::new(KeyCode::Modifier(code), modifier),
+                        &config.keybindings,
+                        "dialog",
+                    );
+                }
+                let lines = render_with_bar(
+                    &mut terminal,
+                    &mut dialog,
+                    &config,
+                    &bar_state,
+                    FormView {
+                        connecting: true,
+                        configuring: false,
+                        fixed_remote,
+                        remote: "example.org",
+                        script: Some(script),
+                        values: Some(&values),
+                        focus,
+                        generation_error: "",
+                        error: "",
+                    },
+                );
+                for label in ["Profile", "single"] {
+                    let row = &lines[position(&lines, label).1];
+                    assert!(!row.contains(['←', '→']), "{row}");
+                }
+                assert!(lines[position(&lines, "multiple").1].contains("← one →"));
+                let footer = lines
+                    .iter()
+                    .rev()
+                    .find(|line| !line.trim().is_empty())
+                    .unwrap();
+                match modifier {
+                    KeyModifiers::NONE => {
+                        assert_eq!(footer.contains("Choice"), can_choose, "{footer}")
+                    }
+                    KeyModifiers::CONTROL => {
+                        assert_eq!(footer.contains("Previous"), can_choose, "{footer}");
+                        assert_eq!(footer.contains("Next"), can_choose, "{footer}");
+                        assert_eq!(footer.contains("Word"), can_edit, "{footer}");
+                    }
+                    KeyModifiers::ALT => assert_eq!(footer.contains("Erase"), can_edit, "{footer}"),
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        // A setup form without any recipes has only None; Action still offers a choice.
+        let mut dialog = Dialog::new(&[], false);
+        for focus in [0, 2] {
+            let lines = render(
+                &mut terminal,
+                &mut dialog,
+                &config,
+                FormView {
+                    connecting: false,
+                    configuring: false,
+                    fixed_remote: false,
+                    remote: "example.org",
+                    script: None,
+                    values: None,
+                    focus,
+                    generation_error: "",
+                    error: "",
+                },
+            );
+            let selector = &lines[position(&lines, "Setup").1];
+            assert!(selector.contains("None"));
+            assert!(!selector.contains(['←', '→']), "{selector}");
+            assert_eq!(lines.iter().any(|line| line.contains("Choice")), focus == 0);
+        }
+    }
+
+    #[test]
+    fn rendered_dialog_anchors_stay_fixed_across_recipes_focus_and_errors() {
+        let config = sample_config();
+        for connecting in [false, true] {
+            let mut terminal = Terminal::new(TestBackend::new(120, 32)).unwrap();
+            let mut dialog = Dialog::new(&config.profiles, connecting);
+            let mut anchors = None;
+            for selected in [None, Some(0), Some(1), Some(2), Some(0), None] {
+                let script = selected.map(|index| &config.profiles[index]);
+                let values = script.map(launch::Profile::input_defaults);
+                let fields =
+                    script.map_or(0, |script| script.inputs.len()) + 2 + usize::from(!connecting);
+                for focus in 0..fields {
+                    for (error, generation_error) in [
+                        ("", ""),
+                        (" Enter a valid host and optional port (1–65535)", ""),
+                        ("", "Generator failed: please choose another recipe"),
+                    ] {
+                        let lines = render(
+                            &mut terminal,
+                            &mut dialog,
+                            &config,
+                            FormView {
+                                connecting,
+                                configuring: !connecting,
+                                fixed_remote: false,
+                                remote: "deploy@example.org:2222",
+                                script,
+                                values: values.as_ref(),
+                                focus,
+                                generation_error,
+                                error,
+                            },
+                        );
+                        let current = [
+                            position(
+                                &lines,
+                                if connecting {
+                                    "CONNECT"
+                                } else {
+                                    "REMOTE SETUP"
+                                },
+                            ),
+                            position(&lines, "Remote"),
+                            position(&lines, if connecting { "Profile" } else { "Setup" }),
+                            // Contextual hints can shorten the footer horizontally.
+                            (0, position(&lines, "F1 Help").1),
+                        ];
+                        if let Some(expected) = anchors {
+                            assert_eq!(current, expected);
+                        } else {
+                            anchors = Some(current);
+                        }
+                        assert_eq!(dialog.list_state.offset(), 0);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn short_dialog_scroll_remains_stable_until_focus_leaves_the_viewport() {
+        let config = sample_config();
+        let script = &config.profiles[2];
+        let values = script.input_defaults();
+        let mut terminal = Terminal::new(TestBackend::new(32, 8)).unwrap();
+        let mut dialog = Dialog::new(&config.profiles, true);
+        let mut draw = |focus| {
+            render(
+                &mut terminal,
+                &mut dialog,
+                &config,
+                FormView {
+                    connecting: true,
+                    configuring: false,
+                    fixed_remote: true,
+                    remote: "example.org",
+                    script: Some(script),
+                    values: Some(&values),
+                    focus,
+                    generation_error: "",
+                    error: "",
+                },
+            )
+        };
+        let last = draw(8);
+        let previous = draw(7);
+        assert_eq!(position(&last, "Field3"), position(&previous, "Field3"));
+        assert_eq!(position(&last, "Field6"), position(&previous, "Field6"));
+        assert_eq!(position(&last, "CONNECT"), position(&previous, "CONNECT"));
+        assert_eq!(position(&last, "F1 Help"), position(&previous, "F1 Help"));
+        assert_eq!(dialog.list_state.offset(), 5);
+
+        terminal.backend_mut().resize(80, 24);
+        terminal.resize(Rect::new(0, 0, 80, 24)).unwrap();
+        let lines = render(
+            &mut terminal,
+            &mut dialog,
+            &config,
+            FormView {
+                connecting: true,
+                configuring: false,
+                fixed_remote: true,
+                remote: "example.org",
+                script: Some(script),
+                values: Some(&values),
+                focus: 7,
+                generation_error: "",
+                error: "",
+            },
+        );
+        assert_eq!(dialog.list_state.offset(), 0);
+        assert!(position(&lines, "Remote").1 < position(&lines, "Field0").1);
+    }
+
+    #[test]
+    fn focused_values_keep_labels_and_unicode_tails_visible() {
+        let config = sample_config();
+        let script = &config.profiles[1];
+        let values = HashMap::from([("single".into(), "prefix-long-e\u{301}-界界界尾".into())]);
+        let mut terminal = Terminal::new(TestBackend::new(22, 8)).unwrap();
+        let mut dialog = Dialog::new(&config.profiles, true);
+        let lines = render(
+            &mut terminal,
+            &mut dialog,
+            &config,
+            FormView {
+                connecting: true,
+                configuring: false,
+                fixed_remote: false,
+                remote: "example.org",
+                script: Some(script),
+                values: Some(&values),
+                focus: 2,
+                generation_error: "",
+                error: "",
+            },
+        );
+        let selected = lines.iter().find(|line| line.contains('›')).unwrap();
+        assert!(selected.contains("single"), "{selected}");
+        assert!(selected.contains('…'), "{selected}");
+        assert!(selected.contains('尾'), "{selected}");
+    }
+
+    #[test]
+    fn tiny_forms_render_and_fixed_remote_navigation_never_selects_locked_field() {
+        let config = sample_config();
+        for (width, height) in [(1, 1), (12, 3), (20, 5), (32, 8)] {
+            for connecting in [false, true] {
+                for index in 0..config.profiles.len() {
+                    let script = &config.profiles[index];
+                    let values = script.input_defaults();
+                    let remote = usize::from(!connecting);
+                    let count = remote + 2 + script.inputs.len();
+                    for fixed in [false, true] {
+                        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+                        let mut dialog = Dialog::new(&config.profiles, connecting);
+                        let mut focus = initial_focus(
+                            connecting,
+                            !connecting,
+                            fixed,
+                            !script.inputs.is_empty(),
+                        );
+                        for forward in [true, false] {
+                            for _ in 0..count + 1 {
+                                if fixed {
+                                    assert_ne!(focus, remote);
+                                }
+                                render(
+                                    &mut terminal,
+                                    &mut dialog,
+                                    &config,
+                                    FormView {
+                                        connecting,
+                                        configuring: !connecting,
+                                        fixed_remote: fixed,
+                                        remote: "example.org",
+                                        script: Some(script),
+                                        values: Some(&values),
+                                        focus,
+                                        generation_error: "",
+                                        error: "A validation error that must not move this form",
+                                    },
+                                );
+                                focus = next_focus(focus, count, remote, fixed, forward);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(initial_focus(false, false, false, false), 1);
+        assert_eq!(initial_focus(false, true, false, false), 2);
+        assert_eq!(initial_focus(true, false, false, false), 0);
+        assert_eq!(initial_focus(true, false, true, false), 1);
+        assert_eq!(initial_focus(true, false, false, true), 2);
+        assert_eq!(initial_focus(true, false, true, true), 2);
+    }
+
     #[test]
     fn validates_remote_before_running_scripts() {
         for valid in ["host", "alice@host:2222", "user@[::1]:22"] {

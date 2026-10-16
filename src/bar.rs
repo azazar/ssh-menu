@@ -1,5 +1,6 @@
 use crate::*;
 
+#[derive(Clone)]
 pub(super) struct Item {
     prefix: String,
     key: String,
@@ -8,6 +9,7 @@ pub(super) struct Item {
     selected: bool,
     alternatives: Vec<String>,
     action: Option<String>,
+    available: bool,
 }
 impl Item {
     pub fn new(key: impl Into<String>, label: impl Into<String>, priority: u8) -> Self {
@@ -19,6 +21,7 @@ impl Item {
             selected: false,
             alternatives: Vec::new(),
             action: None,
+            available: true,
         }
     }
     pub fn action(
@@ -48,7 +51,9 @@ impl Item {
         let left = plain_hint(&config.keybindings, "menu", "left");
         let right = plain_hint(&config.keybindings, "menu", "right");
         if count < 2 || (left == "—" && right == "—") {
-            return Self::new("—", "", 3);
+            let mut item = Self::new("—", "", 3);
+            item.action = Some("profiles".into());
+            return item;
         }
         let mut item = Self::new(
             format!(
@@ -67,7 +72,12 @@ impl Item {
         if left != "—" {
             item.prefix = format!("{} ", config.profiles[(current + count - 1) % count].name);
         }
+        item.action = Some("profiles".into());
         item
+    }
+    pub fn available(mut self, available: bool) -> Self {
+        self.available = available;
+        self
     }
     pub fn selected(mut self) -> Self {
         self.selected = true;
@@ -90,9 +100,20 @@ pub(super) fn pair(
                 .or_else(|| keys.iter().find(|key| group(key).is_empty()))
                 .cloned()
         })
-        .collect::<Vec<_>>()
-        .join("");
-    if keys.is_empty() { "—".into() } else { keys }
+        .collect::<Vec<_>>();
+    if keys.is_empty() {
+        "—".into()
+    } else {
+        let separator = if keys
+            .iter()
+            .all(|key| matches!(key.as_str(), "←" | "→" | "↑" | "↓"))
+        {
+            ""
+        } else {
+            "/"
+        };
+        keys.join(separator)
+    }
 }
 
 pub(super) fn plain_hint(bindings: &bindings::Bindings, scope: &str, action: &str) -> String {
@@ -119,7 +140,7 @@ fn compact(key: &str) -> String {
 pub(super) fn line(items: Vec<Item>, width: u16) -> Line<'static> {
     let mut candidates: Vec<_> = items
         .into_iter()
-        .filter(|i| i.key != "—")
+        .filter(|i| i.available && i.key != "—")
         .enumerate()
         .map(|(index, mut item)| {
             item.key = compact(&item.key);
@@ -206,17 +227,40 @@ fn group(key: &str) -> KeyModifiers {
 
 pub(super) struct State {
     held: Vec<crossterm::event::ModifierKeyCode>,
+    inferred: KeyModifiers,
     latched: KeyModifiers,
+    modifier_events: bool,
 }
 impl Default for State {
     fn default() -> Self {
         Self {
             held: Vec::new(),
+            inferred: KeyModifiers::NONE,
             latched: KeyModifiers::NONE,
+            modifier_events: false,
         }
     }
 }
 impl State {
+    fn modifier_flag(modifier: crossterm::event::ModifierKeyCode) -> KeyModifiers {
+        use crossterm::event::ModifierKeyCode::*;
+        match modifier {
+            LeftAlt | RightAlt => KeyModifiers::ALT,
+            LeftControl | RightControl => KeyModifiers::CONTROL,
+            LeftShift | RightShift => KeyModifiers::SHIFT,
+            LeftSuper | RightSuper => KeyModifiers::SUPER,
+            LeftHyper | RightHyper => KeyModifiers::HYPER,
+            LeftMeta | RightMeta => KeyModifiers::META,
+            IsoLevel3Shift | IsoLevel5Shift => KeyModifiers::NONE,
+        }
+    }
+    fn held_modifiers(&self) -> KeyModifiers {
+        self.held
+            .iter()
+            .fold(KeyModifiers::NONE, |flags, modifier| {
+                flags | Self::modifier_flag(*modifier)
+            })
+    }
     pub fn event(
         &mut self,
         key: crossterm::event::KeyEvent,
@@ -224,58 +268,63 @@ impl State {
         scope: &str,
     ) -> bool {
         if let KeyCode::Modifier(modifier) = key.code {
+            self.modifier_events = true;
             self.latched = KeyModifiers::NONE;
             if key.kind == KeyEventKind::Release {
                 self.held.retain(|m| *m != modifier);
             } else if !self.held.contains(&modifier) {
                 self.held.push(modifier);
             }
+            self.inferred = key.modifiers & !self.held_modifiers() & !Self::modifier_flag(modifier);
             return true;
         }
-        if key.kind == KeyEventKind::Press {
-            use crossterm::event::ModifierKeyCode::*;
-            self.held.retain(|modifier| match modifier {
-                LeftAlt | RightAlt => key.modifiers.contains(KeyModifiers::ALT),
-                LeftControl | RightControl => key.modifiers.contains(KeyModifiers::CONTROL),
-                LeftShift | RightShift => key.modifiers.contains(KeyModifiers::SHIFT),
-                _ => true,
+        let reveal = bindings
+            .translate(scope, key)
+            .and_then(|event| match event.code {
+                KeyCode::F(21) => Some(KeyModifiers::ALT),
+                KeyCode::F(22) => Some(KeyModifiers::CONTROL | KeyModifiers::ALT),
+                KeyCode::F(23) => Some(KeyModifiers::CONTROL),
+                KeyCode::F(24) => Some(KeyModifiers::SHIFT),
+                _ => None,
             });
-            let reveal = bindings
-                .translate(scope, key)
-                .and_then(|event| match event.code {
-                    KeyCode::F(21) => Some(KeyModifiers::ALT),
-                    KeyCode::F(22) => Some(KeyModifiers::CONTROL | KeyModifiers::ALT),
-                    KeyCode::F(23) => Some(KeyModifiers::CONTROL),
-                    KeyCode::F(24) => Some(KeyModifiers::SHIFT),
-                    _ => None,
-                });
-            if let Some(reveal) = reveal {
+        if let Some(reveal) = reveal {
+            if key.kind == KeyEventKind::Press {
                 self.held.clear();
+                self.inferred = KeyModifiers::NONE;
                 self.latched = if self.latched == reveal {
                     KeyModifiers::NONE
                 } else {
                     reveal
                 };
-                return true;
             }
+            // Repeats and releases must neither toggle a fallback nor reach an
+            // action handler as its internal F21--F24 identifier.
+            return true;
+        }
+        if key.kind != KeyEventKind::Release {
             self.latched = KeyModifiers::NONE;
+        }
+        if self.latched.is_empty() && self.modifier_events {
+            self.held.retain(|modifier| {
+                let flag = Self::modifier_flag(*modifier);
+                flag.is_empty() || key.modifiers.contains(flag)
+            });
+            // A scope switch can miss modifier presses. Ordinary key events
+            // still carry the current mask, including repeats and releases.
+            self.inferred = key.modifiers & !self.held_modifiers();
         }
         false
     }
     pub fn reset(&mut self) {
-        *self = Self::default();
+        // Reset held keys across focus/scope changes while remembering that
+        // this terminal has actually demonstrated modifier-release support.
+        *self = Self {
+            modifier_events: self.modifier_events,
+            ..Self::default()
+        };
     }
     fn modifiers(&self) -> KeyModifiers {
-        use crossterm::event::ModifierKeyCode::*;
-        self.held.iter().fold(self.latched, |flags, key| {
-            flags
-                | match key {
-                    LeftAlt | RightAlt => KeyModifiers::ALT,
-                    LeftControl | RightControl => KeyModifiers::CONTROL,
-                    LeftShift | RightShift => KeyModifiers::SHIFT,
-                    _ => KeyModifiers::NONE,
-                }
-        })
+        self.latched | self.inferred | self.held_modifiers()
     }
     pub fn draw(
         &self,
@@ -286,8 +335,14 @@ impl State {
         mut items: Vec<Item>,
     ) {
         let active = self.modifiers();
-        if active.is_empty() {
+        use crossterm::event::ModifierKeyCode::{IsoLevel3Shift, IsoLevel5Shift};
+        let level3 = self.held.contains(&IsoLevel3Shift);
+        let level5 = self.held.contains(&IsoLevel5Shift);
+        if active.is_empty() && !level3 && !level5 {
             items.retain_mut(|item| {
+                if !item.available {
+                    return false;
+                }
                 if !item.alternatives.is_empty() {
                     let Some(key) = item.alternatives.iter().find(|key| group(key).is_empty())
                     else {
@@ -297,38 +352,43 @@ impl State {
                 }
                 group(&item.key).is_empty()
             });
-            for (action, name) in [
-                ("reveal_shift", "Shift"),
-                ("reveal_ctrl", "Ctrl"),
-                ("reveal_alt", "Alt"),
-                ("reveal_ctrl_alt", "Ctrl+Alt"),
-            ] {
-                let key = config.keybindings.hint(scope, action);
-                if key != "—" {
-                    items.push(Item::new(
-                        if key.ends_with("+?") {
-                            name.to_owned()
-                        } else {
-                            key
-                        },
-                        "?",
-                        9,
-                    ));
-                }
-            }
         } else {
             let label = [
                 (KeyModifiers::CONTROL, "Ctrl"),
                 (KeyModifiers::ALT, "Alt"),
                 (KeyModifiers::SHIFT, "Shift"),
+                (KeyModifiers::SUPER, "Super"),
+                (KeyModifiers::HYPER, "Hyper"),
+                (KeyModifiers::META, "Meta"),
             ]
             .into_iter()
             .filter_map(|(flag, name)| active.contains(flag).then_some(name))
+            .chain(level3.then_some("Level3"))
+            .chain(level5.then_some("Level5"))
             .collect::<Vec<_>>()
             .join("+");
+            if Line::from(format!(" {label} ")).width() > usize::from(area.width) {
+                // Never show a bare modified shortcut when its modifier
+                // heading cannot fit; it would advertise a different key.
+                draw(frame, area, Vec::new());
+                return;
+            }
             let mut revealed = vec![Item::new("", label, 0).selected()];
+            let profiles_available = !items
+                .iter()
+                .any(|item| item.action.as_deref() == Some("profiles") && !item.available);
+            let cycle_available = profiles_available && config.profiles.len() > 1;
             for (action, keys) in config.keybindings.actions(scope) {
-                if action.starts_with("reveal_") {
+                if action.starts_with("reveal_")
+                    || level3
+                    || level5
+                    || items
+                        .iter()
+                        .any(|item| item.action.as_deref() == Some(&action) && !item.available)
+                    || (scope == "menu"
+                        && !cycle_available
+                        && matches!(action.as_str(), "left" | "right"))
+                {
                     continue;
                 }
                 let keys: Vec<_> = keys
@@ -378,7 +438,7 @@ impl State {
                     .map_or(label, |item| item.label.as_str());
                 revealed.push(Item::new(keys.join("/"), label, 2));
             }
-            if scope == "menu" {
+            if scope == "menu" && profiles_available && !level3 && !level5 {
                 for profile in &config.profiles {
                     if let Some(key) = &profile.key {
                         let key = key.to_string();
@@ -407,6 +467,392 @@ impl State {
 mod tests {
     use super::*;
     use crossterm::event::{KeyEvent, ModifierKeyCode::*};
+
+    fn configuration(overrides: &str) -> launch::Config {
+        launch::Config::parse(&format!("default: SSH\nprofiles: [{{name: SSH, key: Alt+S, command: 'ssh %h'}}, {{name: Special, key: Ctrl+Alt+X, command: 'ssh %h'}}]\n{overrides}")).unwrap()
+    }
+
+    fn rendered(
+        state: &State,
+        config: &launch::Config,
+        scope: &str,
+        width: u16,
+        items: Vec<Item>,
+    ) -> String {
+        use ratatui::{Terminal, backend::TestBackend};
+        let mut terminal = Terminal::new(TestBackend::new(width, 1)).unwrap();
+        terminal
+            .draw(|frame| state.draw(frame, frame.area(), config, scope, items.clone()))
+            .unwrap();
+        terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>()
+            .trim()
+            .to_owned()
+    }
+
+    fn controls(config: &launch::Config, scope: &str) -> Vec<Item> {
+        let exit = match scope {
+            "menu" => "quit",
+            "help" => "close",
+            _ => "cancel",
+        };
+        vec![
+            Item::action(&config.keybindings, scope, "help", "Help", 0),
+            Item::action(&config.keybindings, scope, exit, "Back", 1),
+            Item::action(
+                &config.keybindings,
+                scope,
+                if scope == "editor" { "edit" } else { "connect" },
+                "Open",
+                2,
+            ),
+        ]
+    }
+
+    #[test]
+    fn rendered_bars_follow_complete_modifier_transitions_in_each_scope() {
+        let config = configuration("");
+        for scope in ["menu", "dialog", "help", "editor"] {
+            let mut state = State::default();
+            let normal = rendered(&state, &config, scope, 160, controls(&config, scope));
+            assert!(
+                normal.contains("F1 Help") && normal.contains("Esc Back"),
+                "{scope}: {normal}"
+            );
+            for (modifier, kind, mask, heading) in [
+                (LeftAlt, KeyEventKind::Press, KeyModifiers::ALT, "Alt"),
+                (RightAlt, KeyEventKind::Press, KeyModifiers::ALT, "Alt"),
+                (RightAlt, KeyEventKind::Repeat, KeyModifiers::ALT, "Alt"),
+                (
+                    LeftControl,
+                    KeyEventKind::Press,
+                    KeyModifiers::ALT | KeyModifiers::CONTROL,
+                    "Ctrl+Alt",
+                ),
+                (
+                    LeftAlt,
+                    KeyEventKind::Release,
+                    KeyModifiers::ALT | KeyModifiers::CONTROL,
+                    "Ctrl+Alt",
+                ),
+                (
+                    RightAlt,
+                    KeyEventKind::Release,
+                    KeyModifiers::CONTROL,
+                    "Ctrl",
+                ),
+                (
+                    LeftShift,
+                    KeyEventKind::Press,
+                    KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                    "Ctrl+Shift",
+                ),
+                (
+                    LeftControl,
+                    KeyEventKind::Release,
+                    KeyModifiers::SHIFT,
+                    "Shift",
+                ),
+            ] {
+                assert!(state.event(
+                    KeyEvent::new_with_kind(KeyCode::Modifier(modifier), mask, kind),
+                    &config.keybindings,
+                    scope
+                ));
+                let text = rendered(&state, &config, scope, 160, controls(&config, scope));
+                assert!(text.starts_with(&format!("{heading} ")), "{scope}: {text}");
+                assert!(
+                    !text.contains("F1 Help") && !text.contains("Esc Back"),
+                    "{scope}: {text}"
+                );
+                assert_eq!(
+                    text.contains("S SSH"),
+                    scope == "menu" && heading == "Alt",
+                    "{scope}: {text}"
+                );
+                assert_eq!(
+                    text.contains("X Special"),
+                    scope == "menu" && heading == "Ctrl+Alt",
+                    "{scope}: {text}"
+                );
+            }
+            state.event(
+                KeyEvent::new_with_kind(
+                    KeyCode::Modifier(LeftShift),
+                    KeyModifiers::NONE,
+                    KeyEventKind::Release,
+                ),
+                &config.keybindings,
+                scope,
+            );
+            assert_eq!(
+                rendered(&state, &config, scope, 160, controls(&config, scope)),
+                normal
+            );
+
+            // Recover current modifiers after entering a new scope or missing
+            // a modifier press, and recover stale state on repeated input.
+            state.reset();
+            state.event(
+                KeyEvent::new_with_kind(KeyCode::Down, KeyModifiers::CONTROL, KeyEventKind::Repeat),
+                &config.keybindings,
+                scope,
+            );
+            assert!(
+                rendered(&state, &config, scope, 160, controls(&config, scope))
+                    .starts_with("Ctrl ")
+            );
+            state.event(
+                KeyEvent::new_with_kind(KeyCode::Down, KeyModifiers::NONE, KeyEventKind::Repeat),
+                &config.keybindings,
+                scope,
+            );
+            assert_eq!(
+                rendered(&state, &config, scope, 160, controls(&config, scope)),
+                normal
+            );
+            state.event(
+                KeyEvent::new(KeyCode::Modifier(LeftAlt), KeyModifiers::ALT),
+                &config.keybindings,
+                scope,
+            );
+            state.reset(); // Focus loss and scope transitions use this same reset.
+            assert_eq!(
+                rendered(&state, &config, scope, 160, controls(&config, scope)),
+                normal
+            );
+        }
+    }
+
+    #[test]
+    fn fallback_remaps_toggle_once_and_keep_context_labels() {
+        for scope in ["menu", "dialog", "help", "editor"] {
+            let config = configuration(&format!(
+                "keybindings: {{{scope}: {{reveal_alt: [F2], help: [Alt+F3]}}}}"
+            ));
+            let mut state = State::default();
+            let items = vec![Item::action(
+                &config.keybindings,
+                scope,
+                "help",
+                "Context help",
+                0,
+            )];
+            let fallback = KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE);
+            assert!(state.event(fallback, &config.keybindings, scope));
+            let revealed = rendered(&state, &config, scope, 160, items.clone());
+            assert!(revealed.contains("F3 Context help"));
+            for kind in [KeyEventKind::Repeat, KeyEventKind::Release] {
+                assert!(state.event(
+                    KeyEvent::new_with_kind(KeyCode::F(2), KeyModifiers::NONE, kind),
+                    &config.keybindings,
+                    scope
+                ));
+                assert_eq!(
+                    rendered(&state, &config, scope, 160, items.clone()),
+                    revealed
+                );
+            }
+            assert!(state.event(fallback, &config.keybindings, scope));
+            assert_eq!(rendered(&state, &config, scope, 160, items.clone()), "");
+            assert!(state.event(fallback, &config.keybindings, scope));
+            state.event(
+                KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+                &config.keybindings,
+                scope,
+            );
+            assert_eq!(rendered(&state, &config, scope, 160, items), "");
+        }
+    }
+
+    #[test]
+    fn legacy_key_masks_do_not_leave_a_modifier_menu_stuck() {
+        let config = configuration("");
+        for scope in ["menu", "dialog", "help", "editor"] {
+            let mut state = State::default();
+            let normal = rendered(&state, &config, scope, 160, controls(&config, scope));
+            for key in [
+                KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT),
+                KeyEvent::new(KeyCode::Char('y'), KeyModifiers::ALT),
+                KeyEvent::new(KeyCode::Down, KeyModifiers::CONTROL),
+            ] {
+                state.event(key, &config.keybindings, scope);
+                assert_eq!(
+                    rendered(&state, &config, scope, 160, controls(&config, scope)),
+                    normal
+                );
+            }
+            state.event(
+                KeyEvent::new(KeyCode::Char('?'), KeyModifiers::ALT | KeyModifiers::SHIFT),
+                &config.keybindings,
+                scope,
+            );
+            assert!(
+                rendered(&state, &config, scope, 160, controls(&config, scope)).starts_with("Alt ")
+            );
+            state.event(
+                KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT),
+                &config.keybindings,
+                scope,
+            );
+            assert_eq!(
+                rendered(&state, &config, scope, 160, controls(&config, scope)),
+                normal
+            );
+        }
+    }
+
+    #[test]
+    fn extra_modifiers_never_advertise_or_activate_a_smaller_group() {
+        let config = configuration("keybindings: {menu: {help: [Ctrl+Q]}}");
+        for (modifier, flag, name) in [
+            (LeftShift, KeyModifiers::SHIFT, "Shift"),
+            (LeftSuper, KeyModifiers::SUPER, "Super"),
+            (LeftHyper, KeyModifiers::HYPER, "Hyper"),
+            (LeftMeta, KeyModifiers::META, "Meta"),
+        ] {
+            let mut state = State::default();
+            state.event(
+                KeyEvent::new(KeyCode::Modifier(LeftAlt), KeyModifiers::ALT),
+                &config.keybindings,
+                "menu",
+            );
+            state.event(
+                KeyEvent::new(KeyCode::Modifier(modifier), KeyModifiers::ALT | flag),
+                &config.keybindings,
+                "menu",
+            );
+            let text = rendered(&state, &config, "menu", 160, controls(&config, "menu"));
+            assert_eq!(text, format!("Alt+{name}  No shortcuts"));
+            let event = KeyEvent::new(KeyCode::Char('S'), KeyModifiers::ALT | flag);
+            assert!(!config.profiles[0].key.as_ref().unwrap().matches(event));
+            assert!(config.keybindings.translate("menu", event).is_none());
+            assert!(
+                config
+                    .keybindings
+                    .translate(
+                        "menu",
+                        KeyEvent::new(KeyCode::Char('Q'), KeyModifiers::CONTROL | flag)
+                    )
+                    .is_none()
+            );
+        }
+        for modifier in [IsoLevel3Shift, IsoLevel5Shift] {
+            let mut state = State::default();
+            state.event(
+                KeyEvent::new(KeyCode::Modifier(modifier), KeyModifiers::NONE),
+                &config.keybindings,
+                "menu",
+            );
+            assert!(
+                rendered(&state, &config, "menu", 160, controls(&config, "menu"))
+                    .ends_with("No shortcuts")
+            );
+        }
+    }
+
+    #[test]
+    fn narrow_and_unavailable_bars_cannot_advertise_unusable_keys() {
+        let config =
+            configuration("keybindings: {menu: {left: [Ctrl+Alt+Left], right: [Alt+Right]}}");
+        let mut state = State::default();
+        state.event(
+            KeyEvent::new(
+                KeyCode::Char('?'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
+            &config.keybindings,
+            "menu",
+        );
+        for width in 0..40 {
+            let text = rendered(&state, &config, "menu", width, controls(&config, "menu"));
+            if width < 10 {
+                assert!(text.is_empty(), "width {width}: {text}");
+            } else {
+                assert!(text.starts_with("Ctrl+Alt"), "width {width}: {text}");
+            }
+        }
+        let items = vec![
+            Item::profiles(&config, 0).available(false),
+            Item::action(&config.keybindings, "menu", "connect", "Open", 1).available(false),
+            Item::action(
+                &config.keybindings,
+                "menu",
+                "connect_and_return",
+                "Return",
+                1,
+            )
+            .available(false),
+            Item::action(
+                &config.keybindings,
+                "menu",
+                "connection_settings",
+                "Edit",
+                1,
+            )
+            .available(false),
+            Item::action(&config.keybindings, "menu", "help", "Help", 0),
+        ];
+        for flags in [
+            KeyModifiers::NONE,
+            KeyModifiers::ALT,
+            KeyModifiers::CONTROL,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ] {
+            let state = State {
+                latched: flags,
+                ..State::default()
+            };
+            let text = rendered(&state, &config, "menu", 200, items.clone());
+            for unavailable in [
+                "S SSH",
+                "X Special",
+                "Open",
+                "Return",
+                "Edit",
+                "Previous",
+                "Next",
+            ] {
+                assert!(!text.contains(unavailable), "{flags:?}: {text}");
+            }
+        }
+        let config =
+            configuration("keybindings: {dialog: {previous_field: [F2], next_field: [F3]}}");
+        assert_eq!(
+            pair(
+                &config.keybindings,
+                "dialog",
+                "previous_field",
+                "next_field"
+            ),
+            "F2/F3"
+        );
+        let config = launch::Config::parse("default: SSH\nprofiles: [{name: SSH, key: Alt+S, command: 'ssh %h'}]\nkeybindings: {menu: {left: [Alt+Left], right: [Alt+Right]}}\n").unwrap();
+        let state = State {
+            latched: KeyModifiers::ALT,
+            ..State::default()
+        };
+        let text = rendered(
+            &state,
+            &config,
+            "menu",
+            160,
+            vec![Item::profiles(&config, 0)],
+        );
+        assert!(
+            text.contains("S SSH"),
+            "a single available profile must remain launchable: {text}"
+        );
+        assert!(
+            !text.contains("Previous") && !text.contains("Next"),
+            "a single profile cannot cycle: {text}"
+        );
+    }
     #[test]
     fn bars_show_only_the_exact_modifier_group_in_every_screen() {
         use ratatui::{Terminal, backend::TestBackend};
@@ -436,6 +882,7 @@ mod tests {
                 let state = State {
                     held: Vec::new(),
                     latched: active,
+                    ..State::default()
                 };
                 terminal
                     .draw(|frame| {
@@ -455,6 +902,9 @@ mod tests {
                     .iter()
                     .map(|cell| cell.symbol())
                     .collect::<String>();
+                if active.is_empty() {
+                    assert_eq!(text.trim(), "F10 Help", "{scope}: {text}");
+                }
                 assert_eq!(
                     text.contains("SSH"),
                     scope == "menu" && active == KeyModifiers::ALT

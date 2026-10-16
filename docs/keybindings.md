@@ -23,3 +23,5 @@ Hold **Alt**, **Shift**, or **Ctrl** to show only shortcuts with those exact mod
 This requires Kitty keyboard modifier press/release events. For other terminals, every screen provides `reveal_alt` (Alt+?), `reveal_ctrl_alt` (Ctrl+Alt+?), `reveal_ctrl` (Ctrl+?), and `reveal_shift` (Shift+F1). These toggle the corresponding menu until toggled again or another key is pressed. They only reveal bindings; invoke actions using the full shortcut. Override them in `menu`, `dialog`, `help`, or `editor`.
 
 Idle prompts share the action row. A revealed menu displays its modifier prefix once; `F4 New` under Shift means Shift+F4. The Keys help topic lists every active shortcut, including combinations with no fallback toggle.
+
+The host list also provides `refresh` (F5), `clear_search` (Ctrl+U), `home` (Home), and `end` (End). If your configuration already assigns one of these keys to another action or profile, remap or disable the new action with `[]`.

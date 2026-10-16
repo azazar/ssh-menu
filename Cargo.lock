@@ -459,6 +459,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "glob"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
+
+[[package]]
 name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1274,6 +1280,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
+name = "shui"
+version = "0.1.0-rc.5"
+dependencies = [
+ "crossterm",
+ "glob",
+ "nix 0.31.3",
+ "ratatui",
+ "serde",
+ "serde_yaml_ng",
+ "shell-words",
+ "tui-markdown",
+ "windows-sys",
+]
+
+[[package]]
 name = "signal-hook"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1321,18 +1342,6 @@ name = "smallvec"
 version = "1.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b3dc8af474f516a851ff4bd12db780f948b9250ad37211e4eec0bccea54e01b"
-
-[[package]]
-name = "shui"
-version = "0.1.0-rc.5"
-dependencies = [
- "crossterm",
- "ratatui",
- "serde",
- "serde_yaml_ng",
- "shell-words",
- "tui-markdown",
-]
 
 [[package]]
 name = "stacker"

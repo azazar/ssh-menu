@@ -72,11 +72,17 @@ impl Key {
             modifiers |= KeyModifiers::SHIFT;
         }
         if let KeyCode::Char(c) = code {
-            if c.is_ascii_uppercase() || c.is_ascii_punctuation() {
+            // Punctuation carries its own keyboard-layout Shift (e.g. Alt+?).
+            // For letters, preserve an explicitly reported Shift modifier so
+            // Alt+Shift+S cannot activate an Alt-only action.
+            if c.is_ascii_punctuation() {
                 modifiers.remove(KeyModifiers::SHIFT);
-                code = KeyCode::Char(c.to_ascii_lowercase());
             }
-            if modifiers.contains(KeyModifiers::CONTROL) {
+            code = KeyCode::Char(c.to_ascii_lowercase());
+            // Legacy control bytes alias these keys only in the Ctrl-only
+            // form. Explicit extra modifiers must not dispatch a smaller
+            // group (e.g. Ctrl+Shift+I becoming Shift+Tab).
+            if modifiers == KeyModifiers::CONTROL {
                 match c.to_ascii_lowercase() {
                     'i' => {
                         code = KeyCode::Tab;
@@ -102,9 +108,7 @@ impl Key {
     }
     fn typing(&self) -> bool {
         matches!(self.code, KeyCode::Char(_))
-            && !self
-                .modifiers
-                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+            && self.modifiers.difference(KeyModifiers::SHIFT).is_empty()
     }
 }
 impl std::fmt::Display for Key {
@@ -158,6 +162,10 @@ fn defaults(scope: &str) -> Vec<(&'static str, &'static str, Vec<&'static str>)>
             ("configure_remote", "F4", vec!["F4"]),
             ("new_remote", "Shift+F4", vec!["Shift+F4"]),
             ("edit_config", "F9", vec!["F9"]),
+            ("refresh", "F5", vec!["F5"]),
+            ("clear_search", "Ctrl+U", vec!["Ctrl+U"]),
+            ("home", "Home", vec!["Home"]),
+            ("end", "End", vec!["End"]),
             ("toggle_transport", "F8", vec!["F8"]),
         ]),
         "dialog" => result.extend([
@@ -256,11 +264,10 @@ impl Bindings {
             .collect()
     }
     pub fn hint(&self, scope: &str, action: &str) -> String {
-        self.label(scope, action)
-            .split('/')
+        self.key_labels(scope, action)
+            .into_iter()
             .next()
-            .unwrap_or("—")
-            .to_owned()
+            .unwrap_or_else(|| "—".into())
     }
     pub fn reference(&self, scope: &str) -> String {
         let mut text = String::from(
@@ -395,5 +402,86 @@ mod tests {
             KeyCode::Backspace
         );
         assert!(bindings.reference("menu").contains("Ctrl+R"));
+    }
+
+    #[test]
+    fn explicit_extra_modifiers_do_not_collapse_terminal_aliases() {
+        let bindings = Bindings::default();
+        for (letter, canonical, modifiers) in [
+            ('i', KeyCode::Tab, KeyModifiers::NONE),
+            ('j', KeyCode::Enter, KeyModifiers::NONE),
+            ('m', KeyCode::Enter, KeyModifiers::NONE),
+            ('h', KeyCode::Backspace, KeyModifiers::CONTROL),
+        ] {
+            let translated = bindings
+                .translate(
+                    "dialog",
+                    KeyEvent::new(KeyCode::Char(letter), KeyModifiers::CONTROL),
+                )
+                .unwrap();
+            assert_eq!(translated, KeyEvent::new(canonical, modifiers));
+            for extra in [
+                KeyModifiers::SHIFT,
+                KeyModifiers::ALT,
+                KeyModifiers::SHIFT | KeyModifiers::ALT,
+                KeyModifiers::SUPER,
+                KeyModifiers::HYPER,
+                KeyModifiers::META,
+            ] {
+                assert!(
+                    bindings
+                        .translate(
+                            "dialog",
+                            KeyEvent::new(
+                                KeyCode::Char(letter.to_ascii_uppercase()),
+                                KeyModifiers::CONTROL | extra
+                            )
+                        )
+                        .is_none(),
+                    "Ctrl+{extra:?}+{letter} collapsed into another group"
+                );
+            }
+        }
+        let bindings: Bindings = serde_yaml_ng::from_str("menu: {help: [Ctrl+Alt+M]}").unwrap();
+        bindings.validate(&[]).unwrap();
+        assert_eq!(
+            bindings
+                .translate(
+                    "menu",
+                    KeyEvent::new(
+                        KeyCode::Char('m'),
+                        KeyModifiers::CONTROL | KeyModifiers::ALT
+                    )
+                )
+                .unwrap()
+                .code,
+            KeyCode::F(1)
+        );
+        assert_eq!(bindings.hint("menu", "help"), "Ctrl+Alt+M");
+    }
+
+    #[test]
+    fn system_modified_letters_do_not_fall_through_to_text_entry() {
+        let bindings = Bindings::default();
+        for scope in ["menu", "dialog", "editor"] {
+            for modifiers in [KeyModifiers::NONE, KeyModifiers::SHIFT] {
+                let event = KeyEvent::new(KeyCode::Char('A'), modifiers);
+                assert_eq!(bindings.translate(scope, event), Some(event));
+            }
+            for modifier in [KeyModifiers::SUPER, KeyModifiers::HYPER, KeyModifiers::META] {
+                for extra in [
+                    KeyModifiers::NONE,
+                    KeyModifiers::SHIFT,
+                    KeyModifiers::CONTROL,
+                    KeyModifiers::ALT,
+                ] {
+                    assert!(
+                        bindings
+                            .translate(scope, KeyEvent::new(KeyCode::Char('a'), modifier | extra))
+                            .is_none()
+                    );
+                }
+            }
+        }
     }
 }

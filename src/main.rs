@@ -1,5 +1,6 @@
 mod bar;
 mod bindings;
+mod cli;
 #[cfg(all(test, unix))]
 mod docker_tests;
 mod editor;
@@ -10,6 +11,7 @@ mod new_remote;
 mod preset_tests;
 mod search;
 mod shortcut;
+mod ssh_config;
 
 use crossterm::{
     cursor::Show,
@@ -28,9 +30,9 @@ use ratatui::{
     widgets::{Block, Cell, List, ListItem, ListState, Paragraph, Row, Table, TableState},
 };
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env, fs,
-    io::{self, Write},
+    io::{self, IsTerminal, Write},
     path::Path,
     process::Command,
 };
@@ -62,6 +64,45 @@ impl Target {
     }
 }
 
+fn display_usernames<'a>(
+    targets: &'a [Target],
+    users: &'a HashMap<String, String>,
+    mode: launch::UsernameDisplay,
+) -> Vec<&'a str> {
+    let parts: Vec<_> = targets
+        .iter()
+        .map(|target| {
+            let (explicit, host) = target
+                .host
+                .rsplit_once('@')
+                .map_or((None, target.host.as_str()), |(user, host)| {
+                    (Some(user), host)
+                });
+            let user = explicit
+                .or_else(|| users.get(host).map(String::as_str))
+                .unwrap_or("");
+            (user, host, target.port.as_deref())
+        })
+        .collect();
+    let mut accounts: HashMap<_, HashSet<_>> = HashMap::new();
+    for (user, host, port) in &parts {
+        accounts.entry((*host, *port)).or_default().insert(*user);
+    }
+    parts
+        .into_iter()
+        .map(|(user, host, port)| match mode {
+            launch::UsernameDisplay::Always => user,
+            launch::UsernameDisplay::Never => "",
+            launch::UsernameDisplay::Auto if accounts[&(host, port)].len() > 1 => user,
+            launch::UsernameDisplay::Auto => "",
+        })
+        .collect()
+}
+
+fn normalized_target(target: &Target, home: &Path, user: &str) -> Target {
+    ssh_config::normalize_target(target, &ssh_config::load(home, user).users)
+}
+
 fn valid_host(host: &str) -> bool {
     !host.is_empty()
         && !host.starts_with('-')
@@ -69,8 +110,7 @@ fn valid_host(host: &str) -> bool {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || "_.-@[]:".contains(c))
 }
-fn target(raw: &str, user: &str) -> Option<Target> {
-    let raw = raw.strip_prefix(&format!("{user}@")).unwrap_or(raw);
+fn target(raw: &str, _user: &str) -> Option<Target> {
     let (host, port) = match raw.rsplit_once(':') {
         Some((h, p))
             if !p.is_empty()
@@ -81,7 +121,12 @@ fn target(raw: &str, user: &str) -> Option<Target> {
         }
         _ => (raw, None),
     };
-    if !valid_host(host) {
+    if host.len() > 1024
+        || !valid_host(host)
+        || port
+            .as_ref()
+            .is_some_and(|value| value.parse::<u16>().ok().filter(|port| *port > 0).is_none())
+    {
         return None;
     }
     Some(Target {
@@ -173,49 +218,18 @@ fn history_connection(line: &str, user: &str) -> Option<(Target, Vec<String>, St
     Some((t, it.map(str::to_owned).collect(), cmd.to_owned()))
 }
 fn discover(home: &Path, user: &str) -> Vec<Target> {
+    let ssh = ssh_config::load(home, user);
     let mut entries = HashMap::new();
     let mut rank = 0usize;
     let mut add = |t: Target| {
+        let t = ssh_config::normalize_target(&t, &ssh.users);
         rank += 1;
         entries.insert(t.label(), (rank, t));
     };
-    let config = fs::read_to_string(home.join(".ssh/config")).unwrap_or_default();
-    let mut hosts: Vec<String> = Vec::new();
-    let mut login = user.to_owned();
-    let flush = |hosts: &[String], login: &str, add: &mut dyn FnMut(Target)| {
-        for host in hosts {
-            if host.contains(['*', '?', '!']) {
-                continue;
-            }
-            if let Some(t) = target(&format!("{login}@{host}"), user) {
-                add(t);
-            }
-            if login != "root"
-                && let Some(t) = target(&format!("root@{host}"), user)
-            {
-                add(t);
-            }
-        }
-    };
-    for line in config.lines() {
-        let words: Vec<_> = line.split_whitespace().collect();
-        if words.len() < 2 || words[0].starts_with('#') {
-            continue;
-        }
-        if words[0].eq_ignore_ascii_case("host") {
-            flush(&hosts, &login, &mut add);
-            hosts = words[1..]
-                .iter()
-                .take_while(|w| !w.starts_with('#'))
-                .map(|w| w.to_string())
-                .collect();
-            login = user.into();
-        } else if words[0].eq_ignore_ascii_case("user") {
-            login = words[1].into();
-        }
+    for entry in ssh.targets {
+        add(entry);
     }
-    flush(&hosts, &login, &mut add);
-    for line in fs::read_to_string(home.join(".config/mc/hotlist"))
+    for line in read_history(&home.join(".config/mc/hotlist"))
         .unwrap_or_default()
         .lines()
     {
@@ -228,7 +242,7 @@ fn discover(home: &Path, user: &str) -> Vec<Target> {
             add(t);
         }
     }
-    for line in fs::read_to_string(home.join(".bash_history"))
+    for line in read_history(&home.join(".bash_history"))
         .unwrap_or_default()
         .lines()
     {
@@ -248,6 +262,32 @@ fn erase_filter_word(query: &mut String) {
     query.truncate(end);
 }
 
+// Keep the end of an edited field visible without splitting wide or combining text.
+fn text_tail(text: &str, width: usize) -> String {
+    let span = Span::raw(text);
+    if span.width() <= width {
+        return text.to_owned();
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let graphemes: Vec<_> = span.styled_graphemes(Style::default()).collect();
+    let mut used = 1; // Leading ellipsis.
+    let mut start = graphemes.len();
+    for grapheme in graphemes.iter().rev() {
+        used += Span::raw(grapheme.symbol).width();
+        if used > width {
+            break;
+        }
+        start -= 1;
+    }
+    let mut result = String::from("…");
+    for grapheme in &graphemes[start..] {
+        result.push_str(grapheme.symbol);
+    }
+    result
+}
+
 struct Selection {
     target: Target,
     profile: usize,
@@ -265,11 +305,13 @@ struct MenuState {
     selection: usize,
     profiles: Vec<usize>,
     notice: Option<String>,
+    table: TableState,
+    direct_profile: Option<usize>,
 }
 
 fn menu(
     terminal: &mut DefaultTerminal,
-    targets: &[Target],
+    targets: &mut Vec<Target>,
     config: &mut launch::Config,
     state: &mut MenuState,
     home: &Path,
@@ -279,16 +321,29 @@ fn menu(
         selection,
         profiles,
         notice,
+        table: table_state,
+        direct_profile,
     } = state;
     let mut bar_state = bar::State::default();
-    let host_config = search::host_config(home, &env::var("USER").unwrap_or_default());
+    let local_user = env::var("USER").unwrap_or_default();
+    let ssh = ssh_config::load(home, &local_user);
+    let mut host_config = ssh.hints;
+    let mut configured_users = ssh.users;
     loop {
         let footer_height = 1;
         let visible = search::matching(targets, query, &host_config);
         *selection = (*selection).min(visible.len().saturating_sub(1));
-        let profile_index = visible
-            .get(*selection)
-            .map_or(config.default_index(), |i| profiles[*i]);
+        let username_labels =
+            display_usernames(targets, &configured_users, config.username_display);
+        let profile_index = visible.get(*selection).map_or(
+            direct_profile.unwrap_or_else(|| config.default_index()),
+            |i| profiles[*i],
+        );
+        let direct_target = visible
+            .is_empty()
+            .then(|| new_remote::parse_remote(query))
+            .flatten();
+        let has_target = !visible.is_empty() || direct_target.is_some();
         terminal.draw(|frame| {
             frame.render_widget(
                 Block::default().style(Style::default().fg(theme::TEXT).bg(theme::BASE)),
@@ -300,6 +355,8 @@ fn menu(
                 Constraint::Length(footer_height),
             ])
             .split(frame.area());
+            let count = format!(" {}/{} ", visible.len(), targets.len());
+            let query_width = usize::from(areas[0].width).saturating_sub(6 + count.len() + 3);
             let header = Line::from(vec![
                 Span::styled(
                     " SHUI ",
@@ -308,11 +365,11 @@ fn menu(
                         .bg(theme::LAVENDER)
                         .add_modifier(Modifier::BOLD),
                 ),
+                Span::styled(count, Style::default().fg(theme::SUBTEXT)),
                 Span::styled(
-                    format!(" {}/{} ", visible.len(), targets.len()),
-                    Style::default().fg(theme::SUBTEXT),
+                    format!(" / {}", text_tail(query, query_width)),
+                    Style::default().fg(theme::LAVENDER),
                 ),
-                Span::styled(format!(" / {query}"), Style::default().fg(theme::LAVENDER)),
             ]);
             frame.render_widget(
                 Paragraph::new(header).style(Style::default().bg(theme::SURFACE)),
@@ -324,7 +381,10 @@ fn menu(
                     let profile = &config.profiles[profiles[*i]];
                     let mosh = profile.program() == "mosh";
                     let label = targets[*i].label();
-                    let (username, host) = label.rsplit_once('@').unwrap_or(("", &label));
+                    let host = label
+                        .rsplit_once('@')
+                        .map_or(label.as_str(), |(_, host)| host);
+                    let username = username_labels[*i];
                     Row::new(vec![
                         Cell::from(profile.name.clone()).style(Style::default().fg(if mosh {
                             theme::PEACH
@@ -341,11 +401,30 @@ fn menu(
                     ])
                 })
                 .collect();
+            let mut hint_area = areas[1];
             if rows.is_empty() {
                 frame.render_widget(
-                    Paragraph::new(
-                        " No matches · type to search hosts from ~/.ssh/config or history",
-                    )
+                    Paragraph::new(if let Some(target) = new_remote::parse_remote(query) {
+                        format!(
+                            " {} connects to {} · {}",
+                            config.keybindings.label("menu", "connect"),
+                            target.label(),
+                            config.profiles[profile_index].name,
+                        )
+                    } else if targets.is_empty() {
+                        format!(
+                            " Type a host, then {} to connect.\n {} setup · {} help",
+                            config.keybindings.label("menu", "connect"),
+                            config.keybindings.label("menu", "new_remote"),
+                            config.keybindings.label("menu", "help")
+                        )
+                    } else {
+                        format!(
+                            " No matches · {} clears the search",
+                            config.keybindings.label("menu", "clear_search")
+                        )
+                    })
+                    .wrap(ratatui::widgets::Wrap { trim: false })
                     .style(Style::default().fg(theme::SUBTEXT)),
                     areas[1],
                 );
@@ -358,14 +437,34 @@ fn menu(
                     .unwrap_or(0)
                     .min(usize::from(areas[1].width.saturating_sub(4) / 3))
                     as u16;
-                let username_width = targets
+                let username_width = username_labels
                     .iter()
-                    .filter_map(|target| target.host.rsplit_once('@').map(|(user, _)| user))
-                    .map(|user| Line::from(user).width())
+                    .map(|user| Line::from(*user).width())
                     .max()
                     .unwrap_or(0)
                     .min(usize::from(areas[1].width.saturating_sub(4) / 4))
                     as u16;
+                let host_width = visible
+                    .iter()
+                    .map(|i| {
+                        let label = targets[*i].label();
+                        Span::raw(
+                            label
+                                .rsplit_once('@')
+                                .map_or(label.as_str(), |(_, host)| host),
+                        )
+                        .width()
+                    })
+                    .max()
+                    .unwrap_or(0);
+                let row_width = usize::from(profile_width + username_width) + host_width + 4;
+                let hint_width = usize::from((areas[1].width / 2).min(80));
+                if row_width + hint_width > usize::from(areas[1].width) {
+                    // A hint may use empty rows, but must never cover host text.
+                    let occupied = visible.len().min(usize::from(areas[1].height)) as u16;
+                    hint_area.y += occupied;
+                    hint_area.height -= occupied;
+                }
                 let table = Table::new(
                     rows,
                     [
@@ -381,44 +480,55 @@ fn menu(
                         .bg(theme::SELECTION)
                         .add_modifier(Modifier::BOLD),
                 );
-                let mut state = TableState::default().with_selected(Some(*selection));
-                frame.render_stateful_widget(table, areas[1], &mut state);
+                if visible.len() <= usize::from(areas[1].height) {
+                    *table_state.offset_mut() = 0;
+                }
+                table_state.select(Some(*selection));
+                frame.render_stateful_widget(table, areas[1], table_state);
             }
             let keys = &config.keybindings;
-            bar_state.draw(
-                frame,
-                areas[2],
-                config,
-                "menu",
-                vec![
-                    bar::Item::profiles(config, profile_index),
-                    bar::Item::action(keys, "menu", "connect", "Open", 2),
-                    bar::Item::action(keys, "menu", "connect_and_return", "Return", 4),
-                    bar::Item::action(keys, "menu", "connection_settings", "Edit", 5),
-                    bar::Item::action(keys, "menu", "configure_remote", "Setup", 6),
-                    bar::Item::action(keys, "menu", "new_remote", "New", 8),
-                    bar::Item::action(keys, "menu", "edit_config", "Config", 7),
-                    bar::Item::action(keys, "menu", "help", "Help", 0),
-                    bar::Item::action(keys, "menu", "quit", "Quit", 1),
-                ],
-            );
+            let mut items = vec![
+                bar::Item::profiles(config, profile_index).available(has_target),
+                bar::Item::action(keys, "menu", "connect", "Open", 2).available(has_target),
+                bar::Item::action(keys, "menu", "connect_and_return", "Return", 4)
+                    .available(has_target),
+                bar::Item::action(keys, "menu", "connection_settings", "Edit", 5)
+                    .available(has_target),
+                bar::Item::action(keys, "menu", "configure_remote", "Setup", 6),
+                bar::Item::action(keys, "menu", "new_remote", "New", 8),
+                bar::Item::action(keys, "menu", "edit_config", "Config", 7),
+                bar::Item::action(keys, "menu", "refresh", "Refresh", 9),
+                bar::Item::action(keys, "menu", "clear_search", "Clear", 10)
+                    .available(!query.is_empty()),
+                bar::Item::action(keys, "menu", "help", "Help", 0),
+                bar::Item::action(keys, "menu", "quit", "Quit", 1),
+            ];
+            for (actions, available) in [
+                (&["toggle_transport"][..], has_target),
+                (
+                    &["home", "end", "up", "down", "page_up", "page_down"][..],
+                    !visible.is_empty(),
+                ),
+                (&["erase_character", "erase_word"][..], !query.is_empty()),
+            ] {
+                if !available {
+                    items.extend(actions.iter().map(|action| {
+                        bar::Item::action(keys, "menu", action, "", 10).available(false)
+                    }));
+                }
+            }
+            bar_state.draw(frame, areas[2], config, "menu", items);
             if let Some(i) = visible.get(*selection)
                 && let Some(block) = host_config.get(&targets[*i].host)
             {
-                search::hint(frame, areas[1], block);
+                search::hint(frame, hint_area, block);
             }
             if let Some(message) = notice.as_deref() {
-                // Results must remain visible even where ordinary host hints are hidden.
-                let rect = ratatui::layout::Rect::new(
-                    areas[1].x,
-                    areas[1].bottom() - areas[1].height.min(2),
-                    areas[1].width,
-                    areas[1].height.min(2),
-                );
+                // Reuse the footer so results cannot cover or move the host list.
+                let rect = areas[2];
                 frame.render_widget(ratatui::widgets::Clear, rect);
                 frame.render_widget(
                     Paragraph::new(message)
-                        .wrap(ratatui::widgets::Wrap { trim: false })
                         .style(Style::default().fg(theme::USERNAME).bg(theme::SURFACE)),
                     rect,
                 );
@@ -430,6 +540,7 @@ fn menu(
         }
         if let Event::Key(key) = event {
             if bar_state.event(key, &config.keybindings, "menu") {
+                notice.take();
                 continue;
             }
             if key.kind == KeyEventKind::Release {
@@ -442,22 +553,28 @@ fn menu(
                     .iter()
                     .position(|p| p.key.as_ref().is_some_and(|shortcut| shortcut.matches(key)))
             {
-                if let Some(i) = visible.get(*selection) {
+                let target = visible
+                    .get(*selection)
+                    .map(|i| targets[*i].clone())
+                    .or_else(|| direct_target.clone());
+                if let Some(target) = target {
+                    let target = ssh_config::normalize_target(&target, &configured_users);
                     if !config.profiles[profile].inputs.is_empty() {
                         bar_state.reset();
-                        if let Some(result) =
-                            new_remote::connect(terminal, config, &targets[*i], profile, false)?
+                        if let Some(mut result) =
+                            new_remote::connect(terminal, config, &target, profile, false)?
                         {
+                            result.new = visible.is_empty();
                             return Ok(Some(result));
                         }
                         continue;
                     }
                     return Ok(Some(Selection {
-                        target: targets[*i].clone(),
+                        target,
                         profile,
                         setup: None,
                         setup_command: None,
-                        new: false,
+                        new: visible.is_empty(),
                         configure_only: false,
                         return_to_menu: key.modifiers.contains(KeyModifiers::ALT)
                             && key.code == KeyCode::Enter,
@@ -491,9 +608,45 @@ fn menu(
                     bar_state.reset();
                     help::show(terminal, help::Context::Hosts, config)?;
                 }
+                KeyCode::F(5) => {
+                    let selected = visible.get(*selection).map(|index| targets[*index].clone());
+                    let choices: HashMap<_, _> = targets
+                        .iter()
+                        .zip(profiles.iter())
+                        .map(|(target, profile)| (target.label(), *profile))
+                        .collect();
+                    let user = env::var("USER").unwrap_or_default();
+                    *targets = discover(home, &user);
+                    *profiles = config.history_profiles_with_users(
+                        targets,
+                        &read_history(&home.join(".bash_history")).unwrap_or_default(),
+                        &user,
+                        &ssh_config::load(home, &user).users,
+                    );
+                    for (index, target) in targets.iter().enumerate() {
+                        if let Some(profile) = choices.get(&target.label()) {
+                            profiles[index] = *profile;
+                        }
+                    }
+                    let ssh = ssh_config::load(home, &user);
+                    host_config = ssh.hints;
+                    configured_users = ssh.users;
+                    *selection = search::matching(targets, query, &host_config)
+                        .iter()
+                        .position(|index| selected.as_ref() == Some(&targets[*index]))
+                        .unwrap_or(0);
+                    *notice = Some(format!("Refreshed {} hosts", targets.len()));
+                }
+                KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    query.clear();
+                    *selection = 0;
+                }
+                KeyCode::Home => *selection = 0,
+                KeyCode::End => *selection = visible.len().saturating_sub(1),
                 KeyCode::F(9) => {
                     bar_state.reset();
                     editor::edit(terminal, home, config, profiles)?;
+                    *direct_profile = None;
                 }
                 KeyCode::F(4) => {
                     bar_state.reset();
@@ -504,6 +657,11 @@ fn menu(
                             None
                         } else {
                             visible.get(*selection).map(|i| &targets[*i])
+                        },
+                        if key.modifiers.contains(KeyModifiers::SHIFT) {
+                            None
+                        } else {
+                            direct_target.as_ref()
                         },
                     )? {
                         if !selection.configure_only
@@ -574,30 +732,65 @@ fn menu(
                     if let Some(i) = visible.get(*selection) {
                         profiles[*i] =
                             (profiles[*i] + config.profiles.len() - 1) % config.profiles.len();
+                    } else if direct_target.is_some() {
+                        *direct_profile = Some(
+                            (profile_index + config.profiles.len() - 1) % config.profiles.len(),
+                        );
                     }
                 }
                 KeyCode::Right => {
                     if let Some(i) = visible.get(*selection) {
                         profiles[*i] = (profiles[*i] + 1) % config.profiles.len();
+                    } else if direct_target.is_some() {
+                        *direct_profile = Some((profile_index + 1) % config.profiles.len());
                     }
                 }
                 KeyCode::F(8) => {
                     if let Some(i) = visible.get(*selection) {
                         profiles[*i] = config.toggle_transport(profiles[*i]);
+                    } else if direct_target.is_some() {
+                        *direct_profile = Some(config.toggle_transport(profile_index));
                     }
                 }
                 KeyCode::Enter if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     bar_state.reset();
-                    if let Some(i) = visible.get(*selection)
-                        && let Some(result) = new_remote::connect(
-                            terminal,
-                            config,
-                            &targets[*i],
-                            profile_index,
-                            false,
-                        )?
+                    let target = visible
+                        .get(*selection)
+                        .map(|index| targets[*index].clone())
+                        .or_else(|| new_remote::parse_remote(query));
+                    if let Some(target) = target
+                        && let Some(mut result) =
+                            new_remote::connect(terminal, config, &target, profile_index, false)?
                     {
+                        result.new = visible.is_empty();
                         return Ok(Some(result));
+                    }
+                }
+                KeyCode::Enter if visible.is_empty() => {
+                    if let Some(target) = new_remote::parse_remote(query) {
+                        let target = ssh_config::normalize_target(&target, &configured_users);
+                        let profile = profile_index;
+                        if !config.profiles[profile].inputs.is_empty() {
+                            bar_state.reset();
+                            if let Some(mut result) =
+                                new_remote::connect(terminal, config, &target, profile, false)?
+                            {
+                                result.new = true;
+                                result.return_to_menu |= key.modifiers.contains(KeyModifiers::ALT);
+                                return Ok(Some(result));
+                            }
+                        } else {
+                            return Ok(Some(Selection {
+                                target,
+                                profile,
+                                setup: None,
+                                setup_command: None,
+                                new: true,
+                                configure_only: false,
+                                return_to_menu: key.modifiers.contains(KeyModifiers::ALT),
+                                connection_command: None,
+                            }));
+                        }
                     }
                 }
                 KeyCode::Enter => {
@@ -636,7 +829,7 @@ fn menu(
 }
 fn init_terminal() -> io::Result<DefaultTerminal> {
     let terminal = ratatui::try_init()?;
-    execute!(
+    if let Err(err) = execute!(
         io::stdout(),
         PushKeyboardEnhancementFlags(
             KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
@@ -644,16 +837,19 @@ fn init_terminal() -> io::Result<DefaultTerminal> {
                 | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
         ),
         event::EnableFocusChange
-    )?;
+    ) {
+        let _ = suspend_terminal();
+        return Err(err);
+    }
     Ok(terminal)
 }
 
 fn suspend_terminal() -> io::Result<()> {
-    execute!(
+    let keyboard = execute!(
         io::stdout(),
         PopKeyboardEnhancementFlags,
         event::DisableFocusChange
-    )?;
+    );
     let restore = ratatui::try_restore();
     let appearance = execute!(
         io::stdout(),
@@ -661,7 +857,10 @@ fn suspend_terminal() -> io::Result<()> {
         ResetColor,
         Show
     );
-    restore.and(appearance).and(io::stdout().flush())
+    keyboard
+        .and(restore)
+        .and(appearance)
+        .and(io::stdout().flush())
 }
 
 // exec() skips destructors, so finish all TUI cleanup before handing off the tty.
@@ -671,41 +870,144 @@ fn restore_terminal(terminal: DefaultTerminal) -> io::Result<()> {
     result
 }
 
+fn check_config(path: &Path) -> io::Result<()> {
+    let source = launch::read_config(path)?;
+    launch::Config::parse(&source)
+        .map_err(|err| io::Error::new(err.kind(), format!("{}: {err}", path.display())))?;
+    writeln!(
+        io::stdout().lock(),
+        "{}: configuration is valid (commands were not executed)",
+        path.display()
+    )
+}
+
+fn read_history(path: &Path) -> io::Result<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    const MAX_HISTORY: u64 = 8 * 1024 * 1024;
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(nix::libc::O_NONBLOCK);
+    }
+    let mut file = options.open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() {
+        return Err(io::Error::other("history must be a regular file"));
+    }
+    let offset = metadata.len().saturating_sub(MAX_HISTORY);
+    file.seek(SeekFrom::Start(offset))?;
+    let mut bytes = Vec::new();
+    file.take(MAX_HISTORY).read_to_end(&mut bytes)?;
+    let start = if offset > 0 {
+        bytes
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(bytes.len(), |index| index + 1)
+    } else {
+        0
+    };
+    Ok(String::from_utf8_lossy(&bytes[start..]).into_owned())
+}
+
+fn save_history(path: &Path, line: &str, create: bool) -> io::Result<()> {
+    if !create && !path.exists() {
+        return Ok(());
+    }
+    let previous = read_history(path).or_else(|err| {
+        if create && err.kind() == io::ErrorKind::NotFound {
+            Ok(String::new())
+        } else {
+            Err(err)
+        }
+    })?;
+    if previous.lines().last() == Some(line) {
+        return Ok(());
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true).append(true).create(create);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600).custom_flags(nix::libc::O_NONBLOCK);
+    }
+    let mut file = options.open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() {
+        return Err(io::Error::other("history must be a regular file"));
+    }
+    let mut separator = "";
+    if metadata.len() > 0 {
+        use std::io::{Read, Seek, SeekFrom};
+        file.seek(SeekFrom::End(-1))?;
+        let mut last = [0];
+        file.read_exact(&mut last)?;
+        if last[0] != b'\n' {
+            separator = "\n";
+        }
+    }
+    file.write_all(format!("{separator}{line}\n").as_bytes())
+}
+
 fn run() -> io::Result<()> {
-    let home = env::var_os("HOME").ok_or_else(|| io::Error::other("HOME is not set"))?;
+    let action = cli::parse(env::args_os().skip(1))?;
+    match &action {
+        cli::Action::Help => return writeln!(io::stdout().lock(), "{}", cli::HELP),
+        cli::Action::Version => {
+            return writeln!(io::stdout().lock(), "shui {}", env!("CARGO_PKG_VERSION"));
+        }
+        cli::Action::CheckConfig(Some(path)) => return check_config(path),
+        _ => {}
+    }
+    let home = env::var_os("HOME")
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| io::Error::other("HOME is not set"))?;
     let home = Path::new(&home);
     let user = env::var("USER").unwrap_or_default();
-    let args: Vec<_> = env::args().skip(1).collect();
-    if args == ["--help"] || args == ["-h"] {
-        println!(
-            "shui [--dump | --help | --version]\nTerminal menu for SSH connections and remote tools. Reads ~/.ssh/config, ~/.bash_history and MC hotlist."
-        );
-        return Ok(());
-    }
-    if args == ["--version"] {
-        println!("shui {}", env!("CARGO_PKG_VERSION"));
-        return Ok(());
-    }
-    if !args.is_empty() && args != ["--dump"] {
-        return Err(io::Error::other("unknown argument; use --help"));
-    }
-    let targets = discover(home, &user);
-    if args == ["--dump"] {
-        for t in targets {
-            println!("{}", t.label());
+    match &action {
+        cli::Action::ConfigPath => {
+            return writeln!(
+                io::stdout().lock(),
+                "{}",
+                launch::config_path(home).display()
+            );
         }
-        return Ok(());
+        cli::Action::CheckConfig(None) => return check_config(&launch::config_path(home)),
+        cli::Action::Dump => {
+            let mut stdout = io::stdout().lock();
+            for entry in discover(home, &user) {
+                writeln!(stdout, "{}", entry.label())?;
+            }
+            return Ok(());
+        }
+        _ => {}
     }
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Err(io::Error::other(
+            "interactive mode requires a terminal; use --dump to list hosts or --help for options",
+        ));
+    }
+    let cli::Action::Menu(query) = action else {
+        unreachable!()
+    };
+    let mut targets = discover(home, &user);
     let mut config = launch::Config::load(home)?;
-    let history = fs::read_to_string(home.join(".bash_history")).unwrap_or_default();
-    let profiles = config.history_profiles(&targets, &history, &user);
+    let history = read_history(&home.join(".bash_history")).unwrap_or_default();
+    let profiles = config.history_profiles_with_users(
+        &targets,
+        &history,
+        &user,
+        &ssh_config::load(home, &user).users,
+    );
     let mut state = MenuState {
+        query,
         profiles,
         ..MenuState::default()
     };
     loop {
         let mut terminal = init_terminal()?;
-        let result = menu(&mut terminal, &targets, &mut config, &mut state, home);
+        let result = menu(&mut terminal, &mut targets, &mut config, &mut state, home);
         restore_terminal(terminal)?;
         if let Some(Selection {
             target,
@@ -718,13 +1020,14 @@ fn run() -> io::Result<()> {
             return_to_menu,
         }) = result?
         {
+            let target = normalized_target(&target, home, &user);
             if !configure_only
                 && let Some((program, args)) = config.profiles[profile_index].prepare(&target)?
             {
                 let status = Command::new(program).args(args).status();
                 if !status.as_ref().is_ok_and(|status| status.success()) {
                     state.notice = Some(format!(
-                        "{}: preparation cancelled or failed; connection not started",
+                        "preparation cancelled or failed: {}",
                         config.profiles[profile_index].name
                     ));
                     continue;
@@ -738,12 +1041,16 @@ fn run() -> io::Result<()> {
                 if configure_only {
                     state.notice = Some(match status {
                         Ok(status) if status.success() => {
-                            format!("{}: {} completed", target.label(), script.name)
+                            format!("Setup completed: {} · {}", script.name, target.label())
                         }
                         Ok(status) => {
-                            format!("{}: {} failed ({status})", target.label(), script.name)
+                            format!(
+                                "Setup failed ({status}): {} · {}",
+                                script.name,
+                                target.label()
+                            )
                         }
-                        Err(err) => format!("{}: {} failed: {err}", target.label(), script.name),
+                        Err(err) => format!("Setup failed: {err} · {}", target.label()),
                     });
                     continue;
                 }
@@ -756,30 +1063,30 @@ fn run() -> io::Result<()> {
                 }
             }
             let custom = connection_command.is_some();
-            let (program, args) = connection_command
-                .unwrap_or_else(|| config.profiles[profile_index].command(&target));
-            let history = home.join(".bash_history");
-            let line = config.profiles[profile_index].history_line(&target);
-            if !custom
-                && (new || history.exists())
-                && fs::read_to_string(&history)
-                    .unwrap_or_default()
-                    .lines()
-                    .last()
-                    != Some(line.as_str())
-            {
-                let mut options = fs::OpenOptions::new();
-                options.append(true).create(new);
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::OpenOptionsExt;
-                    options.mode(0o600);
+            let (program, args) = match connection_command {
+                Some(command) => command,
+                None => config.profiles[profile_index].command(&target)?,
+            };
+            if !custom {
+                let line = config.profiles[profile_index].history_line(&target)?;
+                if let Err(err) = save_history(&home.join(".bash_history"), &line, new) {
+                    eprintln!("shui: could not save connection history: {err}");
                 }
-                let mut file = options.open(&history)?;
-                writeln!(file, "{line}")?;
             }
             if return_to_menu {
-                Command::new(program).args(args).status()?;
+                state.notice = Some(match Command::new(program).args(args).status() {
+                    Ok(status) if status.success() => {
+                        format!("Connection closed: {}", target.label())
+                    }
+                    Ok(status) => format!("Connection failed ({status}): {}", target.label()),
+                    Err(err) => format!("Connection failed: {err} · {}", target.label()),
+                });
+                if new && !targets.contains(&target) {
+                    targets.insert(0, target);
+                    state.profiles.insert(0, profile_index);
+                    state.query.clear();
+                    state.selection = 0;
+                }
                 continue;
             }
             #[cfg(unix)]
@@ -800,6 +1107,9 @@ fn run() -> io::Result<()> {
 }
 fn main() {
     if let Err(err) = run() {
+        if err.kind() == io::ErrorKind::BrokenPipe {
+            return;
+        }
         eprintln!("shui: {err}");
         std::process::exit(1);
     }
@@ -808,6 +1118,99 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn edited_text_keeps_the_visible_tail_and_whole_graphemes() {
+        for (text, width, expected) in [
+            ("abcdef", 4, "…def"),
+            ("a界界", 3, "…界"),
+            ("abcdefe\u{301}", 3, "…fe\u{301}"),
+            ("abc👩\u{200d}💻", 3, "…👩\u{200d}💻"),
+            ("abc", 1, "…"),
+            ("abc", 0, ""),
+            ("abc", 3, "abc"),
+        ] {
+            let clipped = text_tail(text, width);
+            assert_eq!(clipped, expected);
+            assert!(Span::raw(clipped).width() <= width);
+        }
+    }
+
+    #[test]
+    fn usernames_are_shown_only_to_disambiguate_unless_configured() {
+        let targets: Vec<_> = ["prod", "bob@prod", "alice@other", "bob@other:2222"]
+            .iter()
+            .map(|name| target(name, "").unwrap())
+            .collect();
+        let users = HashMap::from([("prod".into(), "alice".into())]);
+        assert_eq!(
+            display_usernames(&targets, &users, launch::UsernameDisplay::Auto),
+            ["alice", "bob", "", ""]
+        );
+        assert_eq!(
+            display_usernames(&targets, &users, launch::UsernameDisplay::Always),
+            ["alice", "bob", "alice", "bob"]
+        );
+        assert_eq!(
+            display_usernames(&targets, &users, launch::UsernameDisplay::Never),
+            ["", "", "", ""]
+        );
+    }
+
+    #[test]
+    fn normalized_history_keeps_the_selected_profile() {
+        let config = launch::Config::parse("default: SSH\nprofiles:\n  - {name: SSH, command: 'ssh %h'}\n  - {name: Mosh, command: 'mosh %h'}\n").unwrap();
+        let users = HashMap::from([("prod".into(), "alice".into())]);
+        let targets = vec![target("prod", "").unwrap()];
+        let history = config.profiles[1]
+            .history_line(&target("alice@prod", "").unwrap())
+            .unwrap();
+        assert_eq!(
+            config.history_profiles_with_users(&targets, &history, "alice", &users),
+            [1]
+        );
+        assert_eq!(
+            config.history_profiles_with_users(&targets, "mosh alice@prod", "alice", &users),
+            [1]
+        );
+    }
+
+    #[test]
+    fn explicit_usernames_and_valid_ports_are_preserved() {
+        assert_eq!(target("alice@prod", "alice").unwrap().label(), "alice@prod");
+        assert_eq!(
+            history_target("ssh -l alice prod", "alice")
+                .unwrap()
+                .label(),
+            "alice@prod"
+        );
+        for raw in ["prod:0", "prod:65536", "prod:999999999999999999999"] {
+            assert!(target(raw, "").is_none());
+        }
+    }
+
+    #[test]
+    fn long_history_tail_stays_bounded_and_new_entries_remain_separate() {
+        use std::io::Read;
+        let root = env::temp_dir().join(format!("shui-history-test-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("history");
+        let bytes = vec![b'x'; 8 * 1024 * 1024 + 32];
+        fs::write(&path, &bytes).unwrap();
+        assert_eq!(read_history(&path).unwrap(), "");
+        save_history(&path, "ssh prod", false).unwrap();
+        assert_eq!(read_history(&path).unwrap(), "ssh prod\n");
+        save_history(&path, "ssh prod", false).unwrap();
+        let mut tail = String::new();
+        fs::File::open(&path)
+            .unwrap()
+            .take(1)
+            .read_to_string(&mut tail)
+            .unwrap();
+        assert_eq!(tail, "x");
+        assert_eq!(fs::metadata(&path).unwrap().len(), bytes.len() as u64 + 10);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn filter_word_deletion() {
         for (input, expected) in [
@@ -826,7 +1229,7 @@ mod tests {
     #[test]
     fn history_options() {
         let t = history_target("exec ssh -i '/a key' -p 2222 alice@example.org", "alice").unwrap();
-        assert_eq!(t.label(), "example.org:2222");
+        assert_eq!(t.label(), "alice@example.org:2222");
         for delimiter in ["", "-- "] {
             let line = format!("exec ssh -l bob -p2222 {delimiter}host exec bash -l");
             let (target, remote, program) = history_connection(&line, "alice").unwrap();

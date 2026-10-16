@@ -10,34 +10,34 @@ For development builds, use the **Artifacts** section of a successful [Binaries 
 
 | System | Archive to choose |
 | --- | --- |
-| Linux x86-64 | `shui-x86_64-unknown-linux-musl.tar.gz` |
-| Linux ARM64 | `shui-aarch64-unknown-linux-musl.tar.gz` |
-| Linux ARMv7, hard-float | `shui-armv7-unknown-linux-musleabihf.tar.gz` |
-| macOS Intel | `shui-x86_64-apple-darwin.tar.gz` |
-| macOS Apple Silicon | `shui-aarch64-apple-darwin.tar.gz` |
-| Windows x64 | `shui-x86_64-pc-windows-msvc.zip` |
-| Windows ARM64 | `shui-aarch64-pc-windows-msvc.zip` |
+| Linux x86-64 | [shui-x86_64-unknown-linux-musl.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-x86_64-unknown-linux-musl.tar.gz) |
+| Linux ARM64 | [shui-aarch64-unknown-linux-musl.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-aarch64-unknown-linux-musl.tar.gz) |
+| Linux ARMv7, hard-float | [shui-armv7-unknown-linux-musleabihf.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-armv7-unknown-linux-musleabihf.tar.gz) |
+| macOS Intel | [shui-x86_64-apple-darwin.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-x86_64-apple-darwin.tar.gz) |
+| macOS Apple Silicon | [shui-aarch64-apple-darwin.tar.gz](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-aarch64-apple-darwin.tar.gz) |
+| Windows x64 | [shui-x86_64-pc-windows-msvc.zip](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-x86_64-pc-windows-msvc.zip) |
+| Windows ARM64 | [shui-aarch64-pc-windows-msvc.zip](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/shui-aarch64-pc-windows-msvc.zip) |
 
 ### Linux and macOS
 
-After downloading, choose your archive name and verify its checksum. For an Actions artifact:
+After downloading your archive and the release's [SHA256SUMS](https://github.com/azazar/shui/releases/download/v0.1.0-rc.5/SHA256SUMS), select exactly one matching checksum:
 
 ```sh
 archive=shui-x86_64-unknown-linux-musl.tar.gz  # Change for your platform.
-sha256sum -c "$archive.sha256"                  # macOS: shasum -a 256 -c "$archive.sha256"
+awk -v name="$archive" '$2 == name { print; count++ } END { if (count != 1) exit 1 }' SHA256SUMS > "$archive.sha256"
 ```
 
-For a release download, extract the matching checksum from `SHA256SUMS` first:
+Actions artifacts already include the archive's `.sha256` file. Verify the checksum before extracting or installing anything:
 
 ```sh
-awk -v name="$archive" '$2 == name' SHA256SUMS > "$archive.sha256"
+sha256sum -c "$archive.sha256"  # macOS: shasum -a 256 -c "$archive.sha256"
 ```
 
-Once verified, extract the executable and install it:
+Continue only if verification reports **OK**. The checksums detect incomplete or altered downloads; they are distributed by the same release publisher as the archives. Extract the executable and install it:
 
 ```sh
-tar -xzf "$archive" shui
-mkdir -p "$HOME/.local/bin"
+tar -xzf "$archive" shui &&
+mkdir -p "$HOME/.local/bin" &&
 install -m 755 shui "$HOME/.local/bin/shui"
 export PATH="$HOME/.local/bin:$PATH"
 shui
@@ -53,17 +53,50 @@ Use an explicit version for release candidates; GitHub's `latest` download URL e
 version=v0.1.0-rc.5
 archive=shui-x86_64-unknown-linux-musl.tar.gz
 base="https://github.com/azazar/shui/releases/download/$version"
-curl -fLO "$base/$archive"
-curl -fLO "$base/SHA256SUMS"
-awk -v name="$archive" '$2 == name' SHA256SUMS > "$archive.sha256"
-sha256sum -c "$archive.sha256"  # macOS: shasum -a 256 -c "$archive.sha256"
+curl --fail --location --proto '=https' --output "$archive" "$base/$archive" &&
+curl --fail --location --proto '=https' --output SHA256SUMS "$base/SHA256SUMS" &&
+awk -v name="$archive" '$2 == name { print; count++ } END { if (count != 1) exit 1 }' SHA256SUMS > "$archive.sha256" &&
+sha256sum -c "$archive.sha256"  # macOS: use shasum -a 256 -c "$archive.sha256" instead.
 ```
 
 Then follow the extraction and installation steps above.
 
 ### Windows
 
-Download the matching ZIP and compare `Get-FileHash -Algorithm SHA256 .\shui-x86_64-pc-windows-msvc.zip` in PowerShell with the supplied checksum. Extract `shui.exe` into a directory on your `PATH`.
+Run this in PowerShell to select x64 or ARM64, verify the download, and install `shui.exe` into `~/.local/bin`:
+
+```powershell
+& {
+    $ErrorActionPreference = "Stop"
+    $version = "v0.1.0-rc.5"
+    $target = switch ($env:PROCESSOR_ARCHITECTURE) {
+        "AMD64" { "x86_64-pc-windows-msvc" }
+        "ARM64" { "aarch64-pc-windows-msvc" }
+        default { throw "Use a 64-bit PowerShell on Windows x64 or ARM64." }
+    }
+    $archive = "shui-$target.zip"
+    $base = "https://github.com/azazar/shui/releases/download/$version"
+    $temporary = Join-Path ([IO.Path]::GetTempPath()) ("shui-" + [guid]::NewGuid())
+    New-Item -ItemType Directory $temporary | Out-Null
+    try {
+        Invoke-WebRequest "$base/$archive" -OutFile "$temporary/$archive"
+        Invoke-WebRequest "$base/SHA256SUMS" -OutFile "$temporary/SHA256SUMS"
+        $pattern = "^[0-9a-f]{64}  " + [regex]::Escape($archive) + "$"
+        $matching = @(Get-Content "$temporary/SHA256SUMS" | Where-Object { $_ -cmatch $pattern })
+        if ($matching.Count -ne 1) { throw "Expected exactly one checksum for $archive." }
+        $expected = $matching[0].Split(' ')[0]
+        $actual = (Get-FileHash -Algorithm SHA256 "$temporary/$archive").Hash
+        if ($actual -ne $expected) { throw "Checksum verification failed; nothing installed." }
+        Expand-Archive "$temporary/$archive" "$temporary/unpacked"
+        New-Item -ItemType Directory -Force "$HOME/.local/bin" | Out-Null
+        Copy-Item "$temporary/unpacked/shui.exe" "$HOME/.local/bin/shui.exe" -Force
+    } finally {
+        Remove-Item -Recurse -Force $temporary
+    }
+}
+```
+
+For a manual download, compare `Get-FileHash -Algorithm SHA256 .\shui-x86_64-pc-windows-msvc.zip` with the matching entry in `SHA256SUMS` before extracting the executable.
 
 Run it from **[Git Bash](https://git-scm.com/downloads/win)**, which supplies the `sh`, `HOME`, and `USER` environment used by command templates and host discovery. PowerShell alone does not supply that environment. For WSL, install a Linux build inside WSL instead.
 
@@ -86,7 +119,7 @@ Use a UTF-8 terminal with a monospace font. The action bar needs no Powerline or
 
 ## Command-line options
 
-Run `shui` to open the menu. Use `shui --dump` to list hosts without opening the UI; `--help` and `--version` are also available.
+Run `shui` to open the menu, or `shui prod` to start with a search filter. Use `shui --dump` to list hosts without opening the UI. `shui --config-path` prints the configuration location, and `shui --check-config` validates the current configuration without running commands. Use `shui --check-config ./config.yml` for a draft file. `--help` and `--version` are also available.
 
 ## Upgrading
 

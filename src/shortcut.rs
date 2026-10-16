@@ -55,12 +55,7 @@ impl Shortcut {
         let KeyCode::Char(letter) = event.code else {
             return false;
         };
-        let modifiers = if letter.is_ascii_uppercase() {
-            event.modifiers - KeyModifiers::SHIFT
-        } else {
-            event.modifiers
-        };
-        modifiers == self.modifiers && letter.to_ascii_lowercase() == self.letter
+        event.modifiers == self.modifiers && letter.to_ascii_lowercase() == self.letter
     }
 }
 
@@ -92,6 +87,10 @@ mod tests {
             let key = Shortcut::try_from(text.to_owned()).unwrap();
             assert!(key.matches(KeyEvent::new(KeyCode::Char(key.letter), modifiers)));
             assert!(key.matches(KeyEvent::new(
+                KeyCode::Char(key.letter.to_ascii_uppercase()),
+                modifiers
+            )));
+            assert!(!key.matches(KeyEvent::new(
                 KeyCode::Char(key.letter.to_ascii_uppercase()),
                 modifiers | KeyModifiers::SHIFT
             )));

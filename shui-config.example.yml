@@ -22,6 +22,9 @@
 # available_command: quick, noninteractive local sh -c check, without placeholders.
 # Exit 0 keeps the entry; other statuses hide it. Profile checks run at load/reload;
 # setup checks run when F4 opens. No check means always available. Output is ignored.
+# Checks time out after five seconds; input generators have the same timeout
+# and a 64 KiB limit on each output stream. They have no controlling terminal
+# on Unix, so prompts cannot interfere with the menu.
 # These checks do not test remote connectivity or remote tool availability.
 # Default profiles instead offer dependency installation when launched.
 # prepare_command runs locally with the terminal restored, before setup/connect/history.
@@ -32,6 +35,10 @@
 # YAML *ensure/*install aliases refer to anchors in SSH; copy those fields too
 # when adopting an individual profile in an existing config.
 default: SSH
+# auto: show usernames only to distinguish accounts for the same host/port.
+# always: show known usernames; never: hide the username column.
+# This affects display only. Matching configured usernames are omitted in commands.
+username_display: auto
 # Binding reference: omitted actions keep defaults; [] disables an action.
 # Uncomment entries to override them; merge within each scope, not a second map.
 # Reveal actions are also available in dialog/help/editor with the same defaults.
@@ -50,6 +57,10 @@ keybindings:
     # configure_remote: [F4]
     # new_remote: [Shift+F4]
     # edit_config: [F9]
+    # refresh: [F5]
+    # clear_search: [Ctrl+U]
+    # home: [Home]
+    # end: [End]
     # toggle_transport: [F8]
     # quit: [Esc, Ctrl+C]
     # up: [Up]
@@ -276,7 +287,7 @@ profiles:
     ensure: *ensure
     install: *install
     command: port=%p; exec ssh ${port:+-p "$port"} -tt -- %h %{remote}
-    remote: sh -c %{script} -- %{dashboard}
+    remote: sh -c %{script} -- %{dashboard} %{ensure} %{install}
     # A compact health overview. Press 4 in btop to toggle the process list,
     # i for disk read/write graphs, and n/b to cycle network interfaces.
     dashboard: |
@@ -297,7 +308,7 @@ profiles:
       show_swap = true
     script: |
       set -eu
-      sh -c %{ensure} -- btop btop 'the remote' %{install} || exit $?
+      sh -c "$2" -- btop btop 'the remote' "$3" || exit $?
       # Isolate the dashboard from the user's regular btop configuration.
       umask 077
       config_dir=$(mktemp -d "${TMPDIR:-/tmp}/shui-monitor.XXXXXX")
@@ -374,12 +385,14 @@ configuration_scripts:
         # Durations start on the server after ssh-copy-id: month = 30 days,
         # year = 365 days. UTC avoids local time-zone / daylight-saving ambiguity.
         # never removes expiry-time from this key; it does not remove other options.
-    command: |
+    command: sh -c %{setup_script} -- %h %p %{prepare_key} %{input:key} %{expiry_remote}
+    setup_script: |
       set -eu
-      port=%p
-      key=$(sh -c %{prepare_key} -- %{input:key})
-      ssh-copy-id ${port:+-p "$port"} -i "$key" %h
-      cat "$key" | ssh ${port:+-p "$port"} -i "${key%.pub}" -- %h %{expiry_remote}
+      host=$1
+      port=$2
+      key=$(sh -c "$3" -- "$4")
+      ssh-copy-id ${port:+-p "$port"} -i "$key" "$host"
+      cat "$key" | ssh ${port:+-p "$port"} -i "${key%.pub}" -- "$host" "$5"
     expiry_remote: &ssh_key_expiry_remote sh -c %{set_expiry} -- %{input:expiry}
     # Update every occurrence of the selected key in the standard authorized_keys.
     # Preserve other keys, comments, and options (including quoted commas/spaces).
@@ -502,19 +515,21 @@ configuration_scripts:
         description: Installer shell
         options: [sh, bash]
         default: sh
-    command: |
+    command: sh -c %{setup_script} -- %h %p %{prepare_key} %{input:key} %{expiry_remote} %{input:source} %{input:installer} %{remote}
+    setup_script: |
       set -eu
-      port=%p
-      source=%{input:source}
-      installer=%{input:installer}
+      host=$1
+      port=$2
+      source=$6
+      installer=$7
       case "$source" in /*) ;; *) source="$HOME/$source" ;; esac
       test -f "$source/$installer" || { echo "Missing $source/$installer" >&2; exit 1; }
-      key=$(sh -c %{prepare_key} -- %{input:key})
-      ssh-copy-id ${port:+-p "$port"} -i "$key" %h
-      cat "$key" | ssh ${port:+-p "$port"} -i "${key%.pub}" -- %h %{expiry_remote}
-      ssh ${port:+-p "$port"} -i "${key%.pub}" -- %h 'mkdir -p "$HOME/src/dotfiles"'
-      scp ${port:+-P "$port"} -i "${key%.pub}" -r "$source/." %h:src/dotfiles/
-      ssh ${port:+-p "$port"} -i "${key%.pub}" -tt -- %h %{remote}
+      key=$(sh -c "$3" -- "$4")
+      ssh-copy-id ${port:+-p "$port"} -i "$key" "$host"
+      cat "$key" | ssh ${port:+-p "$port"} -i "${key%.pub}" -- "$host" "$5"
+      ssh ${port:+-p "$port"} -i "${key%.pub}" -- "$host" 'mkdir -p "$HOME/src/dotfiles"'
+      scp ${port:+-P "$port"} -i "${key%.pub}" -r "$source/." "$host:src/dotfiles/"
+      ssh ${port:+-p "$port"} -i "${key%.pub}" -tt -- "$host" "$8"
     remote: sh -c %{script} -- %{input:installer} %{input:shell}
     script: |
       set -eu
@@ -523,11 +538,12 @@ configuration_scripts:
   - name: Copy terminal definition
     available_command: command -v ssh && command -v infocmp && test -n "${TERM:-}"
     # Export before connecting so a failed infocmp cannot send a partial definition.
-    command: |
+    command: sh -c %{export_script} -- %h %p %{remote}
+    export_script: |
       set -eu
-      port=%p
+      port=$2
       definition=$(infocmp -x -- "$TERM")
-      printf '%s\n' "$definition" | ssh ${port:+-p "$port"} -- %h %{remote}
+      printf '%s\n' "$definition" | ssh ${port:+-p "$port"} -- "$1" "$3"
     remote: sh -c %{script}
     script: |
       set -eu

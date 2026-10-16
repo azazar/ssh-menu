@@ -1,13 +1,13 @@
 # Setting up a remote
 
-Press **F4** to open remote setup for the selected host. Press **Shift+F4** to open **Add new** directly with an empty address. With no selected host, F4 also starts in **Add new** mode.
+Press **F4** to open remote setup for the selected host, focused on the recipe. Press **Shift+F4** to open **Add new** directly with an empty address. With no selected host, F4 starts in **Add new** mode and keeps a valid address already typed into the search.
 
 Use Left/Right on **Action** to switch between:
 
 - **Configure host**: the selected address is filled in. Choose a setup recipe and press **Enter** to apply it. Shui returns to the host list with a success or failure message, preserving your filter and profile choices. It does not launch a connection or save a history entry.
 - **Add new**: enter `user@host[:port]` (or `user@[IPv6]:port`), and optionally choose a setup recipe. **Enter** adds and connects using the default launch profile; **Alt+Enter** returns to the menu after the connection ends.
 
-Each action retains its own address draft while you switch. Tab/Shift-Tab or Up/Down moves between fields; Left/Right changes the action, recipe, or dropdown choice. **Esc** cancels. All controls can be rebound under `keybindings.dialog`.
+Each action retains its own address draft while you switch. Tab/Shift-Tab or Up/Down moves between fields; Left/Right changes the focused action, recipe, or dropdown choice. The dialog stays in place when recipes change; short terminals scroll fields to keep the selection visible. **Esc** cancels. All controls can be rebound under `keybindings.dialog`.
 
 ![Configuring the selected host with a setup recipe](../screenshot-configure-remote.png)
 
@@ -30,6 +30,8 @@ Both key-auth recipes offer **Key expiry**: never (default), 8 hours, day, week,
 The updater expects a regular remote `~/.ssh/authorized_keys` file and an OpenSSH server supporting `expiry-time`. Custom authorized-key locations require adapting the recipe. If the post-copy update fails, setup reports failure, but the copied key remains installed.
 
 Existing configuration files are preserved. To adopt these samples in an existing installation, copy the desired entries under `configuration_scripts` from the [updated example](../shui-config.example.yml); keep your custom recipes.
+
+Older bundled setup recipes combine placeholders with `$(...)` command substitution. These templates are now rejected because shell word escaping cannot safely handle nested quoting. Replace the two key-auth entries and **Copy terminal definition** with their current versions, including their helper fields and YAML anchors, then run `shui --check-config`. For custom recipes, move command substitution into a literal script field and pass placeholder values as positional arguments. Placeholders inside `${...}` parameter expansions are also rejected; ordinary expressions such as `${port:+-p "$port"}` remain supported beside placeholders.
 
 Setup defaults to **None**. Configure mode requires a recipe; adding a remote can skip setup. Authentication prompts run with the terminal restored. Failed setup prevents adding or connecting. In configure mode, failures return to the menu so you can retry. Setup is not repeated on later connections. The dialog itself does not edit SSH config; the selected recipe determines what changes on the local or remote machine.
 

@@ -2,6 +2,10 @@
 
 Edit **`$XDG_CONFIG_HOME/shui/config.yml`** using the config editor (F9 by default) for validated live reload, or restart after editing externally. The file is created from the [commented example](../shui-config.example.yml) on the first interactive launch, creating missing directories. Existing configs are preserved. If `XDG_CONFIG_HOME` is unset, empty, or relative, Shui uses `~/.config/shui/config.yml`.
 
+Run `shui --config-path` to print the active path. Use `shui --check-config` (or `shui --check-config path/to/config.yml`) to validate YAML, templates and keybindings without running availability checks, generators or other commands. Validation never creates a configuration file.
+
+`username_display` controls the host list: `auto` (default) shows usernames only to distinguish accounts for the same host and port, `always` shows known usernames, and `never` hides them. Commands omit an explicit username only when it matches a proven static SSH `User` setting; different or uncertain accounts remain explicit.
+
 Configuration examples and editing guidance live in the comments of the shipped config, available through F9.
 
 Each profile needs a unique `name` and a `command`; `default` names one of them. Commands run through local `sh -c`, and additional string fields can hold reusable commands or scripts. **Placeholders are shell-escaped automatically—leave them unquoted.**
@@ -58,6 +62,8 @@ Remote checks inside `command` follow the connection's normal lifecycle: declini
 
 An optional `available_command` checks whether a launch profile can be used. It runs once per profile when the configuration is loaded for an interactive session, before the TUI opens. Exit **0** keeps the profile; a nonzero status or failure to start hides it. Profiles without a check remain available.
 
+Checks time out after five seconds. Input generators have the same deadline and a 64 KiB limit for each output stream, enforced while reading. On Unix, checks and generators run without a controlling terminal, and their process group is stopped on completion, timeout, or output-limit failure. Interactive work belongs in preparation or connection commands.
+
 Checks are literal local `sh -c` commands with stdin closed and output discarded. Use quick, noninteractive checks; placeholders are not expanded and no remote connection is made automatically. Checks do not run for `--dump`, `--help`, or `--version`.
 
 If the configured default is unavailable, the first available profile becomes the session default. History restoration and F8 only select available profiles. If none remain, Shui reports an error before opening the TUI. Filtering does not rewrite your config; restart after installing a missing tool.
@@ -75,7 +81,7 @@ The shipped launch profiles use preparation and remote checks instead of `availa
 | `%{input:id}` | A setup recipe's dialog input |
 | `%%` | A literal percent in a command template |
 
-**Leave placeholders unquoted.** Shui shell-escapes their values. Input values remain literal even when they contain shell syntax or placeholder text.
+**Leave placeholders unquoted.** Do not combine placeholders with here-documents, command substitution, arithmetic expansion or legacy backticks; those contexts cannot safely use shell word quoting and are rejected. Placeholders inside `${...}` parameter expansions are also rejected; placeholder-free optional-port expressions remain valid. Pass values as positional arguments to a literal script field instead. Shui shell-escapes their values. Input values remain literal even when they contain shell syntax or placeholder text.
 
 An absent explicit port leaves SSH alias settings in effect. The shipped templates handle both explicit ports and aliases.
 

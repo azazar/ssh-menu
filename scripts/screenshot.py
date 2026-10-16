@@ -17,6 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 import pyte
 
 parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--binary', type=Path, help='Shui executable (default: target/x86_64-unknown-linux-musl/release/shui)')
 modes = parser.add_mutually_exclusive_group()
 modes.add_argument('--install-prompt', action='store_true', help='capture a missing-tool prompt with isolated fake tools')
 modes.add_argument('--search', action='store_true', help='capture a search matching config comments')
@@ -47,7 +48,7 @@ elif args.connection:
     keys = b'\x1b[13;5u'
     title, output_name, quit_keys = 'CONNECT', 'screenshot-connection.png', b'\x03\x03'
 elif args.configure:
-    keys = b'\x1bOS\t\t\x1b[C\t'
+    keys = b'\x1bOS\x1b[C\t'
     title, output_name, quit_keys = 'REMOTE SETUP', 'screenshot-configure-remote.png', b'\x03\x03'
 elif args.dialog:
     keys = b'\x1b[1;2Sdeploy@new.example.org:2222\t\x1b[C\x1b[C\t'
@@ -60,7 +61,9 @@ else:
     title, output_name, quit_keys = 'SHUI', 'screenshot.png', b'\x03'
 
 repo = Path(__file__).resolve().parents[1]
-binary = repo / 'target/x86_64-unknown-linux-musl/release/shui'
+binary = (args.binary or repo / 'target/x86_64-unknown-linux-musl/release/shui').resolve()
+if not binary.is_file() or not os.access(binary, os.X_OK):
+    parser.error(f'not an executable file: {binary}')
 cols, rows = (110, 30) if args.monitor else (90, 5) if args.install_prompt else (90, 22)
 screen = pyte.Screen(cols, rows)
 stream = pyte.ByteStream(screen)
@@ -90,7 +93,7 @@ with tempfile.TemporaryDirectory(prefix='shui-screenshot-') as directory:
         'mosh dev@workstation.example.org\n'
         'ssh ops@monitor.example.org\n'
         'mosh dev@build.example.org\n'
-        'ssh deploy@production.example.org\n'
+        'ssh production.example.org\n'
     )
     if args.connection:
         (home / '.config/shui/config.yml').write_text("""default: Remote command

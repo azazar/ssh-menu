@@ -29,7 +29,7 @@ pub(super) fn edit(
                 }
                 Err(err) => {
                     message = format!(
-                        "{}\n\n{err}\n\nConfiguration not reloaded.\nEdit to fix, open help, or cancel to keep the current configuration.",
+                        "{err}\n\nConfiguration not reloaded.\n{}",
                         launch::config_path(home).display()
                     )
                 }
@@ -78,7 +78,10 @@ pub(super) fn edit(
         match key.code {
             KeyCode::Esc => return Ok(()),
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return Ok(()),
-            KeyCode::F(1) => help::show(terminal, help::Context::Configuration, config)?,
+            KeyCode::F(1) => {
+                bar_state.reset();
+                help::show(terminal, help::Context::Configuration, config)?;
+            }
             KeyCode::Enter => edit_requested = true,
             _ => {}
         }
