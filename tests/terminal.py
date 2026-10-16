@@ -557,11 +557,14 @@ with tempfile.TemporaryDirectory(prefix="shui-pty-") as directory:
     assert "attach --create" in remote_command
     # Execute the actual encoded remote command with an existing mock Zellij.
     zellij = root / "bin/zellij"
-    zellij.write_text('#!/bin/sh\ncase "$1" in\nlist-sessions) printf "existing session\\n" ;;\nattach) printf "%s\\n" "$@" > "$SHUI_TEST_LOG.zellij"; read -r line; [ "$line" = terminal-input ] ;;\nesac\n')
+    zellij.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SHUI_TEST_LOG.zellij"\nread -r line; [ "$line" = terminal-input ]\n')
     zellij.chmod(0o755)
     remote = subprocess.run(["sh", "-c", remote_command], env=child_env, input="terminal-input\n", text=True, capture_output=True, timeout=10)
     assert remote.returncode == 0, remote.stderr
-    assert (root / "command.zellij").read_text().splitlines() == ["attach", "--create", "existing session"]
+    assert (root / "command.zellij").read_text().splitlines() == [
+        "--config", "/dev/null", "--layout-string", "layout { pane; }",
+        "attach", "--create", "--index", "0", "options",
+        "--show-startup-tips", "false", "--show-release-notes", "false"]
     session([b"beta:2222", b"\r"])  # Zellij is restored from the single-line history entry.
     assert "\n".join((root / "command").read_text().splitlines()[6:]) == remote_command
     # New direct shortcuts and input-bearing forwarding profiles use normal handoff.
